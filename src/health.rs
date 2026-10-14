@@ -2133,6 +2133,7 @@ fn empty_analysis() -> Analysis {
         id: Uuid::new_v4(),
         date: chrono::Local::now().to_rfc3339(),
         minimum_age_days: HEALTH_FILE_MINIMUM_AGE_DAYS,
+        cleanup_policy: Default::default(),
         elapsed_ms: 0,
         cancelled: false,
         categories: Vec::new(),

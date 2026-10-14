@@ -32,6 +32,7 @@ fn analysis_with_file(id: Uuid) -> Analysis {
         id: Uuid::new_v4(),
         date: "fixture-time".into(),
         minimum_age_days: 1,
+        cleanup_policy: Default::default(),
         elapsed_ms: 0,
         cancelled: false,
         categories: vec![CategoryResult {

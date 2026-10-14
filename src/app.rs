@@ -1,9 +1,10 @@
 use crate::theme::{self, Tokens};
 use dcleaner::{
+    clean_settings,
     cleanup::{self, SystemTrash},
+    custom_clean,
     domain::{Analysis, Category, CleanupResult, Preferences},
-    platform, scanner,
-    store::{self, Journal},
+    platform, scanner, store,
 };
 use eframe::egui::{self, Align, Color32, Layout, RichText, Vec2};
 use std::{
@@ -18,6 +19,8 @@ use std::{
     time::Duration,
 };
 use uuid::Uuid;
+#[path = "view_clean_settings.rs"]
+mod view_clean_settings;
 #[path = "view_drivers.rs"]
 mod view_drivers;
 #[path = "view_duplicates.rs"]
@@ -105,6 +108,8 @@ const PAGES: [Page; 10] = [
     Page::Settings,
 ];
 enum Event {
+    CleanSettings(view_clean_settings::CleanSettingsEvent),
+    ConfiguredScanned(Result<custom_clean::CustomCleanReport, String>),
     Health(view_health::HealthEvent),
     RecycleBin(view_recycle_bin::RecycleBinEvent),
     Privacy(view_privacy::PrivacyEvent),
@@ -114,7 +119,6 @@ enum Event {
     Startup(view_startup::StartupEvent),
     Drivers(view_drivers::DriverEvent),
     Progress(String),
-    Scanned(Result<Analysis, String>),
     Cleaned(Result<CleanupResult, String>),
     Disk(Result<DiskReport, String>),
 }
@@ -128,6 +132,9 @@ struct DiskReport {
     partial: bool,
 }
 pub struct App {
+    clean_settings_ui: view_clean_settings::CleanSettingsUi,
+    custom_analysis: Option<custom_clean::CustomCleanReport>,
+    custom_partial_acknowledged: bool,
     health_ui: view_health::HealthUi,
     app_icons: crate::app_icons::IconCache,
     #[cfg(debug_assertions)]
@@ -206,6 +213,13 @@ impl App {
                 (vec![], false)
             }
         };
+        let clean_settings_result =
+            clean_settings::load_settings(&data_dir).map_err(|failure| failure.to_string());
+        if let Err(failure) = &clean_settings_result {
+            error = Some(failure.clone());
+        }
+        let clean_settings_ui =
+            view_clean_settings::CleanSettingsUi::from_saved(clean_settings_result);
         #[cfg(debug_assertions)]
         let visual_capture = crate::visual_qa::Capture::from_environment();
         #[cfg(debug_assertions)]
@@ -249,6 +263,9 @@ impl App {
         #[cfg(not(debug_assertions))]
         let (clean_browser, clean_bin) = (false, false);
         Self {
+            clean_settings_ui,
+            custom_analysis: None,
+            custom_partial_acknowledged: false,
             health_ui: Default::default(),
             #[cfg(debug_assertions)]
             visual_capture,
@@ -296,6 +313,8 @@ impl App {
         self.page = Page::Clean;
         self.error = None;
         self.analysis = None;
+        self.custom_analysis = None;
+        self.custom_partial_acknowledged = false;
         self.selected.clear();
         self.progress = "Preparing analysis…".into();
         let (tx, rx) = mpsc::channel();
@@ -305,13 +324,27 @@ impl App {
         let categories = self.categories.clone();
         let ids = self.prefs.selected_categories.clone();
         let age = self.prefs.minimum_age_days;
+        let root = self.data_dir.clone();
         let ctx = ctx.clone();
         thread::spawn(move || {
-            let result = scanner::analyze(&categories, &ids, age, &cancel, |name, count| {
-                let _ = tx.send(Event::Progress(format!("{name} · {count} eligible files")));
-                ctx.request_repaint();
-            });
-            let _ = tx.send(Event::Scanned(result));
+            let result = clean_settings::load_settings(&root)
+                .map_err(|error| error.to_string())
+                .and_then(|settings| {
+                    let options = custom_clean::ScanOptions {
+                        categories,
+                        selected_legacy_ids: ids,
+                        default_age_days: age,
+                        ..Default::default()
+                    };
+                    custom_clean::scan(&settings, &options, &cancel, |progress| {
+                        let _ = tx.send(Event::Progress(format!(
+                            "{} · {} files reviewed",
+                            progress.rule_name, progress.visited
+                        )));
+                        ctx.request_repaint();
+                    })
+                });
+            let _ = tx.send(Event::ConfiguredScanned(result));
             ctx.request_repaint();
         });
     }
@@ -326,6 +359,8 @@ impl App {
         self.error = None;
         self.progress = "Checking selected files…".into();
         let ids: Vec<_> = self.selected.iter().copied().collect();
+        let configured = self.custom_analysis.clone();
+        let acknowledge_partial = self.custom_partial_acknowledged;
         let root = self.data_dir.clone();
         let (tx, rx) = mpsc::channel();
         self.worker = Some(rx);
@@ -333,21 +368,42 @@ impl App {
         let cancel = self.cancel.clone();
         let ctx = ctx.clone();
         thread::spawn(move || {
-            let result = Journal::create(&root, Uuid::new_v4()).and_then(|mut journal| {
-                cleanup::clean(
-                    &analysis,
-                    &ids,
-                    &cancel,
-                    &mut SystemTrash,
-                    &mut journal,
-                    |done, total| {
-                        let _ = tx.send(Event::Progress(format!(
-                            "Reviewed {done} of {total} selected files"
-                        )));
-                        ctx.request_repaint();
-                    },
-                )
-            });
+            let result = (|| {
+                let mut journal = store::DeferredJournal::new(&root, Uuid::new_v4());
+                if let Some(report) = configured {
+                    let settings =
+                        clean_settings::load_settings(&root).map_err(|error| error.to_string())?;
+                    custom_clean::clean(
+                        &report,
+                        &settings,
+                        &ids,
+                        acknowledge_partial,
+                        &cancel,
+                        &mut SystemTrash,
+                        &mut journal,
+                        |done, total| {
+                            let _ = tx.send(Event::Progress(format!(
+                                "Reviewed {done} of {total} selected files"
+                            )));
+                            ctx.request_repaint();
+                        },
+                    )
+                } else {
+                    cleanup::clean(
+                        &analysis,
+                        &ids,
+                        &cancel,
+                        &mut SystemTrash,
+                        &mut journal,
+                        |done, total| {
+                            let _ = tx.send(Event::Progress(format!(
+                                "Reviewed {done} of {total} selected files"
+                            )));
+                            ctx.request_repaint();
+                        },
+                    )
+                }
+            })();
             let _ = tx.send(Event::Cleaned(result));
             ctx.request_repaint();
         });
@@ -403,6 +459,25 @@ impl App {
             .unwrap_or_default();
         for event in events {
             match event {
+                Event::CleanSettings(event) => self.clean_settings_event(event),
+                Event::ConfiguredScanned(result) => {
+                    self.worker = None;
+                    match result {
+                        Ok(report) => {
+                            let analysis = report.to_analysis();
+                            if !analysis.cancelled {
+                                self.selected = analysis
+                                    .categories
+                                    .iter()
+                                    .flat_map(|category| category.files.iter().map(|file| file.id))
+                                    .collect();
+                            }
+                            self.analysis = Some(analysis);
+                            self.custom_analysis = Some(report);
+                        }
+                        Err(error) => self.error = Some(error),
+                    }
+                }
                 Event::Software(event) => self.software_event(event),
                 Event::Duplicate(event) => self.duplicates_event(event),
                 Event::Programs(event) => self.programs_event(event),
@@ -412,26 +487,6 @@ impl App {
                 Event::Privacy(event) => self.privacy_event(event),
                 Event::RecycleBin(event) => self.recycle_bin_event(event),
                 Event::Progress(text) => self.progress = text,
-                Event::Scanned(result) => {
-                    self.worker = None;
-                    match result {
-                        Ok(a) => {
-                            if !a.cancelled {
-                                self.selected = a
-                                    .categories
-                                    .iter()
-                                    .flat_map(|c| c.files.iter().map(|f| f.id))
-                                    .collect();
-                            } else {
-                                self.notice = Some(
-                                    "Analysis cancelled. Analyze again before cleaning.".into(),
-                                );
-                            }
-                            self.analysis = Some(a);
-                        }
-                        Err(e) => self.error = Some(e),
-                    }
-                }
                 Event::Cleaned(result) => {
                     self.worker = None;
                     match result {
@@ -457,6 +512,7 @@ impl App {
                                 "Cleanup stopped: {e}. Review History for confirmed and uncertain outcomes."
                             ));
                             self.analysis = None;
+                            self.custom_analysis = None;
                             self.selected.clear();
                         }
                     }
@@ -491,6 +547,8 @@ impl App {
     }
     fn invalidate(&mut self) {
         self.analysis = None;
+        self.custom_analysis = None;
+        self.custom_partial_acknowledged = false;
         self.selected.clear();
         self.persist();
     }
@@ -506,7 +564,12 @@ impl App {
         else {
             return;
         };
-        match serde_json::to_vec_pretty(analysis)
+        let serialized = if let Some(report) = &self.custom_analysis {
+            serde_json::to_vec_pretty(report)
+        } else {
+            serde_json::to_vec_pretty(analysis)
+        };
+        match serialized
             .map_err(|e| e.to_string())
             .and_then(|b| std::fs::write(path, b).map_err(|e| e.to_string()))
         {
@@ -623,6 +686,12 @@ impl App {
         });
     }
     fn clean_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                self.clean_settings_configure_button(ui, t, ctx);
+            });
+        });
+        ui.add_space(8.);
         theme::tabs(ui, |ui| {
             ui.add_enabled_ui(!self.busy(), |ui| {
                 if theme::tab_value(ui, &mut self.clean_browser, false, "Junk").clicked() {
@@ -643,6 +712,67 @@ impl App {
             ui.add_space(12.);
             self.recycle_bin_page(ui, t, ctx);
             return;
+        }
+        if let Some(report) = &self.custom_analysis {
+            let busy = self.busy();
+            if self.custom_selection_blocked() {
+                for note in report.capabilities().iter().filter(|note| note.blocking()) {
+                    theme::muted(ui, note.detail(), t);
+                }
+            }
+            if report.partial() && !report.cancelled() {
+                theme::muted(
+                    ui,
+                    "Some locations could not be scanned. Review the omissions before cleaning.",
+                    t,
+                );
+                theme::checkbox(
+                    ui,
+                    &mut self.custom_partial_acknowledged,
+                    "I reviewed the partial scan and want to clean only the listed files",
+                    !busy,
+                );
+            }
+            if report.cancelled() {
+                theme::muted(ui, "Scan stopped. Scan again before cleaning.", t);
+            }
+            egui::CollapsingHeader::new("Scan details").show(ui, |ui| {
+                for rule in report.rules().iter().filter(|rule| rule.selected()) {
+                    theme::muted(
+                        ui,
+                        format!(
+                            "{} · {} eligible · {} excluded · {} skipped{}",
+                            rule.name(),
+                            rule.eligible(),
+                            rule.excluded(),
+                            rule.skipped(),
+                            if rule.truncated() { " · partial" } else { "" }
+                        ),
+                        t,
+                    );
+                    if let Some(reason) = rule.reason() {
+                        theme::muted(ui, reason, t);
+                    }
+                }
+                for entry in report.skipped_entries() {
+                    theme::muted(
+                        ui,
+                        format!(
+                            "{} · {:?}",
+                            entry
+                                .path()
+                                .map(|path| path.display().to_string())
+                                .unwrap_or_else(|| "Unavailable location".into()),
+                            entry.reason()
+                        ),
+                        t,
+                    );
+                }
+                for note in report.capabilities() {
+                    theme::muted(ui, note.detail(), t);
+                }
+            });
+            ui.add_space(12.);
         }
         let selection_width = if ui.available_width() > 800. {
             260.
@@ -809,19 +939,46 @@ impl App {
             if theme::secondary(
                 ui,
                 "Scan now",
-                !busy && !self.prefs.selected_categories.is_empty(),
+                !busy
+                    && (!self.prefs.selected_categories.is_empty() || self.custom_clean_enabled()),
             ) {
                 self.begin_scan(ctx);
             }
             let enabled = !busy
                 && !self.selected.is_empty()
                 && self.history_readable
-                && self.analysis.as_ref().is_some_and(|a| !a.cancelled);
+                && !self.custom_selection_blocked()
+                && self.analysis.as_ref().is_some_and(|a| !a.cancelled)
+                && self
+                    .custom_analysis
+                    .as_ref()
+                    .is_none_or(|report| !report.partial() || self.custom_partial_acknowledged);
             if theme::primary(ui, "Clean selected", t, enabled) {
                 self.confirm = true;
             }
             theme::muted(ui, format!("{} files selected", self.selected.len()), t);
         });
+    }
+    fn custom_selection_blocked(&self) -> bool {
+        let Some(report) = &self.custom_analysis else {
+            return false;
+        };
+        report.capabilities().iter().any(|note| {
+            note.blocking()
+                && match note.rule_id() {
+                    None => true,
+                    Some(rule_id) => {
+                        self.selected
+                            .iter()
+                            .filter_map(|id| report.file(*id))
+                            .any(|file| {
+                                file.eligibility().iter().any(|rule| {
+                                    rule.eligible() && rule.selected() && rule.rule_id() == rule_id
+                                })
+                            })
+                    }
+                }
+        })
     }
     fn disk_page(&mut self, ui: &mut egui::Ui, t: Tokens, _ctx: &egui::Context) {
         theme::card(t).show(ui, |ui| {
@@ -1144,6 +1301,7 @@ impl App {
         self.health_dialog(&ctx);
         self.privacy_dialog(&ctx);
         self.recycle_bin_dialog(&ctx);
+        self.clean_settings_dialog(&ctx);
         #[cfg(debug_assertions)]
         {
             let capture_busy = self.busy() || self.app_icons.is_loading();

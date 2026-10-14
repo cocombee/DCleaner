@@ -213,6 +213,7 @@ pub fn analyze(
         id: Uuid::new_v4(),
         date: chrono::Local::now().to_rfc3339(),
         minimum_age_days: age,
+        cleanup_policy: Default::default(),
         elapsed_ms: started.elapsed().as_millis() as u64,
         cancelled: cancel.load(Ordering::Relaxed),
         categories: results,

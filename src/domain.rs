@@ -34,11 +34,19 @@ impl CategoryResult {
         self.files.iter().map(|f| f.size).sum()
     }
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CleanupPolicy {
+    #[default]
+    MinimumAge,
+    CustomCleanRules,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Analysis {
     pub id: Uuid,
     pub date: String,
     pub minimum_age_days: u32,
+    #[serde(default)]
+    pub cleanup_policy: CleanupPolicy,
     pub elapsed_ms: u64,
     pub cancelled: bool,
     pub categories: Vec<CategoryResult>,

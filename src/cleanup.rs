@@ -1,5 +1,5 @@
 use crate::{
-    domain::{Analysis, Candidate, CleanupResult, FileOutcome},
+    domain::{Analysis, Candidate, CleanupPolicy, CleanupResult, FileOutcome},
     scanner::{DAY_NS, contained, is_link, safe_root, same_path, timestamp},
     store::{JournalEvent, JournalSink},
 };
@@ -51,7 +51,35 @@ pub fn clean(
     cancel: &AtomicBool,
     trash: &mut impl TrashPort,
     journal: &mut impl JournalSink,
+    progress: impl FnMut(usize, usize),
+) -> Result<CleanupResult, String> {
+    if analysis.cleanup_policy != CleanupPolicy::MinimumAge {
+        return Err(
+            "Configured files require their current Custom Clean rules. Analyze again.".into(),
+        );
+    }
+    clean_with_validator(analysis, ids, cancel, trash, journal, progress, |file| {
+        validate_age(file, analysis.minimum_age_days)
+    })
+}
+
+fn validate_age(file: &Candidate, age: u32) -> Result<(), String> {
+    if file.modified_ns > timestamp(SystemTime::now()).saturating_sub(u128::from(age) * DAY_NS) {
+        return Err("The file is too recent to clean.".into());
+    }
+    Ok(())
+}
+
+/// The owning report must resolve exact IDs and enforce its current policy.
+/// Core identity and location checks remain mandatory for every effect.
+pub(crate) fn clean_with_validator(
+    analysis: &Analysis,
+    ids: &[Uuid],
+    cancel: &AtomicBool,
+    trash: &mut impl TrashPort,
+    journal: &mut impl JournalSink,
     mut progress: impl FnMut(usize, usize),
+    mut validate: impl FnMut(&Candidate) -> Result<(), String>,
 ) -> Result<CleanupResult, String> {
     if analysis.cancelled {
         return Err("Complete a new analysis before cleaning.".into());
@@ -59,12 +87,16 @@ pub fn clean(
     if ids.is_empty() {
         return Err("Select files from the current analysis.".into());
     }
-    let by_id: HashMap<_, _> = analysis
+    let mut by_id = HashMap::new();
+    for file in analysis
         .categories
         .iter()
-        .flat_map(|c| &c.files)
-        .map(|f| (f.id, f))
-        .collect();
+        .flat_map(|category| &category.files)
+    {
+        if by_id.insert(file.id, file).is_some() {
+            return Err("Ambiguous file ID in analysis. Analyze again.".into());
+        }
+    }
     let mut seen = HashSet::new();
     let mut files = vec![];
     for id in ids {
@@ -94,7 +126,8 @@ pub fn clean(
             path: file.path.clone(),
             size: file.size,
         })?;
-        let effect = revalidate(file, analysis.minimum_age_days)
+        let effect = revalidate(file, 0)
+            .and_then(|_| validate(file))
             .and_then(|_| trash.move_to_trash(&file.path));
         let outcome = FileOutcome {
             file_id: file.id,
@@ -119,4 +152,148 @@ pub fn clean(
         cancelled: result.cancelled,
     })?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::Category;
+
+    #[derive(Default)]
+    struct Effects(usize);
+    impl TrashPort for Effects {
+        fn move_to_trash(&mut self, _: &Path) -> Result<(), String> {
+            self.0 += 1;
+            Ok(())
+        }
+    }
+    #[derive(Default)]
+    struct Journal(Vec<JournalEvent>);
+    impl JournalSink for Journal {
+        fn append(&mut self, event: &JournalEvent) -> Result<(), String> {
+            self.0.push(event.clone());
+            Ok(())
+        }
+    }
+    fn fixture() -> (tempfile::TempDir, Analysis) {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("fixture.tmp");
+        fs::write(&path, b"unchanged").unwrap();
+        filetime::set_file_mtime(
+            &path,
+            filetime::FileTime::from_system_time(
+                SystemTime::now() - std::time::Duration::from_secs(30 * 86400),
+            ),
+        )
+        .unwrap();
+        let analysis = crate::scanner::analyze(
+            &[Category {
+                id: "fixture".into(),
+                name: "Fixture".into(),
+                group: "Test".into(),
+                description: String::new(),
+                roots: vec![directory.path().to_path_buf()],
+            }],
+            &["fixture".into()],
+            7,
+            &AtomicBool::new(false),
+            |_, _| {},
+        )
+        .unwrap();
+        assert_eq!(analysis.count(), 1);
+        (directory, analysis)
+    }
+    #[test]
+    fn custom_projection_cannot_use_legacy_effect_path() {
+        let (_directory, mut analysis) = fixture();
+        analysis.cleanup_policy = CleanupPolicy::CustomCleanRules;
+        let id = analysis.categories[0].files[0].id;
+        let mut effects = Effects::default();
+        let mut journal = Journal::default();
+        assert!(
+            clean(
+                &analysis,
+                &[id],
+                &AtomicBool::new(false),
+                &mut effects,
+                &mut journal,
+                |_, _| {}
+            )
+            .is_err()
+        );
+        assert!(journal.0.is_empty());
+        assert_eq!(effects.0, 0);
+    }
+    #[test]
+    fn owner_policy_rejection_never_reaches_trash() {
+        let (_directory, analysis) = fixture();
+        let id = analysis.categories[0].files[0].id;
+        let mut effects = Effects::default();
+        let mut journal = Journal::default();
+        let result = clean_with_validator(
+            &analysis,
+            &[id],
+            &AtomicBool::new(false),
+            &mut effects,
+            &mut journal,
+            |_, _| {},
+            |_| Err("Rule no longer permits this file".into()),
+        )
+        .unwrap();
+        assert_eq!(effects.0, 0);
+        assert_eq!(result.failed.len(), 1);
+        assert!(matches!(
+            journal.0.get(1),
+            Some(JournalEvent::Intent { .. })
+        ));
+        assert!(
+            matches!(journal.0.get(2), Some(JournalEvent::Outcome { outcome }) if !outcome.success)
+        );
+    }
+    #[test]
+    fn permissive_owner_cannot_bypass_core_file_identity() {
+        let (_directory, analysis) = fixture();
+        let candidate = &analysis.categories[0].files[0];
+        fs::write(&candidate.path, b"changed length").unwrap();
+        let mut effects = Effects::default();
+        let mut journal = Journal::default();
+        let mut owner_called = false;
+        let result = clean_with_validator(
+            &analysis,
+            &[candidate.id],
+            &AtomicBool::new(false),
+            &mut effects,
+            &mut journal,
+            |_, _| {},
+            |_| {
+                owner_called = true;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(!owner_called);
+        assert_eq!(effects.0, 0);
+        assert_eq!(result.failed.len(), 1);
+    }
+    #[test]
+    fn ambiguous_analysis_ids_rejected_before_journal() {
+        let (_directory, mut analysis) = fixture();
+        let candidate = analysis.categories[0].files[0].clone();
+        analysis.categories[0].files.push(candidate.clone());
+        let mut effects = Effects::default();
+        let mut journal = Journal::default();
+        assert!(
+            clean(
+                &analysis,
+                &[candidate.id],
+                &AtomicBool::new(false),
+                &mut effects,
+                &mut journal,
+                |_, _| {}
+            )
+            .is_err()
+        );
+        assert!(journal.0.is_empty());
+        assert_eq!(effects.0, 0);
+    }
 }

@@ -30,6 +30,36 @@ pub enum JournalEvent {
 pub trait JournalSink {
     fn append(&mut self, event: &JournalEvent) -> Result<(), String>;
 }
+/// Opens no file until the effect owner has completed its preflight and writes
+/// its first event. A rejected request must not leave an empty history record.
+pub struct DeferredJournal {
+    root: PathBuf,
+    id: Uuid,
+    journal: Option<Journal>,
+}
+impl DeferredJournal {
+    pub fn new(root: &Path, id: Uuid) -> Self {
+        Self {
+            root: root.to_owned(),
+            id,
+            journal: None,
+        }
+    }
+}
+impl JournalSink for DeferredJournal {
+    fn append(&mut self, event: &JournalEvent) -> Result<(), String> {
+        if self.journal.is_none() {
+            if !matches!(event, JournalEvent::Start { .. }) {
+                return Err("A cleanup journal must begin with its start event.".into());
+            }
+            self.journal = Some(Journal::create(&self.root, self.id)?);
+        }
+        self.journal
+            .as_mut()
+            .expect("journal opened above")
+            .append(event)
+    }
+}
 pub struct Journal {
     file: File,
 }

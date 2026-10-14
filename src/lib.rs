@@ -1,5 +1,6 @@
 pub mod clean_settings;
 pub mod cleanup;
+pub mod custom_clean;
 pub mod domain;
 pub mod drivers;
 pub mod duplicates;

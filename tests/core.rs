@@ -26,6 +26,70 @@ struct MemoryJournal {
     fail_at: Option<usize>,
 }
 
+#[test]
+fn rejected_cleanup_leaves_no_empty_history_file() {
+    let (_fixture, category) = fixture();
+    let data = tempfile::tempdir().unwrap();
+    let mut analysis = scanner::analyze(
+        &[category],
+        &["temp".into()],
+        7,
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+    analysis.cleanup_policy = dcleaner::domain::CleanupPolicy::CustomCleanRules;
+    let id = analysis.categories[0].files[0].id;
+    let mut journal = store::DeferredJournal::new(data.path(), Uuid::new_v4());
+    let mut trash = MockTrash { paths: vec![] };
+    assert!(
+        cleanup::clean(
+            &analysis,
+            &[id],
+            &AtomicBool::new(false),
+            &mut trash,
+            &mut journal,
+            |_, _| {}
+        )
+        .is_err()
+    );
+    assert!(!data.path().join("operations").exists());
+    assert!(store::history(data.path()).unwrap().is_empty());
+    assert!(trash.paths.is_empty());
+}
+
+#[test]
+fn deferred_journal_persists_real_cleanup_receipts() {
+    let (_fixture, category) = fixture();
+    let data = tempfile::tempdir().unwrap();
+    let analysis = scanner::analyze(
+        &[category],
+        &["temp".into()],
+        7,
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+    let id = analysis.categories[0].files[0].id;
+    let mut journal = store::DeferredJournal::new(data.path(), Uuid::new_v4());
+    let mut trash = MockTrash { paths: vec![] };
+    let result = cleanup::clean(
+        &analysis,
+        &[id],
+        &AtomicBool::new(false),
+        &mut trash,
+        &mut journal,
+        |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(result.files, 1);
+    let history = store::history(data.path()).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].cleaned_ids, vec![id]);
+    assert!(!history[0].interrupted);
+    assert_eq!(trash.paths.len(), 1);
+}
+
 #[cfg(windows)]
 #[test]
 #[ignore = "Explicit native integration run: moves and restores only a uniquely named test fixture"]

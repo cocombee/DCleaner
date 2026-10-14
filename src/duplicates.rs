@@ -609,6 +609,7 @@ pub fn build_cleanup_analysis(
         id: Uuid::new_v4(),
         date: chrono::Local::now().to_rfc3339(),
         minimum_age_days: 0,
+        cleanup_policy: Default::default(),
         elapsed_ms: report.elapsed_ms,
         cancelled: report.cancelled,
         categories: vec![CategoryResult {

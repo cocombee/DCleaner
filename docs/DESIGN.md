@@ -10,6 +10,8 @@ Observed correction: the first shell repeated the entire destination list in bot
 
 ## Attached screenshot references
 
+The Custom Clean Configure control opens one draft editor with Inclusions, Exclusions, Rules and age, and Deletion tabs. It reuses the 32px field/action geometry, compact tabs, checkbox geometry and common typography. Modal title/actions stay outside its bounded scrolling body. File/folder rows have individual Edit/Remove controls; inclusion rules have explicit enable state and `.custom` is an opt-in. Partial scan acknowledgement, omission details and unsupported-effect messages are connected to actual report state. These additions have source review only; no new application launch, screenshot, installation or native interaction occurred. Existing geometry images cannot be presented as evidence for these new states; their visual acceptance remains pending the user's inspection confirmation.
+
 | Reference | Applied composition |
 | --- | --- |
 | [Status findings](design/references/01-status-findings.png) | Navy shell, narrow icon rail, adjacent section navigation, title/action header, compact finding cards, real cleanup activity |
