@@ -1,0 +1,5 @@
+/target/
+/release/
+/data/
+/reference/
+*.log

@@ -1,0 +1,361 @@
+{
+  "Schema": 1,
+  "Method": "Actual egui framebuffer export; real read-only services; isolated QA preferences",
+  "ExecutableSha256": "9700E0F2D344E1EA63284D76EFDA055FDA9346E156566A9846AE8866DA42AF5E",
+  "CapturedAtUtc": "2026-10-14T21:59:03.2551113Z",
+  "Frames": [
+    {
+      "Page": "health",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "health-wide-dark-v8.png",
+      "Sha256": "941D95A40F6994FA2D25230591D662676002ABBC823320F9D6E193B7AEF833A5",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "health-wide-light-v8.png",
+      "Sha256": "B20C3298DEC5D43127D53AAD682AFE023BB2C18747676D65A85E5098374C335E",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "health-minimum-dark-v8.png",
+      "Sha256": "47B1ABD7B0D6FDD2D21AC4DC37D72F714BE1B58CB629C14924DC4D8B2DFE4752",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "health-minimum-light-v8.png",
+      "Sha256": "520805D34671A02251FDAA23A96188673FF88EABD2632460F3BF5EBF78738EF1",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "clean-wide-dark-v8.png",
+      "Sha256": "5880EFD0E25BF736FE4772B5CF9FD6E5D9939AA30C54D04171290BEAA38B3DAF",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "clean-wide-light-v8.png",
+      "Sha256": "ADA93BDED2AF7BD7D447B512AA13A05E26124EA725AD869C91BAFD93E4C9B6FD",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "clean-minimum-dark-v8.png",
+      "Sha256": "5F7C13BAD98614CA9BAD6042F51A3B60170E120D37C09E7DDADD3706B461E156",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "clean-minimum-light-v8.png",
+      "Sha256": "51BE43C916153F11B7795B7AB64BE7D11594679C55170CCBCA7D683BB54CD7B6",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "duplicates",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "duplicates-wide-dark-v8.png",
+      "Sha256": "09CD95AABCBDEA6664B9147398AE9E5C9A1D4A8A7EE5EA9BF25F92FBED7A8E8C",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "duplicates",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "duplicates-wide-light-v8.png",
+      "Sha256": "C0D39BB65524B59E87380C7244CE781C6CFC362D7E55F31AA1FC80BC55154DE1",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "duplicates",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "duplicates-minimum-dark-v8.png",
+      "Sha256": "E72F1D67F5354365792E97FED6341D467A23407AB684D645F757147596457124",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "duplicates",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "duplicates-minimum-light-v8.png",
+      "Sha256": "A4BADB146D9D21693BFDAC52AF26786BA1C2ED3F5993341C0698565A026FE57B",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "programs-wide-dark-v8.png",
+      "Sha256": "B5A75D091C61C51DE8D4CCC14825A8D51E668C87C04ADED247CE5DD974F2ADA2",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "programs-wide-light-v8.png",
+      "Sha256": "4A69BFFC80552253B255C2092985263A65CD1F3DFE1DADF18012243B8B189B08",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "programs-minimum-dark-v8.png",
+      "Sha256": "B61CBD0048D7D71B1D1679628DF20A4B9CD1D67F2A0F7C3A4FED7ACD6B45D204",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "programs-minimum-light-v8.png",
+      "Sha256": "8982BEE09BD2946B33807DE9C40CB07FE61988E73F6C59401BA89C600960B426",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "startup-wide-dark-v8.png",
+      "Sha256": "FCA42586A625D15B40CE3C74F91D748AC3F624EEEF4F597C3F47F88315DE4832",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "startup-wide-light-v8.png",
+      "Sha256": "A81103DB641961BBDAB312E855F94A86A6CD90B57B6DF7495723A09290AA8FEE",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "startup-minimum-dark-v8.png",
+      "Sha256": "528B007EDBFDB51D1186BD10B83813A0EF7A92EB8ED2F72C2081E49795F5C412",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "startup-minimum-light-v8.png",
+      "Sha256": "E916A2A6BAB3C9170D372FD18754D5828FA51FA46118BEFA4B09577BBD067DCB",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "software-wide-dark-v8.png",
+      "Sha256": "E0857F80E3273562BAB9EEEA58FA920750FACEDAE7B728895251019AB96834F8",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "software-wide-light-v8.png",
+      "Sha256": "A8868B57243044BC0C2F6E09E837CE656FAE5DC5F469FBCBF464FBDD8CCDEAE3",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "software-minimum-dark-v8.png",
+      "Sha256": "FD873820DB86F7E5494EB1A36B73BC17E9641972DD8AACDCED2D2632FEA1C777",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "software-minimum-light-v8.png",
+      "Sha256": "EB1F4F3943D191530A58908AFB24C3D991C418832478F3D537680C6D470A1F6B",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "disk",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "disk-wide-dark-v8.png",
+      "Sha256": "306EEF6DF4410376CCA9B2F0AEE35ECA3F033A28BB242971F8B81C93C89956EA",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "disk",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "disk-wide-light-v8.png",
+      "Sha256": "5E56EFD608121137B5F7713101704DF2A1982F9C16DCF820A10314E77080D52F",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "disk",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "disk-minimum-dark-v8.png",
+      "Sha256": "2D3E79A2175222577FFFBAED316EFC8761B767A54419CF0B23F9455D0E330FE4",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "disk",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "disk-minimum-light-v8.png",
+      "Sha256": "22691D8A209B4ECE74C8CE70681150304776578BC0D4E847ABE6848AED90D2EF",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "history",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "history-wide-dark-v8.png",
+      "Sha256": "2B3DD9BE1578787EAC4760E9075CB03C4F06315D2C0D5B9749B547BE644153DC",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "history",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "history-wide-light-v8.png",
+      "Sha256": "FB7D8E0E975BE795C55CDEA840345CA665ED3D5757463A0BB8FFE972CA16802F",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "history",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "history-minimum-dark-v8.png",
+      "Sha256": "FE489D1088CCA6F70EB4BF5BA22303A62717D24579BADA1D8DED232C12F39217",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "history",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "history-minimum-light-v8.png",
+      "Sha256": "123B496AEED1AF98D5D0425A9D64FCC5798C6E93B6426B73EFD6E47F9B2B4EBB",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "settings",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "settings-wide-dark-v8.png",
+      "Sha256": "146BC36FFFA8617B5F7EAF3640CC148F7DEAC7A098728F7FEDDF8865403281FC",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "settings-wide-light-v8.png",
+      "Sha256": "F46FB50F96FF8987B3C3617CD49C46BA669B03E62A808EA7F592ADD22BDD91C3",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "settings-minimum-dark-v8.png",
+      "Sha256": "0FEC8BBFE19CE31D2162C5BEC8B466ED8262BFDAA4721DC1E439FC98BC8724FA",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "settings-minimum-light-v8.png",
+      "Sha256": "7B929DD72EF3225506A7A58D3BF95898D004438D9D0F94E5279A61323F46EE10",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "browser-wide-dark-v8.png",
+      "Sha256": "62113629931892358B6D09EAB3C50FE7D371451E14B7C8F85F3413E42864E523",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "browser-wide-light-v8.png",
+      "Sha256": "ABD85B3A1E6662B1E3116382AD7EECD486F4C4F7613D5444BC581E174EB34CBE",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "browser-minimum-dark-v8.png",
+      "Sha256": "16CA3D2F76D254999B33422D619F722FDB911F9D1C2327818BC63970264E076C",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "browser-minimum-light-v8.png",
+      "Sha256": "8B582549AE5BE54E6EA793C559B15DE303940FBE7112B82DF7F3A1D64C28D7CE",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "recyclebin-wide-dark-v8.png",
+      "Sha256": "FA963D3B82B75B03ADCEF7251821BC019E5E9B8B05CA5C5493C1C8A8B6FEE90B",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "recyclebin-wide-light-v8.png",
+      "Sha256": "8C1F414CB4DFD229BE53DE3F51451773AFE2AC1D69D80C539DEA7A98C03043AA",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "recyclebin-minimum-dark-v8.png",
+      "Sha256": "9531F563D8C499444FCAB87F5133A7B22E07634BB5678E10FBCF031A764E9754",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "recyclebin-minimum-light-v8.png",
+      "Sha256": "526B6711E606962CD3281D01D5ED8504176132E0324DC85A09EA2D8B73880595",
+      "StoredWithSource": false
+    }
+  ],
+  "Acceptance": "Rendered implementation evidence only. Functional parity, all states, pixel comparison and accessibility acceptance remain open."
+}

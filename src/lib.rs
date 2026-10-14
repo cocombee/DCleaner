@@ -1,0 +1,13 @@
+pub mod cleanup;
+pub mod domain;
+pub mod duplicates;
+pub mod effects;
+pub mod instance;
+pub mod platform;
+pub mod privacy;
+pub mod programs;
+pub mod recycle_bin;
+pub mod scanner;
+pub mod software;
+pub mod startup;
+pub mod store;
