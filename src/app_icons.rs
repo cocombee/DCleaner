@@ -143,6 +143,9 @@ fn extract(raw: &str) -> Option<ColorImage> {
         },
         core::PCWSTR,
     };
+    if let Some(product) = raw.strip_prefix("msi:") {
+        return extract_msi_product(product);
+    }
     let (path, index) = resource_locator(raw)?;
     let wide: Vec<_> = path.as_os_str().encode_wide().chain(Some(0)).collect();
     const SIDE: usize = 32;
@@ -214,6 +217,123 @@ fn extract(raw: &str) -> Option<ColorImage> {
     }
 }
 
+#[cfg(windows)]
+fn extract_msi_product(product: &str) -> Option<ColorImage> {
+    use windows::{
+        Win32::System::ApplicationInstallationAndServicing::*,
+        core::{PCWSTR, PWSTR},
+    };
+    let product = uuid::Uuid::parse_str(product).ok()?;
+    let product = format!("{{{product}}}").to_ascii_uppercase();
+    let wide: Vec<u16> = product.encode_utf16().chain(Some(0)).collect();
+    let code = PCWSTR(wide.as_ptr());
+    struct Handle(MSIHANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = MsiCloseHandle(self.0);
+            }
+        }
+    }
+    // Fixed properties and SQL only. These APIs read the registered product;
+    // no install, advertise, repair, provide-component or custom-action API runs.
+    unsafe fn property(code: PCWSTR, name: PCWSTR) -> Option<String> {
+        let mut data = vec![0u16; 32768];
+        let mut count = data.len() as u32;
+        let status = unsafe {
+            MsiGetProductInfoW(code, name, Some(PWSTR(data.as_mut_ptr())), Some(&mut count))
+        };
+        if status != 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&data[..count as usize]))
+    }
+    unsafe fn field(record: MSIHANDLE, column: u32) -> Option<String> {
+        let mut data = vec![0u16; 32768];
+        let mut count = data.len() as u32;
+        if unsafe {
+            MsiRecordGetStringW(
+                record,
+                column,
+                Some(PWSTR(data.as_mut_ptr())),
+                Some(&mut count),
+            )
+        } != 0
+        {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&data[..count as usize]))
+    }
+    unsafe {
+        if let Some(icon) = property(code, INSTALLPROPERTY_PRODUCTICON) {
+            if let Some(image) = resource_locator(&icon).and_then(|_| extract(&icon)) {
+                return Some(image);
+            }
+        }
+        let package = property(code, INSTALLPROPERTY_LOCALPACKAGE)?;
+        let (package, _) = resource_locator(&package)?;
+        let package: Vec<u16> = package
+            .as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+        let mut database = MSIHANDLE::default();
+        let status = MsiOpenDatabaseW(PCWSTR(package.as_ptr()), MSIDBOPEN_READONLY, &mut database);
+        if status != 0 {
+            return None;
+        }
+        let database = Handle(database);
+        let query = windows::core::w!("SELECT `ComponentId` FROM `Component`");
+        let mut view = MSIHANDLE::default();
+        let status = MsiDatabaseOpenViewW(database.0, query, &mut view);
+        if status != 0 {
+            return None;
+        }
+        let view = Handle(view);
+        if MsiViewExecute(view.0, MSIHANDLE::default()) != 0 {
+            return None;
+        }
+        for _ in 0..4096 {
+            let mut record = MSIHANDLE::default();
+            if MsiViewFetch(view.0, &mut record) != 0 {
+                break;
+            }
+            let record = Handle(record);
+            let Some(component) = field(record.0, 1) else {
+                continue;
+            };
+            let Ok(component) = uuid::Uuid::parse_str(&component) else {
+                continue;
+            };
+            let component: Vec<u16> = format!("{{{component}}}")
+                .to_ascii_uppercase()
+                .encode_utf16()
+                .chain(Some(0))
+                .collect();
+            let mut path = vec![0u16; 32768];
+            let mut count = path.len() as u32;
+            if MsiGetComponentPathW(
+                code,
+                PCWSTR(component.as_ptr()),
+                Some(PWSTR(path.as_mut_ptr())),
+                Some(&mut count),
+            ) != INSTALLSTATE_LOCAL
+            {
+                continue;
+            }
+            let path = String::from_utf16_lossy(&path[..count as usize]);
+            if !path.to_ascii_lowercase().ends_with(".exe") {
+                continue;
+            }
+            if let Some(image) = resource_locator(&path).and_then(|_| extract(&path)) {
+                return Some(image);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +362,16 @@ mod tests {
         assert_eq!(image.size, [32, 32]);
         assert!(image.pixels.iter().any(|pixel| pixel.a() > 0));
         assert!(image.pixels.iter().any(|pixel| pixel.a() < 255));
+    }
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "Read-only native MSI check; explicitly set DCLEANER_QA_MSI_PRODUCT to an installed product GUID."]
+    fn native_registered_msi_product_artwork() {
+        let product =
+            std::env::var("DCLEANER_QA_MSI_PRODUCT").expect("explicit installed MSI product GUID");
+        let image = extract_msi_product(&product)
+            .expect("artwork owned by the exact registered MSI product");
+        assert_eq!(image.size, [32, 32]);
+        assert!(image.pixels.iter().any(|pixel| pixel.a() > 0));
     }
 }

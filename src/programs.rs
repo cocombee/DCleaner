@@ -129,6 +129,23 @@ pub struct InstalledProgram {
 }
 
 impl InstalledProgram {
+    /// Inert artwork locator. GUID registrations are resolved by read-only MSI
+    /// product/component metadata instead of guessing an installation directory.
+    pub fn icon_resource(&self) -> Option<std::borrow::Cow<'_, str>> {
+        if let Some(icon) = self
+            .display_icon
+            .as_deref()
+            .filter(|icon| !icon.trim().is_empty())
+        {
+            return Some(std::borrow::Cow::Borrowed(icon));
+        }
+        if let Ok(product) = Uuid::parse_str(&self.identity.key_name) {
+            return Some(std::borrow::Cow::Owned(format!("msi:{{{product}}}")));
+        }
+        self.uninstall_command
+            .as_ref()
+            .map(|command| std::borrow::Cow::Borrowed(command.executable.as_str()))
+    }
     pub fn removal_block_reasons(&self) -> Vec<RemovalBlockReason> {
         let mut reasons = Vec::new();
         if is_current_application(&self.identity, &self.display_name) {

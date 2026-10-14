@@ -803,8 +803,10 @@ impl App {
             });
             ui.separator();
             let body_height = (ui.ctx().content_rect().bottom() - ui.cursor().top() - 74. - 28. - 80.).max(120.);
+            let previous_y_spacing = ui.spacing().item_spacing.y;
+            ui.spacing_mut().item_spacing.y = 0.;
             egui::ScrollArea::vertical().id_salt(("startup-table-body", inventory.section.label()))
-                .max_height(body_height).auto_shrink([false, false]).show(ui, |ui| {
+                .max_height(body_height).auto_shrink([false, false]).show_rows(ui, 44., entries.len(), |ui, range| {
                 egui::Grid::new(("startup-inventory-grid", inventory.section.label()))
                 .num_columns(columns)
                 .striped(false)
@@ -812,7 +814,7 @@ impl App {
                 .spacing([8., 0.])
                 .min_col_width(0.)
                 .show(ui, |ui| {
-                    for entry in entries {
+                    for entry in &entries[range] {
                         let selected = self.startup_ui.selected.as_ref() == Some(&entry.id);
                         let program = field_text(&entry.program);
                         let response = ui.allocate_ui_with_layout([program_width, 36.].into(), Layout::left_to_right(Align::Center), |ui| {
@@ -900,6 +902,7 @@ impl App {
                     }
                 });
             });
+            ui.spacing_mut().item_spacing.y = previous_y_spacing;
         });
         if let Some(id) = detail_selection {
             self.startup_ui.selected = Some(id);

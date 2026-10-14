@@ -1,0 +1,137 @@
+{
+  "Schema": 1,
+  "Method": "Actual egui framebuffer export; real read-only services; isolated QA preferences",
+  "ExecutableSha256": "D4256723F192983F982637D50242436A4099366A615971FE37180AAFB18F2D18",
+  "CapturedAtUtc": "2026-10-14T22:13:47.4738896Z",
+  "Frames": [
+    {
+      "Page": "health",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "health-wide-dark-v9.png",
+      "Sha256": "4FD34E88616221D684033F2D99556A6B061875AAFD85E8C9F769D83DEA31484E",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "health-wide-light-v9.png",
+      "Sha256": "ECBDA7FF53CA4BC6AE01552C5FDB71F9C72B2FA71D5ACBA2C20232C7AE40F885",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "health-minimum-dark-v9.png",
+      "Sha256": "21C9F551968601629BB0B5FE460B1DDFEE990C06F23D65D0A9F51BAD5E3BBECD",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "health-minimum-light-v9.png",
+      "Sha256": "D6BE390E5D85C9BCA7B98FDD0C2DDDE6B1EAA4877A871ADECB2084B8594C93B7",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "programs",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "programs-wide-dark-v9.png",
+      "Sha256": "CE5D987CBDF407F0B7F6BE6785E4207D58996A320B2FAE64156C9E33FA99580E",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "programs-wide-light-v9.png",
+      "Sha256": "387D6D37B989C8008B73813949E9D26C69A86A0240502697A1B648E78ADFEFB6",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "programs-minimum-dark-v9.png",
+      "Sha256": "72F9AFCA9325B035CC1950D8C7EEB0CAE5C96C09E579429E3E95CDF3DE428802",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "programs-minimum-light-v9.png",
+      "Sha256": "4710E2D5BAB311C9581F1AA0CAF297385196EEFF82B55AD0D7485F151E7CFAA2",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "startup-wide-dark-v9.png",
+      "Sha256": "9A7F5738ED2E2118733ED5AFB42E331619689A0BF13B6B545DF2B555ACE05DD7",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "startup-wide-light-v9.png",
+      "Sha256": "2553F994485F762D6E80CECBDCCF1AFCECF32A945856A9ECF64D4F1A3668BE76",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "startup-minimum-dark-v9.png",
+      "Sha256": "5466BE0FB0B41C90F9EBBBFCB9BD8F3122B6A25617C1A584D19D3B87E5D7095C",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "startup-minimum-light-v9.png",
+      "Sha256": "533F3C68E7CD0B1A9BB33018BE5447B9946836D326B43506F53AE07966821A16",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "software-wide-dark-v9.png",
+      "Sha256": "A28C8FA47F878C49EF1A28E018CF3220145E9A06B53C3C6CBBE2FEC5F3F6191D",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "software-wide-light-v9.png",
+      "Sha256": "06884118F746E1DAE5B4D83C242BB4A1E5E8421202D1DE3201E0D76E233261CB",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "software-minimum-dark-v9.png",
+      "Sha256": "6791B8BAF73D34610967DA4F08C41887689B050C17D948425BC89791C12A1A55",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "software-minimum-light-v9.png",
+      "Sha256": "1E57CBE9F41CDBFF2B7B0564E0E5AF69DA31E7526AE7989D45D74D81BF01B9A2",
+      "StoredWithSource": false
+    }
+  ],
+  "Acceptance": "Rendered follow-up for artwork and visible-row changes. Full parity, pixel comparison and all-state acceptance remain open."
+}

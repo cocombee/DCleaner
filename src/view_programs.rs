@@ -173,138 +173,158 @@ impl App {
         let mut close = false;
         let mut start_handoff: Option<UninstallRequest> = None;
         let modal_width = (ctx.content_rect().width() - 32.).min(560.).max(280.);
-        let modal_height = (ctx.content_rect().height() - 80.).max(180.);
+        let body_height = dialog_body_max_height(ctx);
         let can_dismiss = matches!(&dialog, ProgramsDialog::Details(_)) || !self.busy();
+        let heading = match &dialog {
+            ProgramsDialog::Details(_) => "Installed program details",
+            ProgramsDialog::UninstallReview(_) => "Review native uninstall handoff",
+        };
         let response = egui::Modal::new(egui::Id::new("programs-dialog"))
             .frame(theme::dialog_frame(t))
             .show(ctx, |ui| {
-            ui.set_width(modal_width);
-            egui::ScrollArea::vertical()
-                .max_height(modal_height)
-                .show(ui, |ui| {
-            match &dialog {
-                ProgramsDialog::Details(identity) => {
-                    if let Some(program) = self.program_by_identity(identity).cloned() {
-                        ui.heading("Installed program details");
-                        ui.add_space(12.);
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(&program.display_name).family(theme::semibold()),
-                            )
-                            .wrap(),
-                        );
-                        ui.add_space(12.);
-                        detail_row(ui, "Publisher", optional(&program.publisher), t);
-                        detail_row(ui, "Version", optional(&program.version), t);
-                        detail_row(
-                            ui,
-                            "Install location",
-                            program
-                                .install_location
-                                .as_ref()
-                                .map(|path| path.display().to_string())
-                                .unwrap_or_else(|| "Not registered".into()),
-                            t,
-                        );
-                        detail_row(
-                            ui,
-                            "Install date",
-                            program
-                                .install_date
-                                .as_deref()
-                                .map(format_install_date)
-                                .unwrap_or_else(|| "Not registered".into()),
-                            t,
-                        );
-                        detail_row(
-                            ui,
-                            "Estimated size",
-                            program
-                                .estimated_size_bytes
-                                .map(format_size)
-                                .unwrap_or_else(|| "Not registered".into()),
-                            t,
-                        );
-                        detail_row(ui, "Registration", source_label(program.source), t);
-                        detail_row(ui, "Stable identity", program.identity.stable_id(), t);
-                        ui.add_space(10.);
-                        ui.label(RichText::new("Registered uninstall command (preview only)").family(theme::semibold()));
-                        ui.add_space(6.);
-                        command_preview(ui, &program, t);
-                        if !program.removal_block_reasons().is_empty() {
-                            ui.add_space(8.);
-                            for reason in program.removal_block_reasons() {
-                                ui.colored_label(t.attention, reason.to_string());
+                ui.set_width(modal_width);
+                ui.heading(heading);
+                ui.add_space(8.);
+                egui::ScrollArea::vertical()
+                    .max_height(body_height)
+                    .auto_shrink([false, false])
+                    .show(ui, |body| match &dialog {
+                        ProgramsDialog::Details(identity) => {
+                            if let Some(program) = self.program_by_identity(identity).cloned() {
+                                body.add(
+                                    egui::Label::new(
+                                        RichText::new(&program.display_name)
+                                            .family(theme::semibold()),
+                                    )
+                                    .wrap(),
+                                );
+                                body.add_space(12.);
+                                detail_row(body, "Publisher", optional(&program.publisher), t);
+                                detail_row(body, "Version", optional(&program.version), t);
+                                detail_row(
+                                    body,
+                                    "Install location",
+                                    program
+                                        .install_location
+                                        .as_ref()
+                                        .map(|path| path.display().to_string())
+                                        .unwrap_or_else(|| "Not registered".into()),
+                                    t,
+                                );
+                                detail_row(
+                                    body,
+                                    "Install date",
+                                    program
+                                        .install_date
+                                        .as_deref()
+                                        .map(format_install_date)
+                                        .unwrap_or_else(|| "Not registered".into()),
+                                    t,
+                                );
+                                detail_row(
+                                    body,
+                                    "Estimated size",
+                                    program
+                                        .estimated_size_bytes
+                                        .map(format_size)
+                                        .unwrap_or_else(|| "Not registered".into()),
+                                    t,
+                                );
+                                detail_row(body, "Registration", source_label(program.source), t);
+                                detail_row(body, "Stable identity", program.identity.stable_id(), t);
+                                body.add_space(10.);
+                                body.label(
+                                    RichText::new("Registered uninstall command (preview only)")
+                                        .family(theme::semibold()),
+                                );
+                                body.add_space(6.);
+                                command_preview(body, &program, t);
+                                if !program.removal_block_reasons().is_empty() {
+                                    body.add_space(8.);
+                                    for reason in program.removal_block_reasons() {
+                                        body.colored_label(t.attention, reason.to_string());
+                                    }
+                                }
+                            } else {
+                                theme::muted(
+                                    body,
+                                    "This program is no longer in inventory. Refresh before reviewing it.",
+                                    t,
+                                );
                             }
                         }
-                    } else {
-                        ui.heading("Program no longer in inventory");
-                        theme::muted(ui, "Refresh the registry inventory before reviewing this entry.", t);
-                    }
-                }
-                ProgramsDialog::UninstallReview(request) => {
-                    let program = self.program_by_identity(&request.identity).cloned();
-                    ui.heading("Review native uninstall handoff");
-                    ui.add_space(10.);
-                    if let Some(program) = program {
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(format!(
-                                    "Start the registered uninstaller for {}?",
-                                    program.display_name
-                                ))
-                                .family(theme::semibold()),
-                            )
-                            .wrap(),
-                        );
-                        ui.add_space(10.);
-                        theme::muted(ui, "DCleaner will re-read this exact registration and verify its identity, protection flags, and command before launching it directly. The command is preview data here; it has not run.", t);
-                        ui.add_space(12.);
-                        detail_row(ui, "Registration", source_label(request.source), t);
-                        detail_row(ui, "Stable identity", request.identity.stable_id(), t);
-                        ui.add_space(6.);
-                        ui.label(RichText::new("Exact registered command").family(theme::semibold()));
-                        ui.add_space(5.);
-                        if let Some(command) = program.uninstall_command.as_ref() {
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(&command.registered).monospace(),
-                                )
-                                .wrap(),
-                            );
-                        } else {
-                            ui.colored_label(t.attention, "The command is no longer available for safe handoff.");
+                        ProgramsDialog::UninstallReview(request) => {
+                            if let Some(program) =
+                                self.program_by_identity(&request.identity).cloned()
+                            {
+                                body.add(
+                                    egui::Label::new(
+                                        RichText::new(format!(
+                                            "Start the registered uninstaller for {}?",
+                                            program.display_name
+                                        ))
+                                        .family(theme::semibold()),
+                                    )
+                                    .wrap(),
+                                );
+                                body.add_space(10.);
+                                theme::muted(body, "DCleaner will re-read this exact registration and verify its identity, protection flags, and command before launching it directly. The command is preview data here; it has not run.", t);
+                                body.add_space(12.);
+                                detail_row(body, "Registration", source_label(request.source), t);
+                                detail_row(body, "Stable identity", request.identity.stable_id(), t);
+                                body.add_space(6.);
+                                body.label(
+                                    RichText::new("Exact registered command")
+                                        .family(theme::semibold()),
+                                );
+                                body.add_space(5.);
+                                if let Some(command) = program.uninstall_command.as_ref() {
+                                    body.add(
+                                        egui::Label::new(
+                                            RichText::new(&command.registered).monospace(),
+                                        )
+                                        .wrap(),
+                                    );
+                                } else {
+                                    body.colored_label(
+                                        t.attention,
+                                        "The command is no longer available for safe handoff.",
+                                    );
+                                }
+                                body.add_space(12.);
+                                body.colored_label(t.attention, "Launching does not confirm removal. The program may request elevation or require a restart.");
+                            } else {
+                                theme::muted(
+                                    body,
+                                    "This registration disappeared from the current inventory. Refresh before trying again.",
+                                    t,
+                                );
+                            }
                         }
-                        ui.add_space(12.);
-                        ui.colored_label(t.attention, "Launching does not confirm removal. The program may request elevation or require a restart.");
-                        ui.add_space(18.);
-                        ui.horizontal(|ui| {
-                            if theme::secondary(ui, "Cancel", !self.busy()) {
-                                close = true;
-                            }
-                            let enabled = !self.busy() && program.can_uninstall();
-                            if theme::primary(ui, "Start registered uninstaller", t, enabled) {
-                                start_handoff = Some(request.clone());
-                                close = true;
-                            }
-                        });
-                    } else {
-                        theme::muted(ui, "This registration disappeared from the current inventory. Refresh before trying again.", t);
-                        ui.add_space(14.);
-                        if theme::secondary(ui, "Close", !self.busy()) {
+                    });
+                ui.add_space(8.);
+                ui.separator();
+                ui.add_space(8.);
+                ui.horizontal_wrapped(|actions| match &dialog {
+                    ProgramsDialog::Details(_) => {
+                        if theme::secondary(actions, "Close", true) {
                             close = true;
                         }
                     }
-                }
-            }
-            if !matches!(&dialog, ProgramsDialog::UninstallReview(_)) {
-                ui.add_space(18.);
-                if theme::secondary(ui, "Close", true) {
-                    close = true;
-                }
-            }
+                    ProgramsDialog::UninstallReview(request) => {
+                        let program = self.program_by_identity(&request.identity);
+                        if theme::secondary(actions, "Cancel", !self.busy()) {
+                            close = true;
+                        }
+                        let enabled = !self.busy()
+                            && program.is_some_and(InstalledProgram::can_uninstall);
+                        if theme::primary(actions, "Start registered uninstaller", t, enabled) {
+                            start_handoff = Some(request.clone());
+                            close = true;
+                        }
+                    }
                 });
-        });
+            });
         if response.should_close() && can_dismiss {
             close = true;
         }
@@ -487,8 +507,9 @@ impl App {
                 .id_salt("installed-programs-table-body")
                 .max_height(body_height)
                 .auto_shrink([false, false])
-                .show(ui, |rows_ui| {
-            for program in visible.iter().copied() {
+                .show_rows(ui, 44.0, visible.len(), |rows_ui, visible_rows| {
+            for index in visible_rows {
+                let program = visible[index];
                 rows_ui.push_id(program.identity.stable_id(), |ui| {
                     let row_response = ui.allocate_ui_with_layout(
                         [table_width, 44.].into(),
@@ -499,12 +520,7 @@ impl App {
                             row.spacing_mut().item_spacing.y = previous_y_spacing;
                             let is_selected =
                                 self.program_ui.selected.as_ref() == Some(&program.identity);
-                            let icon = program.display_icon.as_deref().or_else(|| {
-                                program
-                                    .uninstall_command
-                                    .as_ref()
-                                    .map(|command| command.executable.as_str())
-                            });
+                            let icon = program.icon_resource();
                             let name = row
                                 .allocate_ui_with_layout(
                                     [name_width, 40.].into(),
@@ -513,7 +529,7 @@ impl App {
                                         cell.set_min_width(name_width);
                                         cell.set_max_width(name_width);
                                         cell.spacing_mut().item_spacing.x = 8.;
-                                        self.app_icons.show(cell, icon, 22.0);
+                                        self.app_icons.show(cell, icon.as_deref(), 22.0);
                                         cell.scope(|cell| {
                                             cell.spacing_mut().button_padding.x = 0.;
                                             cell.add_sized(
@@ -833,6 +849,11 @@ fn table_heading(ui: &mut egui::Ui, label: &str, width: f32, t: Tokens) {
         width,
         22.,
     );
+}
+
+fn dialog_body_max_height(ctx: &egui::Context) -> f32 {
+    // Keep the 24px dialog padding, pinned title, pinned action footer, and layout gaps visible.
+    (ctx.content_rect().height() - 48.0 - 40.0 - 56.0 - 24.0).max(80.0)
 }
 
 fn unavailable_card(ui: &mut egui::Ui, t: Tokens, heading: &str, message: &str) {

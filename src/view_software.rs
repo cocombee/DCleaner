@@ -307,22 +307,23 @@ impl App {
             SoftwareDialog::Details(item) => {
                 let mut close = false;
                 let modal_width = (ctx.content_rect().width() - 32.).min(560.).max(280.);
-                let modal_height = (ctx.content_rect().height() - 80.).max(180.);
+                let body_height = dialog_body_max_height(ctx, 44.0);
                 let response = egui::Modal::new(egui::Id::new("software-details-dialog"))
                     .frame(theme::dialog_frame(t))
                     .show(ctx, |ui| {
                         ui.set_width(modal_width);
+                        ui.heading("Program details");
+                        ui.add_space(8.);
                         egui::ScrollArea::vertical()
-                            .max_height(modal_height)
-                            .show(ui, |ui| {
-                                ui.heading("Program details");
-                                ui.add_space(8.);
-                                self.software_details(ui, t, &item);
-                                ui.add_space(12.);
-                                if theme::secondary(ui, "Close", true) {
-                                    close = true;
-                                }
-                            });
+                            .max_height(body_height)
+                            .auto_shrink([false, false])
+                            .show(ui, |body| self.software_details(body, t, &item));
+                        ui.add_space(8.);
+                        ui.separator();
+                        ui.add_space(8.);
+                        if theme::secondary(ui, "Close", true) {
+                            close = true;
+                        }
                     });
                 if close || response.should_close() {
                     self.software_ui.dialog = None;
@@ -333,49 +334,58 @@ impl App {
                 let mut cancel = false;
                 let can_dismiss = !self.busy();
                 let modal_width = (ctx.content_rect().width() - 32.).min(510.).max(280.);
-                let modal_height = (ctx.content_rect().height() - 80.).max(180.);
+                let body_height = dialog_body_max_height(ctx, 56.0);
                 let response = egui::Modal::new(egui::Id::new("software-update-review"))
                     .frame(theme::dialog_frame(t))
                     .show(ctx, |ui| {
-                    ui.set_width(modal_width);
-                    egui::ScrollArea::vertical()
-                        .max_height(modal_height)
-                        .show(ui, |ui| {
-                            ui.heading("Review software update");
-                            ui.add_space(8.);
-                            theme::muted(ui, "WinGet opens its interactive update prompt after you confirm.", t);
-                            ui.add_space(12.);
-                            review_row(ui, "Program", &request.display_name, t);
-                            review_row(ui, "Package ID", &request.package_id, t);
-                            review_row(ui, "Source", &request.source_id, t);
-                            review_row(ui, "Installed version", &request.installed_version, t);
-                            review_row(ui, "Requested version", &request.target_version, t);
-                            egui::CollapsingHeader::new("Command details")
-                                .default_open(false)
-                                .show(ui, |ui| {
-                                    ui.add(
-                                        egui::Label::new(
-                                            RichText::new(format!(
-                                                "winget upgrade --id \"{}\" --exact --source \"{}\" --version \"{}\" --interactive",
-                                                request.package_id, request.source_id, request.target_version
-                                            ))
-                                            .monospace(),
-                                        )
-                                        .wrap(),
-                                    );
-                                    theme::muted(ui, "This is an informational preview. DCleaner rechecks the same registration and source row before launch; it does not accept agreements or use silent-install flags.", t);
-                                });
-                            ui.add_space(15.);
-                            ui.horizontal(|ui| {
-                                if theme::secondary(ui, "Cancel", can_dismiss) {
-                                    cancel = true;
-                                }
-                                if theme::primary(ui, "Run reviewed update", t, can_dismiss) {
-                                    accept = true;
-                                }
+                        ui.set_width(modal_width);
+                        ui.heading("Review software update");
+                        ui.add_space(8.);
+                        egui::ScrollArea::vertical()
+                            .max_height(body_height)
+                            .auto_shrink([false, false])
+                            .show(ui, |body| {
+                                theme::muted(
+                                    body,
+                                    "WinGet opens its interactive update prompt after you confirm.",
+                                    t,
+                                );
+                                body.add_space(12.);
+                                review_row(body, "Program", &request.display_name, t);
+                                review_row(body, "Package ID", &request.package_id, t);
+                                review_row(body, "Source", &request.source_id, t);
+                                review_row(body, "Installed version", &request.installed_version, t);
+                                review_row(body, "Requested version", &request.target_version, t);
+                                egui::CollapsingHeader::new("Command details")
+                                    .default_open(false)
+                                    .show(body, |body| {
+                                        body.add(
+                                            egui::Label::new(
+                                                RichText::new(format!(
+                                                    "winget upgrade --id \"{}\" --exact --source \"{}\" --version \"{}\" --interactive",
+                                                    request.package_id,
+                                                    request.source_id,
+                                                    request.target_version
+                                                ))
+                                                .monospace(),
+                                            )
+                                            .wrap(),
+                                        );
+                                        theme::muted(body, "This is an informational preview. DCleaner rechecks the same registration and source row before launch; it does not accept agreements or use silent-install flags.", t);
+                                    });
                             });
+                        ui.add_space(8.);
+                        ui.separator();
+                        ui.add_space(8.);
+                        ui.horizontal_wrapped(|actions| {
+                            if theme::secondary(actions, "Cancel", can_dismiss) {
+                                cancel = true;
+                            }
+                            if theme::primary(actions, "Run reviewed update", t, can_dismiss) {
+                                accept = true;
+                            }
                         });
-                });
+                    });
                 if can_dismiss && (cancel || response.should_close()) {
                     self.software_ui.dialog = None;
                 } else if can_dismiss && accept {
@@ -682,8 +692,9 @@ impl App {
             .id_salt("software-table-body")
             .max_height(body_height)
             .auto_shrink([false, false])
-            .show(ui, |rows_ui| {
-                for item in &items {
+            .show_rows(ui, 44.0, items.len(), |rows_ui, visible_rows| {
+                for index in visible_rows {
+                    let item = &items[index];
                     let key = item.row_key();
                     rows_ui.push_id(&key, |ui| {
                         let row_response = ui.allocate_ui_with_layout(
@@ -694,14 +705,10 @@ impl App {
                                 row.spacing_mut().item_spacing.x = 8.0;
                                 row.spacing_mut().item_spacing.y = previous_y_spacing;
                                 let selected = self.software_ui.selected.as_deref() == Some(&key);
-                                let icon = item.registration.as_ref().and_then(|program| {
-                                    program.display_icon.as_deref().or_else(|| {
-                                        program
-                                            .uninstall_command
-                                            .as_ref()
-                                            .map(|command| command.executable.as_str())
-                                    })
-                                });
+                                let icon = item
+                                    .registration
+                                    .as_ref()
+                                    .and_then(|program| program.icon_resource());
                                 let name = row
                                     .allocate_ui_with_layout(
                                         [name_width, 40.].into(),
@@ -710,7 +717,7 @@ impl App {
                                             cell.set_min_width(name_width);
                                             cell.set_max_width(name_width);
                                             cell.spacing_mut().item_spacing.x = 8.;
-                                            self.app_icons.show(cell, icon, 22.0);
+                                            self.app_icons.show(cell, icon.as_deref(), 22.0);
                                             cell.scope(|cell| {
                                                 cell.spacing_mut().button_padding.x = 0.;
                                                 cell.add_sized(
@@ -1195,6 +1202,11 @@ fn table_heading(ui: &mut egui::Ui, label: &str, width: f32, t: Tokens) {
         width,
         22.,
     );
+}
+
+fn dialog_body_max_height(ctx: &egui::Context, footer_height: f32) -> f32 {
+    // Reserve the 24px dialog padding, pinned title, pinned actions, and inter-widget gaps.
+    (ctx.content_rect().height() - 48.0 - 40.0 - footer_height - 24.0).max(80.0)
 }
 
 fn status_card(ui: &mut egui::Ui, t: Tokens, heading: &str, body: &str) {
