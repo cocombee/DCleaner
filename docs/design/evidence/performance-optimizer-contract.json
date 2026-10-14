@@ -1,0 +1,265 @@
+{
+  "schema": 1,
+  "evidence_kind": "static behavior contract; not visual or runtime acceptance",
+  "target": {
+    "product": "CCleaner",
+    "windows_version": "7.12.1526.0",
+    "gui_sha256": "ab7c068440e5afbae365ada04a8b2c79446fdf546515a42d6aca6188019fdcb4",
+    "reactivator": {
+      "file_version": "25.0.0.1",
+      "product_version": "7.12.1526.0",
+      "sha256": "ebf22f13d136528dbbd08317e0d1b20e6b6c1b6078c15b6fb02d7589df39ef4f"
+    }
+  },
+  "gui_evidence": [
+    {
+      "summary": "ev_4da09308ae7e77884e7b3ced6e5ff198579a14997072335b7484c1c12128f9b6",
+      "parent": "ev_ecb0a8a02ee7acb8310908242007dd3c6a35864421fe1a2c4843bba6866d8ce6",
+      "parsed_files": 5,
+      "ast_nodes": 15323,
+      "findings": 705,
+      "parse_failures": 0,
+      "coverage": "partial"
+    },
+    {
+      "summary": "ev_784590f850891e35d4d8b147e4a2bc9d331d3cbe6eec0bc78a7db6dac9ddffb6",
+      "parent": "ev_5f43a55782904bdda318f531d8f6d6dc3191ed39ffcda2d315bce52a09ce625f",
+      "parsed_files": 4,
+      "ast_nodes": 10117,
+      "findings": 228,
+      "parse_failures": 0,
+      "coverage": "partial"
+    },
+    {
+      "summary": "ev_6f310872831e43c0688f6061d84b71933bd1a65fef198ee3b469ce40089f02f3",
+      "parent": "ev_bbd3c34a23b6eba12da1915902764da9177c6eeedce494e15abbd00b1172af41",
+      "parsed_files": 1,
+      "ast_nodes": 49899,
+      "findings": 184,
+      "parse_failures": 0,
+      "coverage": "partial; semantic graph truncated at 12000 nodes"
+    }
+  ],
+  "ui": {
+    "buckets": {
+      "active": [
+        "found",
+        "deactivating"
+      ],
+      "sleeping": [
+        "deactivated",
+        "activating"
+      ],
+      "excluded": [
+        "ignored"
+      ]
+    },
+    "substates": [
+      "none",
+      "deactivated_external",
+      "deactivated_scheduled",
+      "deactivated_reenabled",
+      "deactivated_another_p_d_s_d_k",
+      "deactivated_scheduled_another_p_d_s_d_k"
+    ],
+    "actions": {
+      "active": [
+        "sleep",
+        "details",
+        "exclude when offered"
+      ],
+      "sleeping": [
+        "activate",
+        "details",
+        "activate all with confirmation"
+      ],
+      "excluded": [
+        "remove exclusion",
+        "details"
+      ],
+      "shared": [
+        "scan again",
+        "scan progress",
+        "stop scan"
+      ]
+    },
+    "details": [
+      "version",
+      "publisher",
+      "install date",
+      "impact",
+      "associated entry path/type/status"
+    ],
+    "entry_types": [
+      "service",
+      "scheduled_task",
+      "autostart",
+      "registry_run",
+      "pet_app_x_background_application",
+      "pet_app_x_startup_task",
+      "pet_app_x_a_l_t",
+      "unknown"
+    ],
+    "entry_statuses": [
+      "disabled",
+      "enabled",
+      "enabled_temporarily"
+    ],
+    "confirmation_skip_defaults": {
+      "post_sleep": false,
+      "exclude": false,
+      "remove_exclusion": false,
+      "activate_all": false
+    },
+    "progress": {
+      "poll_ms": 250,
+      "source": "service completed_steps and total_steps; no synthetic progress"
+    },
+    "promised_behavior": [
+      "automatic activation when the app is needed",
+      "return to sleep afterward"
+    ],
+    "response_variants": [
+      "result",
+      "program_details",
+      "background_scan"
+    ],
+    "status_schema": [
+      "idle",
+      "running",
+      "done",
+      "error",
+      "denied"
+    ],
+    "selected_handler_limit": "Selected optimizer handler explicitly handles idle/running/done and program_details. Global handling of other variants is not established."
+  },
+  "native_evidence": [
+    {
+      "evidence_id": "ev_67037b2c2ee8d518f1c0ee765703be94abc25cadd3cb664385d880a4642a54b5",
+      "procedure": "0x14001fc00",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_7b9507845f90d973cdca8d2b0eef0c2a6d2e773297f793476142dd0159842910",
+      "procedure": "0x140020920",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_81e94ab7cf7b5b984caf856463a2feb84d3a927f47fb2f45b691581fe7d3656d",
+      "procedure": "0x14001ffa0",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_5475a49beb535da7ff8521b9531b4f63b127cb78155e3d09c7ae8151152610ea",
+      "procedure": "0x1400202a0",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_97bdc12ed7274206038e4a304c1588417c4e695629ca5014941e5dfb0e554951",
+      "procedure": "0x14002b130",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_f0dd37df4a06cb9c95cfd45f54a1b5e49c9f31238bec904638f06c7351d3d714",
+      "procedure": "0x140020e00",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_a42591bd5490e4fbc921793a97749e46ba5b37f0e69b92ad14f5d2a344f6f57c",
+      "procedure": "0x14002ad30",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_71d232f01f24a9f271add6231d24f50ec12f3d15cd338afcf5ad51bbdd2b3b33",
+      "procedure": "0x14002b750",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev_883f0a528b7234bdd189acbec3885a3c0e7eb139f8c51cd8148483c8520a476b",
+      "procedure": "0x14002c050",
+      "authority": "shipped-artifact",
+      "confidence": "observed"
+    }
+  ],
+  "native_observations": [
+    {
+      "procedures": [
+        "0x14001fc00"
+      ],
+      "fact": "Builds an exeName JSON field and sends pd.ReenableForExe through the reactivator RPC path; timeout handling is present."
+    },
+    {
+      "procedures": [
+        "0x140020920",
+        "0x1400202a0",
+        "0x14002ad30"
+      ],
+      "fact": "Launch orchestration calls re-enabling first, checks debugger registration, includes recursive-call detection and conditional temporary debugger clearing/restoration, then waits for child input-idle with a finite timeout."
+    },
+    {
+      "procedures": [
+        "0x14001ffa0"
+      ],
+      "fact": "Checks target executable existence, calls CreateProcessW with target command line/current directory, and has a ShellExecuteExW branch after elevation-required failure. This path was not executed."
+    },
+    {
+      "procedures": [
+        "0x14002b130",
+        "0x14002b750",
+        "0x14002c050"
+      ],
+      "fact": "Debugger registration management includes IFEO, Debugger, FilterFullPath and UseFilter, plus registry-view branches and clear paths. Full-path scope is therefore an implementation obligation."
+    },
+    {
+      "procedures": [
+        "0x140020e00"
+      ],
+      "fact": "Contains a synchronous ProgramDeactivator RevertAll request. The caller's failure/recovery circumstances remain unproven."
+    }
+  ],
+  "dcleaner_obligations": [
+    "A real background state owner must preserve sleeping, temporary activation and return-to-sleep behavior independently of GUI lifetime.",
+    "Use exact app/component identities and full executable paths; do not disable arbitrary same-name executables.",
+    "Retain before/after snapshots, journal before effects, reject changed external state and verify restoration.",
+    "Confirm helper/service readiness before arming any launch interception; failure must not prevent normal app launch.",
+    "Preserve foreign debugger registrations and other optimizers' state; never claim ownership from a display name.",
+    "Implement startup/service/task/packaged-app component behavior and impact provenance; startup toggles or process termination alone do not establish Sleep parity.",
+    "Use independent Rust services and providers; observed vendor request names are reconstruction evidence, not an implemented backend."
+  ],
+  "unknowns": [
+    "Exact UI-to-native dispatcher association",
+    "Service-side component mutation and app/component association",
+    "Impact classification",
+    "Service lifecycle, process-exit monitoring and return-to-sleep",
+    "Native journal/receipt, crash and reboot recovery behavior",
+    "Global optimizer error/denied/background-scan UI handling and feature-specific restart behavior",
+    "Successful host Sleep/Wake/Exclude/Activate-all and final native visual acceptance"
+  ],
+  "acceptance": {
+    "native_effects_executed": false,
+    "app_launched": false,
+    "desktop_capture": false,
+    "installed_candidate_changed": false,
+    "optimizer_implemented": false,
+    "parity_complete": false
+  },
+  "gui_source_sha256": {
+    "chunks/PerformanceOptimizer.js": "28c4a06c014a0488679bd38c03248b163b45c4fbf4f3b202e15be95d3120694b",
+    "chunks/performance_optimizer.js": "06de0294b4c2ac63a0aec864cd7cec2b83adb0e3be7c9678b1db79ad0eb7b24d",
+    "chunks/Results3.js": "0b2739e5936ab8e9053ce7dd8ec8c07bbf29de51ef710e53c6d50f607041ab0f",
+    "chunks/results2.js": "8aa67bb83a45d7835f51be7b5c05c321793cee5c035f1d4e61a60d76e3e247bc",
+    "chunks/Progress5.js": "c96e7672c73f9d8a9d45df91b12d7fb727130924abb0add0782d59fbbfbcda62",
+    "chunks/settings5.js": "7225d2546b06ad4d5f3fa8bf6bb7274415f117d207878bb754a19cd123c44e90",
+    "chunks/analytics.js": "5f6b15cdb29f94d3fbc4c431c28153c8c6caa60e21cec537c5e145fe8055778a",
+    "chunks/webview.js": "7adef99d34ef6da70fe79f108cce4af9306441dbd27d324e1491aa4dc14b0350",
+    "chunks/en.js": "045ca0c315dd09981c86624ece95ff0d6e049bdf90635fbb8909678d55b8ae27"
+  }
+}
