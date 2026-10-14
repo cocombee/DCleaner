@@ -26,6 +26,8 @@ const MAX_CUSTOM_RULES: usize = 512;
 const MAX_CUSTOM_EXCLUSIONS: usize = 4096;
 const MAX_FILTERS: usize = 4096;
 const MAX_FILTER_BYTES: usize = 1024;
+const MAX_MATCH_INPUT_BYTES: usize = 32_768;
+pub const MAX_MATCH_STEPS: usize = 128_000_000;
 const MAX_SCAN_DEPTH: usize = 128;
 const MAX_SKIP_DETAILS: usize = 2048;
 const HOUR_NS: f64 = 3_600_000_000_000.0;
@@ -41,6 +43,9 @@ pub struct ScanOptions {
     pub now: SystemTime,
     /// A caller may lower the bound, never raise it above the shared scanner cap.
     pub max_entries: usize,
+    /// Aggregate matching work for the whole scan, including normalization and
+    /// wildcard retries. A lower caller limit is useful for bounded scans.
+    pub max_match_steps: usize,
 }
 
 impl Default for ScanOptions {
@@ -51,6 +56,7 @@ impl Default for ScanOptions {
             default_age_days: 7,
             now: SystemTime::now(),
             max_entries: MAX_ENTRIES,
+            max_match_steps: MAX_MATCH_STEPS,
         }
     }
 }
@@ -223,6 +229,34 @@ pub enum SkipReason {
     ExcludedByPathRule,
     EntryLimit,
     ChangedDuringScan,
+    MatchingWorkLimit,
+    MatchingInputLimit,
+    MatchingCancelled,
+}
+
+impl SkipReason {
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::UnavailableRoot => "Location unavailable",
+            Self::ReadDirectoryFailed => "Folder could not be read",
+            Self::EntryReadFailed => "Folder entry could not be read",
+            Self::LinkedEntry => "Linked or redirected location skipped",
+            Self::OutsideRoot => "Location moved outside its selected folder",
+            Self::MetadataUnavailable => "File information unavailable",
+            Self::NonRegularFile => "Not an ordinary file",
+            Self::DepthLimit => "Folder nesting limit reached",
+            Self::TooRecent => "File is newer than the selected age limit",
+            Self::ExcludedByFileRule => "Excluded by a file rule",
+            Self::ExcludedByPathRule => "Excluded by a folder rule",
+            Self::EntryLimit => "Scan entry limit reached",
+            Self::ChangedDuringScan => "File changed during the scan",
+            Self::MatchingWorkLimit => {
+                "Matching limit reached; remaining locations were not scanned"
+            }
+            Self::MatchingInputLimit => "Path or filter text exceeds supported matching limits",
+            Self::MatchingCancelled => "Matching stopped at your request",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -301,6 +335,8 @@ pub struct CustomCleanReport {
     settings_snapshot: CustomCleanSettings,
     default_age_days: u32,
     elapsed_ms: u64,
+    match_steps_used: usize,
+    match_step_limit: usize,
     cancelled: bool,
     partial: bool,
     truncated: bool,
@@ -313,6 +349,12 @@ pub struct CustomCleanReport {
 }
 
 impl CustomCleanReport {
+    pub fn match_steps_used(&self) -> usize {
+        self.match_steps_used
+    }
+    pub fn match_step_limit(&self) -> usize {
+        self.match_step_limit
+    }
     pub fn id(&self) -> Uuid {
         self.id
     }
@@ -679,13 +721,27 @@ pub fn scan(
 
     let started = Instant::now();
     let now_ns = timestamp(options.now);
-    let mut builder = ReportBuilder::default();
-    let exclusions = &settings.exclusions;
+    let mut builder = ReportBuilder {
+        matcher: MatchBudget::new(options.max_match_steps),
+        ..Default::default()
+    };
+    let file_exclusions: Vec<_> = settings
+        .exclusions
+        .iter()
+        .filter(|rule| {
+            matches!(
+                rule.exclusion_type,
+                ExclusionType::File | ExclusionType::Path
+            )
+        })
+        .cloned()
+        .collect();
+    let exclusions = &file_exclusions;
     let mut budget = options.max_entries;
     let mut seen_rules = HashMap::<String, String>::new();
 
     for category in &options.categories {
-        if cancel.load(Ordering::Relaxed) {
+        if cancel.load(Ordering::Relaxed) || builder.matcher.exhausted {
             break;
         }
         let selected = settings.rule_selection(&category.id).unwrap_or_else(|| {
@@ -702,7 +758,7 @@ pub fn scan(
         let mut rule = rule;
         let cutoff = now_ns.saturating_sub(u128::from(options.default_age_days) * DAY_NS);
         for root in &category.roots {
-            if cancel.load(Ordering::Relaxed) {
+            if cancel.load(Ordering::Relaxed) || builder.matcher.exhausted {
                 break;
             }
             scan_legacy_root(
@@ -735,7 +791,7 @@ pub fn scan(
 
     let custom_enabled = settings.rule_selection(".custom") == Some(true);
     for inclusion in &settings.inclusions {
-        if cancel.load(Ordering::Relaxed) {
+        if cancel.load(Ordering::Relaxed) || builder.matcher.exhausted {
             break;
         }
         let rule_id = rule_id_for_inclusion(inclusion);
@@ -787,8 +843,7 @@ pub fn scan(
                         }
                     }
                     Err((path, reason)) => {
-                        rule.skipped = rule.skipped.saturating_add(1);
-                        builder.skip(Some(rule_id.clone()), path, reason);
+                        builder.record_failure(&mut rule, path, reason);
                     }
                 }
             }
@@ -824,6 +879,7 @@ pub fn scan(
             .iter()
             .any(|rule| !rule.available && rule.selected);
     let elapsed_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+    let match_steps_used = builder.matcher.limit - builder.matcher.remaining;
     let date = chrono::DateTime::<chrono::Local>::from(options.now).to_rfc3339();
     let ReportBuilder {
         rules,
@@ -841,6 +897,8 @@ pub fn scan(
         settings_snapshot: settings.clone(),
         default_age_days: options.default_age_days,
         elapsed_ms,
+        match_steps_used,
+        match_step_limit: options.max_match_steps,
         cancelled,
         partial,
         truncated,
@@ -854,6 +912,9 @@ pub fn scan(
 }
 
 fn validate_options(options: &ScanOptions) -> Result<(), String> {
+    if !(1..=MAX_MATCH_STEPS).contains(&options.max_match_steps) {
+        return Err("Custom Clean matching limit is outside the safe bounds.".into());
+    }
     if !(1..=365).contains(&options.default_age_days) {
         return Err("Minimum built-in cache age must be between 1 and 365 days.".into());
     }
@@ -874,6 +935,7 @@ fn validate_options(options: &ScanOptions) -> Result<(), String> {
 
 #[derive(Default)]
 struct ReportBuilder {
+    matcher: MatchBudget,
     rules: Vec<RuleScan>,
     files: Vec<CustomCleanFile>,
     file_index: HashMap<String, usize>,
@@ -884,6 +946,16 @@ struct ReportBuilder {
 }
 
 impl ReportBuilder {
+    fn record_failure(&mut self, rule: &mut RuleScan, path: Option<PathBuf>, reason: SkipReason) {
+        if reason == SkipReason::MatchingWorkLimit {
+            self.truncated = true;
+            rule.truncated = true;
+            rule.reason =
+                Some("Matching work limit reached; remaining locations were not scanned.".into());
+        }
+        rule.skipped = rule.skipped.saturating_add(1);
+        self.skip(Some(rule.id.clone()), path, reason);
+    }
     fn add_file(&mut self, candidate: Candidate, rule_id: String, eligibility: RuleEligibility) {
         let key = path_key(&candidate.path);
         if let Some(index) = self.file_index.get(&key).copied() {
@@ -993,7 +1065,10 @@ fn scan_file_inclusion(
         return Err((Some(absolute), SkipReason::OutsideRoot));
     }
     rule.available = true;
-    if is_excluded(&canonical, exclusions) {
+    if exclusion_reason(&canonical, exclusions, &mut builder.matcher, cancel)
+        .map_err(|reason| (Some(canonical.clone()), reason))?
+        .is_some()
+    {
         rule.excluded = rule.excluded.saturating_add(1);
         return Ok(None);
     }
@@ -1141,8 +1216,20 @@ fn scan_folder_inclusion(
                 }
                 match safe_root(&path) {
                     Ok(child) if same_path(&child, &path) && contained(&safe, &child) => {
-                        if !is_excluded_directory(&child, exclusions) {
-                            stack.push((child, depth + 1));
+                        match is_excluded_directory(
+                            &child,
+                            exclusions,
+                            &mut builder.matcher,
+                            cancel,
+                        ) {
+                            Ok(false) => stack.push((child, depth + 1)),
+                            Ok(true) => rule.excluded = rule.excluded.saturating_add(1),
+                            Err(reason) => {
+                                builder.record_failure(rule, Some(child), reason);
+                                if builder.matcher.exhausted || cancel.load(Ordering::Relaxed) {
+                                    return;
+                                }
+                            }
                         }
                     }
                     _ => {
@@ -1179,18 +1266,36 @@ fn scan_folder_inclusion(
                     continue;
                 }
             };
-            if !matches_folder_filter(&canonical, &safe, folder.filter.as_deref()) {
-                continue;
-            }
-            if let Some(reason) = exclusion_reason(&canonical, exclusions) {
-                rule.excluded = rule.excluded.saturating_add(1);
-                if matches!(
-                    reason,
-                    SkipReason::ExcludedByFileRule | SkipReason::ExcludedByPathRule
-                ) {
-                    // Exclusions are normal policy skips, not scan failures.
+            let matching = matches_folder_filter(
+                &canonical,
+                &safe,
+                folder.filter.as_deref(),
+                &mut builder.matcher,
+                cancel,
+            )
+            .and_then(|included| {
+                if !included {
+                    return Ok(false);
                 }
-                continue;
+                exclusion_reason(&canonical, exclusions, &mut builder.matcher, cancel).map(
+                    |reason| {
+                        if reason.is_some() {
+                            rule.excluded = rule.excluded.saturating_add(1);
+                        }
+                        reason.is_none()
+                    },
+                )
+            });
+            match matching {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(reason) => {
+                    builder.record_failure(rule, Some(canonical), reason);
+                    if builder.matcher.exhausted || cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    continue;
+                }
             }
             let modified_ns = match metadata.modified() {
                 Ok(modified) => timestamp(modified),
@@ -1410,10 +1515,20 @@ fn scan_legacy_root(
                 }
                 match safe_root(&path) {
                     Ok(child) if same_path(&child, &path) && contained(&root, &child) => {
-                        if !is_excluded_directory(&child, exclusions) {
-                            stack.push((child, depth + 1));
-                        } else {
-                            rule.excluded = rule.excluded.saturating_add(1);
+                        match is_excluded_directory(
+                            &child,
+                            exclusions,
+                            &mut builder.matcher,
+                            cancel,
+                        ) {
+                            Ok(false) => stack.push((child, depth + 1)),
+                            Ok(true) => rule.excluded = rule.excluded.saturating_add(1),
+                            Err(reason) => {
+                                builder.record_failure(rule, Some(child), reason);
+                                if builder.matcher.exhausted || cancel.load(Ordering::Relaxed) {
+                                    return;
+                                }
+                            }
                         }
                     }
                     _ => {
@@ -1450,10 +1565,19 @@ fn scan_legacy_root(
                     continue;
                 }
             };
-            if let Some(reason) = exclusion_reason(&canonical, exclusions) {
-                rule.excluded = rule.excluded.saturating_add(1);
-                let _ = reason;
-                continue;
+            match exclusion_reason(&canonical, exclusions, &mut builder.matcher, cancel) {
+                Ok(Some(_)) => {
+                    rule.excluded = rule.excluded.saturating_add(1);
+                    continue;
+                }
+                Ok(None) => {}
+                Err(reason) => {
+                    builder.record_failure(rule, Some(canonical), reason);
+                    if builder.matcher.exhausted || cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    continue;
+                }
             }
             let modified_ns = match metadata.modified() {
                 Ok(modified) => timestamp(modified),
@@ -1523,79 +1647,179 @@ fn is_temporary_rule(rule_id: &str) -> bool {
     matches!(rule_id, "temp" | "windows.tempfiles")
 }
 
-fn is_excluded(path: &Path, rules: &[crate::clean_settings::ExclusionRule]) -> bool {
-    exclusion_reason(path, rules).is_some()
+#[derive(Default)]
+struct MatchBudget {
+    limit: usize,
+    remaining: usize,
+    exhausted: bool,
+}
+impl MatchBudget {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            remaining: limit,
+            exhausted: false,
+        }
+    }
+    fn charge(&mut self, units: usize, cancel: &AtomicBool) -> Result<(), SkipReason> {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(SkipReason::MatchingCancelled);
+        }
+        if self.exhausted || units > self.remaining {
+            self.remaining = 0;
+            self.exhausted = true;
+            return Err(SkipReason::MatchingWorkLimit);
+        }
+        self.remaining -= units;
+        Ok(())
+    }
+    fn normalize(
+        &mut self,
+        value: &str,
+        maximum: usize,
+        cancel: &AtomicBool,
+    ) -> Result<String, SkipReason> {
+        if value.len() > maximum {
+            return Err(SkipReason::MatchingInputLimit);
+        }
+        self.charge(value.len() + 1, cancel)?;
+        let normalized = normalized_text(value);
+        if normalized.len() > maximum {
+            return Err(SkipReason::MatchingInputLimit);
+        }
+        Ok(normalized)
+    }
+    fn path(&mut self, path: &Path, cancel: &AtomicBool) -> Result<String, SkipReason> {
+        self.normalize(
+            path.to_str().ok_or(SkipReason::MatchingInputLimit)?,
+            MAX_MATCH_INPUT_BYTES,
+            cancel,
+        )
+    }
 }
 
-fn is_excluded_directory(path: &Path, rules: &[crate::clean_settings::ExclusionRule]) -> bool {
-    rules.iter().any(|rule| {
-        rule.exclusion_type == ExclusionType::Path && path_rule_matches(path, &rule.path)
-    })
+fn is_excluded_directory(
+    path: &Path,
+    rules: &[crate::clean_settings::ExclusionRule],
+    budget: &mut MatchBudget,
+    cancel: &AtomicBool,
+) -> Result<bool, SkipReason> {
+    let mut value = None;
+    for rule in rules
+        .iter()
+        .filter(|rule| rule.exclusion_type == ExclusionType::Path)
+    {
+        if value.is_none() {
+            value = Some(budget.path(path, cancel)?);
+        }
+        let pattern = budget.normalize(&rule.path, MAX_FILTER_BYTES, cancel)?;
+        if path_rule_matches(
+            value.as_deref().expect("normalized above"),
+            &pattern,
+            budget,
+            cancel,
+        )? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn exclusion_reason(
     path: &Path,
     rules: &[crate::clean_settings::ExclusionRule],
-) -> Option<SkipReason> {
+    budget: &mut MatchBudget,
+    cancel: &AtomicBool,
+) -> Result<Option<SkipReason>, SkipReason> {
+    let mut value = None;
     for rule in rules {
-        match rule.exclusion_type {
-            ExclusionType::File if file_rule_matches(path, &rule.path) => {
-                return Some(SkipReason::ExcludedByFileRule);
-            }
-            ExclusionType::Path if path_rule_matches(path, &rule.path) => {
-                return Some(SkipReason::ExcludedByPathRule);
-            }
-            ExclusionType::RegistryKey
-            | ExclusionType::RegistryKeyValue
-            | ExclusionType::Cookie
-            | ExclusionType::File
-            | ExclusionType::Path => {}
+        if !matches!(
+            rule.exclusion_type,
+            ExclusionType::File | ExclusionType::Path
+        ) {
+            continue;
+        }
+        if value.is_none() {
+            value = Some(budget.path(path, cancel)?);
+        }
+        let value = value.as_deref().expect("normalized above");
+        let pattern = budget.normalize(&rule.path, MAX_FILTER_BYTES, cancel)?;
+        let matched = match rule.exclusion_type {
+            ExclusionType::File => file_rule_matches(value, &pattern, budget, cancel)?,
+            ExclusionType::Path => path_rule_matches(value, &pattern, budget, cancel)?,
+            _ => unreachable!(),
+        };
+        if matched {
+            return Ok(Some(if rule.exclusion_type == ExclusionType::File {
+                SkipReason::ExcludedByFileRule
+            } else {
+                SkipReason::ExcludedByPathRule
+            }));
         }
     }
-    None
+    Ok(None)
 }
 
-fn file_rule_matches(path: &Path, pattern: &str) -> bool {
-    let path = normalized_path(path);
-    let pattern = normalized_text(pattern);
-    if has_glob(&pattern) {
-        glob_matches(&pattern, &path)
+fn file_rule_matches(
+    path: &str,
+    pattern: &str,
+    budget: &mut MatchBudget,
+    cancel: &AtomicBool,
+) -> Result<bool, SkipReason> {
+    if has_glob(pattern) {
+        glob_matches(pattern, path, budget, cancel)
     } else {
-        path == pattern
+        budget.charge(path.len() + pattern.len() + 1, cancel)?;
+        Ok(path == pattern)
     }
 }
 
-fn path_rule_matches(path: &Path, pattern: &str) -> bool {
-    let path = normalized_path(path);
-    let pattern = normalized_text(pattern);
-    if has_glob(&pattern) {
-        glob_matches(&pattern, &path)
+fn path_rule_matches(
+    path: &str,
+    pattern: &str,
+    budget: &mut MatchBudget,
+    cancel: &AtomicBool,
+) -> Result<bool, SkipReason> {
+    if has_glob(pattern) {
+        glob_matches(pattern, path, budget, cancel)
     } else {
-        path == pattern || path.starts_with(&format!("{}/", pattern.trim_end_matches('/')))
+        budget.charge(path.len() + pattern.len() + 1, cancel)?;
+        let pattern = pattern.trim_end_matches('/');
+        Ok(path == pattern
+            || path
+                .strip_prefix(pattern)
+                .is_some_and(|tail| tail.starts_with('/')))
     }
 }
 
-fn matches_folder_filter(path: &Path, root: &Path, filters: Option<&[String]>) -> bool {
+fn matches_folder_filter(
+    path: &Path,
+    root: &Path,
+    filters: Option<&[String]>,
+    budget: &mut MatchBudget,
+    cancel: &AtomicBool,
+) -> Result<bool, SkipReason> {
     let Some(filters) = filters.filter(|filters| !filters.is_empty()) else {
-        return true;
+        return Ok(true);
     };
     let basename = path
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let relative = path
-        .strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .into_owned();
-    filters.iter().any(|filter| {
-        let filter = normalized_text(filter);
-        if filter.contains('/') {
-            glob_matches(&filter, &normalized_text(&relative))
+        .and_then(|name| name.to_str())
+        .ok_or(SkipReason::MatchingInputLimit)?;
+    let basename = budget.normalize(basename, MAX_MATCH_INPUT_BYTES, cancel)?;
+    let relative = budget.path(path.strip_prefix(root).unwrap_or(path), cancel)?;
+    for filter in filters {
+        let filter = budget.normalize(filter, MAX_FILTER_BYTES, cancel)?;
+        let value = if filter.contains('/') {
+            &relative
         } else {
-            glob_matches(&filter, &normalized_text(&basename))
+            &basename
+        };
+        if glob_matches(&filter, value, budget, cancel)? {
+            return Ok(true);
         }
-    })
+    }
+    Ok(false)
 }
 
 fn has_glob(value: &str) -> bool {
@@ -1604,16 +1828,23 @@ fn has_glob(value: &str) -> bool {
 
 /// Linear-space wildcard matching with one remembered `*`; pattern and path
 /// input lengths are separately bounded before scanning.
-fn glob_matches(pattern: &str, value: &str) -> bool {
-    if pattern.len() > MAX_FILTER_BYTES || value.len() > 32_768 {
-        return false;
+fn glob_matches(
+    pattern: &str,
+    value: &str,
+    budget: &mut MatchBudget,
+    cancel: &AtomicBool,
+) -> Result<bool, SkipReason> {
+    if pattern.len() > MAX_FILTER_BYTES || value.len() > MAX_MATCH_INPUT_BYTES {
+        return Err(SkipReason::MatchingInputLimit);
     }
+    budget.charge(pattern.len() + value.len() + 1, cancel)?;
     let pattern: Vec<char> = pattern.chars().collect();
     let value: Vec<char> = value.chars().collect();
     let (mut p, mut v) = (0usize, 0usize);
     let mut star = None;
     let mut retry = 0usize;
     while v < value.len() {
+        budget.charge(1, cancel)?;
         if p < pattern.len() && (pattern[p] == '?' || pattern[p] == value[v]) {
             p += 1;
             v += 1;
@@ -1626,17 +1857,111 @@ fn glob_matches(pattern: &str, value: &str) -> bool {
             v = retry;
             p = star_position + 1;
         } else {
-            return false;
+            return Ok(false);
         }
     }
     while p < pattern.len() && pattern[p] == '*' {
+        budget.charge(1, cancel)?;
         p += 1;
     }
-    p == pattern.len()
+    Ok(p == pattern.len())
 }
 
 fn normalized_path(path: &Path) -> String {
     normalized_text(&path.to_string_lossy())
+}
+
+#[cfg(test)]
+mod matching_tests {
+    use super::*;
+
+    fn oracle(pattern: &[u8], value: &[u8]) -> bool {
+        let mut row = vec![false; value.len() + 1];
+        row[0] = true;
+        for &symbol in pattern {
+            let mut next = vec![false; value.len() + 1];
+            next[0] = symbol == b'*' && row[0];
+            for index in 1..=value.len() {
+                next[index] = if symbol == b'*' {
+                    row[index] || next[index - 1]
+                } else {
+                    row[index - 1] && (symbol == b'?' || symbol == value[index - 1])
+                };
+            }
+            row = next;
+        }
+        row[value.len()]
+    }
+    fn words(alphabet: &[char], length: usize) -> Vec<String> {
+        let mut all = vec![String::new()];
+        let mut level = vec![String::new()];
+        for _ in 0..length {
+            level = level
+                .iter()
+                .flat_map(|word| alphabet.iter().map(move |symbol| format!("{word}{symbol}")))
+                .collect();
+            all.extend(level.iter().cloned());
+        }
+        all
+    }
+    #[test]
+    fn bounded_matcher_preserves_wildcard_semantics_against_independent_oracle() {
+        let cancel = AtomicBool::new(false);
+        for pattern in words(&['a', 'b', '?', '*'], 4) {
+            for value in words(&['a', 'b'], 4) {
+                assert_eq!(
+                    glob_matches(&pattern, &value, &mut MatchBudget::new(10_000), &cancel),
+                    Ok(oracle(pattern.as_bytes(), value.as_bytes())),
+                    "{pattern:?} / {value:?}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn wildcard_retries_cannot_exceed_shared_work_budget() {
+        let cancel = AtomicBool::new(false);
+        let mut budget = MatchBudget::new(4096);
+        let pattern = format!("*{}b", "a".repeat(64));
+        let value = "a".repeat(2000);
+        assert_eq!(
+            glob_matches(&pattern, &value, &mut budget, &cancel),
+            Err(SkipReason::MatchingWorkLimit)
+        );
+        assert!(budget.exhausted);
+        assert_eq!(budget.remaining, 0);
+        assert_eq!(
+            glob_matches("*", "safe", &mut budget, &cancel),
+            Err(SkipReason::MatchingWorkLimit)
+        );
+    }
+    #[test]
+    fn oversized_unicode_exclusion_input_is_an_error_instead_of_a_false_match() {
+        let cancel = AtomicBool::new(false);
+        let path = PathBuf::from("文".repeat(11_000));
+        let rules = vec![crate::clean_settings::ExclusionRule {
+            exclusion_type: ExclusionType::File,
+            path: "*".into(),
+        }];
+        let mut budget = MatchBudget::new(MAX_MATCH_STEPS);
+        assert_eq!(
+            exclusion_reason(&path, &rules, &mut budget, &cancel),
+            Err(SkipReason::MatchingInputLimit)
+        );
+        assert!(!budget.exhausted);
+    }
+    #[test]
+    fn cancellation_prevents_subsequent_match_work_without_becoming_a_nonmatch() {
+        let cancel = AtomicBool::new(false);
+        let mut budget = MatchBudget::new(10_000);
+        assert_eq!(glob_matches("*", "first", &mut budget, &cancel), Ok(true));
+        let remaining = budget.remaining;
+        cancel.store(true, Ordering::Relaxed);
+        assert_eq!(
+            glob_matches("*a*b", "second", &mut budget, &cancel),
+            Err(SkipReason::MatchingCancelled)
+        );
+        assert_eq!(budget.remaining, remaining);
+    }
 }
 
 fn normalized_text(value: &str) -> String {

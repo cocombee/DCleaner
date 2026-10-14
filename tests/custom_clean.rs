@@ -2,7 +2,9 @@ use clean_settings::{
     CustomCleanSettings, ExclusionRule, ExclusionType, FileDeletionMode, FolderInclusion,
     InclusionLocation, InclusionRule, OverwriteType,
 };
-use custom_clean::{CapabilityKind, ScanOptions, clean, rule_id_for_inclusion, scan};
+use custom_clean::{
+    CapabilityKind, MAX_MATCH_STEPS, ScanOptions, SkipReason, clean, rule_id_for_inclusion, scan,
+};
 use dcleaner::{clean_settings, cleanup, custom_clean, domain, scanner, store};
 use domain::{Category, CleanupPolicy};
 use std::{
@@ -53,6 +55,23 @@ fn settings_for_folder(
         }),
         age_threshold_hours: None,
     });
+    settings.set_rule_selection(".custom", Some(true)).unwrap();
+    settings
+}
+
+fn settings_for_files(paths: &[&Path], exclusion_pattern: &str) -> CustomCleanSettings {
+    let mut settings = CustomCleanSettings::default();
+    settings.inclusions = paths
+        .iter()
+        .map(|path| InclusionRule {
+            location: InclusionLocation::File(path.to_string_lossy().into_owned()),
+            age_threshold_hours: None,
+        })
+        .collect();
+    settings.exclusions = vec![ExclusionRule {
+        exclusion_type: ExclusionType::File,
+        path: exclusion_pattern.to_owned(),
+    }];
     settings.set_rule_selection(".custom", Some(true)).unwrap();
     settings
 }
@@ -352,6 +371,170 @@ fn cancel_and_entry_limit_are_reported_as_partial_without_claiming_complete() {
     assert!(cancelled.cancelled());
     assert!(cancelled.partial());
     assert!(cancelled.files().is_empty());
+}
+
+#[test]
+fn matching_work_limit_must_stay_within_safe_bounds() {
+    let settings = CustomCleanSettings::default();
+    let mut scan_options = options(SystemTime::now());
+    scan_options.max_match_steps = 0;
+    assert!(scan(&settings, &scan_options, &AtomicBool::new(false), |_| {}).is_err());
+    scan_options.max_match_steps = MAX_MATCH_STEPS + 1;
+    assert!(scan(&settings, &scan_options, &AtomicBool::new(false), |_| {}).is_err());
+}
+
+#[test]
+fn aggregate_matching_limit_fails_closed_and_cleanup_needs_partial_ack_for_verified_ids() {
+    let data = tempfile::tempdir().unwrap();
+    let root = data.path().join("matches");
+    fs::create_dir(&root).unwrap();
+    let verified = root.join("a.tmp");
+    let limited = root.join(format!("{}.tmp", "z".repeat(80)));
+    fs::write(&verified, b"verified").unwrap();
+    fs::write(&limited, b"must not be offered").unwrap();
+    let exclusion_glob = format!("*{}*.tmp", "z".repeat(80));
+
+    // Measure the first explicit-file rule's exact matching cost, then leave
+    // only enough work for the next path and pattern normalization. The second
+    // glob itself must stop before it can decide that its file is excluded.
+    let first_settings = settings_for_files(&[&verified], &exclusion_glob);
+    let first_scan = scan(
+        &first_settings,
+        &options(SystemTime::now()),
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(first_scan.files().len(), 1);
+    let first_cost = first_scan.match_steps_used();
+    assert!(first_cost > 0);
+
+    let settings = settings_for_files(&[&verified, &limited], &exclusion_glob);
+    let complete = scan(
+        &settings,
+        &options(SystemTime::now()),
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(complete.files().len(), 1);
+    assert_eq!(complete.files()[0].path(), verified);
+    let limited_rule_id = rule_id_for_inclusion(&settings.inclusions[1]);
+    assert!(
+        complete
+            .rules()
+            .iter()
+            .any(|rule| { rule.id() == limited_rule_id.as_str() && rule.excluded() == 1 })
+    );
+
+    let canonical_limited = dunce::canonicalize(&limited).unwrap();
+    let path_normalize_steps = canonical_limited.to_str().unwrap().len() + 1;
+    let pattern_normalize_steps = exclusion_glob.len() + 1;
+    let match_limit = first_cost + path_normalize_steps + pattern_normalize_steps + 1;
+    let mut scan_options = options(SystemTime::now());
+    scan_options.max_match_steps = match_limit;
+    let report = scan(&settings, &scan_options, &AtomicBool::new(false), |_| {}).unwrap();
+
+    assert_eq!(report.match_step_limit(), match_limit);
+    assert_eq!(report.match_steps_used(), report.match_step_limit());
+    assert!(report.match_steps_used() <= report.match_step_limit());
+    assert!(report.truncated());
+    assert!(report.partial());
+    assert_eq!(report.files().len(), 1);
+    assert_eq!(report.files()[0].path(), verified);
+    assert!(report.skipped_entries().iter().any(|entry| {
+        entry.reason() == SkipReason::MatchingWorkLimit
+            && entry
+                .path()
+                .is_some_and(|path| path == canonical_limited.as_path())
+    }));
+    assert!(report.rules().iter().any(|rule| {
+        rule.id() == limited_rule_id.as_str() && rule.truncated() && rule.skipped() == 1
+    }));
+
+    let verified_id = report.files()[0].id();
+    assert!(
+        report
+            .review_selection(&settings, &[verified_id], false)
+            .is_err()
+    );
+    let mut trash = MockTrash::default();
+    let mut journal = MemoryJournal::default();
+    assert!(
+        clean(
+            &report,
+            &settings,
+            &[verified_id],
+            false,
+            &AtomicBool::new(false),
+            &mut trash,
+            &mut journal,
+            |_, _| {},
+        )
+        .is_err()
+    );
+    assert!(trash.paths.is_empty());
+    assert!(journal.events.is_empty());
+
+    let result = clean(
+        &report,
+        &settings,
+        &[verified_id],
+        true,
+        &AtomicBool::new(false),
+        &mut trash,
+        &mut journal,
+        |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(result.files, 1);
+    assert_eq!(trash.paths, vec![verified]);
+    assert!(limited.exists());
+}
+
+#[test]
+fn cancellation_after_a_matched_file_never_reaches_mock_trash() {
+    let data = tempfile::tempdir().unwrap();
+    let root = data.path().join("cancel-matching");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("first.tmp"), b"first").unwrap();
+    fs::write(root.join("second.tmp"), b"second").unwrap();
+    let mut settings = settings_for_folder(&root, Some(vec!["*.tmp"]), true);
+    settings.exclusions = vec![ExclusionRule {
+        exclusion_type: ExclusionType::Path,
+        path: "*pattern-that-does-not-exist*".into(),
+    }];
+    let cancel = AtomicBool::new(false);
+    let mut first_progress = true;
+    let report = scan(&settings, &options(SystemTime::now()), &cancel, |_| {
+        if first_progress {
+            first_progress = false;
+            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    })
+    .unwrap();
+
+    assert!(report.cancelled());
+    assert!(report.partial());
+    assert_eq!(report.files().len(), 1);
+    assert!(report.match_steps_used() > 0);
+    let mut trash = MockTrash::default();
+    let mut journal = MemoryJournal::default();
+    assert!(
+        clean(
+            &report,
+            &settings,
+            &[report.files()[0].id()],
+            true,
+            &cancel,
+            &mut trash,
+            &mut journal,
+            |_, _| {},
+        )
+        .is_err()
+    );
+    assert!(trash.paths.is_empty());
+    assert!(journal.events.is_empty());
 }
 
 #[test]

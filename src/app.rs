@@ -758,12 +758,22 @@ impl App {
                     theme::muted(
                         ui,
                         format!(
-                            "{} · {:?}",
+                            "{} · {}",
                             entry
                                 .path()
                                 .map(|path| path.display().to_string())
                                 .unwrap_or_else(|| "Unavailable location".into()),
-                            entry.reason()
+                            entry.reason().description()
+                        ),
+                        t,
+                    );
+                }
+                if report.omitted_skip_details() > 0 {
+                    theme::muted(
+                        ui,
+                        format!(
+                            "{} additional omissions are counted; individual details are capped.",
+                            report.omitted_skip_details()
                         ),
                         t,
                     );
