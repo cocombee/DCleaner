@@ -41,6 +41,16 @@ enum ProgramSort {
     Size,
 }
 
+impl ProgramSort {
+    const ALL: [Self; 5] = [
+        Self::Name,
+        Self::Publisher,
+        Self::Version,
+        Self::InstallDate,
+        Self::Size,
+    ];
+}
+
 #[derive(Clone, Debug)]
 enum ProgramsDialog {
     Details(ProgramIdentity),
@@ -74,12 +84,20 @@ impl App {
 
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.program_ui.tab, ProgramTab::Installed, "Installed");
-            ui.selectable_value(
-                &mut self.program_ui.tab,
-                ProgramTab::Disabled,
-                "Disabled  ·  unavailable",
-            );
+            theme::tabs(ui, |ui| {
+                theme::tab_value(
+                    ui,
+                    &mut self.program_ui.tab,
+                    ProgramTab::Installed,
+                    "Installed",
+                );
+                theme::tab_value(
+                    ui,
+                    &mut self.program_ui.tab,
+                    ProgramTab::Disabled,
+                    "Disabled  ·  unavailable",
+                );
+            });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 theme::muted(
                     ui,
@@ -187,7 +205,7 @@ impl App {
                 ui.add_space(8.);
                 egui::ScrollArea::vertical()
                     .max_height(body_height)
-                    .auto_shrink([false, false])
+                    .auto_shrink([false, true])
                     .show(ui, |body| match &dialog {
                         ProgramsDialog::Details(identity) => {
                             if let Some(program) = self.program_by_identity(identity).cloned() {
@@ -413,35 +431,32 @@ impl App {
     }
 
     fn program_inventory_panel(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        ui.horizontal_wrapped(|ui| {
-            let search_width = (ui.available_width() - 265.0).clamp(190.0, 360.0);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.program_ui.search)
-                    .hint_text("Search name, publisher, version, location or registration…")
-                    .desired_width(search_width),
+        let sort_choices = ProgramSort::ALL.map(ProgramSort::label);
+        theme::control_row(ui, |ui| {
+            let search_width = theme::search_width(ui, &sort_choices);
+            ui.label(RichText::new("Search").color(t.muted));
+            theme::input(
+                ui,
+                &mut self.program_ui.search,
+                search_width,
+                "Name, publisher, version, location or registration…",
+                true,
             );
-            egui::ComboBox::from_id_salt("program-sort")
-                .selected_text(format!("Sort: {}", self.program_ui.sort.label()))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.program_ui.sort, ProgramSort::Name, "Name");
-                    ui.selectable_value(
-                        &mut self.program_ui.sort,
-                        ProgramSort::Publisher,
-                        "Publisher",
-                    );
-                    ui.selectable_value(&mut self.program_ui.sort, ProgramSort::Version, "Version");
-                    ui.selectable_value(
-                        &mut self.program_ui.sort,
-                        ProgramSort::InstallDate,
-                        "Install date",
-                    );
-                    ui.selectable_value(
-                        &mut self.program_ui.sort,
-                        ProgramSort::Size,
-                        "Estimated size",
-                    );
-                });
-            ui.checkbox(&mut self.program_ui.descending, "Descending");
+            ui.add_space(8.);
+            ui.label(RichText::new("Sort by").color(t.muted));
+            theme::selector(
+                ui,
+                "program-sort",
+                self.program_ui.sort.label(),
+                &sort_choices,
+                |ui| {
+                    for sort in ProgramSort::ALL {
+                        ui.selectable_value(&mut self.program_ui.sort, sort, sort.label());
+                    }
+                },
+            );
+            ui.add_space(8.);
+            theme::checkbox(ui, &mut self.program_ui.descending, "Descending", true);
         });
         ui.add_space(10.);
 

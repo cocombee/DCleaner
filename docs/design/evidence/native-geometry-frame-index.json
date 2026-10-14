@@ -1,0 +1,449 @@
+{
+  "Schema": 1,
+  "Method": "Actual egui framebuffer export; real read-only services; isolated QA preferences",
+  "ExecutableSha256": "6270DBD67A1DAC2F65B107162AD9E1FC9239E9F942CBA2FE80579463C97AE797",
+  "CapturedAtUtc": "2026-10-14T22:44:55.5099693Z",
+  "Frames": [
+    {
+      "Page": "health",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "health-wide-dark-v11.png",
+      "Sha256": "BE62FA3279FAD4DBC924C138B02FDF4EC08EA7ED143F283842E67A87EF5F0455",
+      "LayoutFile": "health-wide-dark-v11.layout.json",
+      "LayoutSha256": "69637F266F5B0B2223239A3E53CA7EACFFCEB080E6AA6C052E0C1423417DAA77",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "health-wide-light-v11.png",
+      "Sha256": "3D19DB68CB6B8AA34F10ED83FD0699AF6DF7712854D8E162FC3C58D4B91AD944",
+      "LayoutFile": "health-wide-light-v11.layout.json",
+      "LayoutSha256": "69637F266F5B0B2223239A3E53CA7EACFFCEB080E6AA6C052E0C1423417DAA77",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "health-minimum-dark-v11.png",
+      "Sha256": "AF4AF8F3C86DB092F0858D32709FC82CEB33020BBBC505274D836E7A419CB370",
+      "LayoutFile": "health-minimum-dark-v11.layout.json",
+      "LayoutSha256": "15273BF5A18B1391ED84A56F1D48CDD07137D667B42667D052061C4BD2F5AD41",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "health",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "health-minimum-light-v11.png",
+      "Sha256": "93562050DE64FFCF23D7446012711112FD3AA6E653876A742111055F1F48E288",
+      "LayoutFile": "health-minimum-light-v11.layout.json",
+      "LayoutSha256": "15273BF5A18B1391ED84A56F1D48CDD07137D667B42667D052061C4BD2F5AD41",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "clean-wide-dark-v11.png",
+      "Sha256": "7AF364F925B393E970BBA3717D3E0D8EBC4A66DEEC63F698D66645B763638FC2",
+      "LayoutFile": "clean-wide-dark-v11.layout.json",
+      "LayoutSha256": "D783371586F333F354E40DF926FC13B6BDEF2C3C6E87A2FBB53F7AF999536165",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "clean-wide-light-v11.png",
+      "Sha256": "192EBCE6931126FBD0769415721EA6607264BE469FED239720BD68179EDCB147",
+      "LayoutFile": "clean-wide-light-v11.layout.json",
+      "LayoutSha256": "D783371586F333F354E40DF926FC13B6BDEF2C3C6E87A2FBB53F7AF999536165",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "clean-minimum-dark-v11.png",
+      "Sha256": "B5F3F273E309467A2BAE8A5A6A296BA48DF69B2885EC6BDEC408CC1824D0D783",
+      "LayoutFile": "clean-minimum-dark-v11.layout.json",
+      "LayoutSha256": "86FE9268CE2A5832DF59307A738380E39B54E3691E5451FCBCA7D32E3CD3C3C2",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "clean",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "clean-minimum-light-v11.png",
+      "Sha256": "0A1CA2464107F25C78775E2550D69A04A304974EDF8C5A0663C121D21C4B18E9",
+      "LayoutFile": "clean-minimum-light-v11.layout.json",
+      "LayoutSha256": "86FE9268CE2A5832DF59307A738380E39B54E3691E5451FCBCA7D32E3CD3C3C2",
+      "StoredWithSource": true
+    },
+    {
+      "Page": "duplicates",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "duplicates-wide-dark-v11.png",
+      "Sha256": "7A3E0773B676114091076B18DFDC1975867BBF77157831650E17F4C85C15A612",
+      "LayoutFile": "duplicates-wide-dark-v11.layout.json",
+      "LayoutSha256": "4CF7BAE20A46356AD3752188FFD57DA2614617F320817178DD2F9152564F9AAB",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "duplicates",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "duplicates-wide-light-v11.png",
+      "Sha256": "CDCE31BC54E1F43662432C3E9F001BFA20837ED2B362F37545DC3BCD916A9EF3",
+      "LayoutFile": "duplicates-wide-light-v11.layout.json",
+      "LayoutSha256": "4CF7BAE20A46356AD3752188FFD57DA2614617F320817178DD2F9152564F9AAB",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "duplicates",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "duplicates-minimum-dark-v11.png",
+      "Sha256": "C9C4FE41676F356DC9986EBC3E817F5C861E64EE1AF95D602EA2C94ED5F7682B",
+      "LayoutFile": "duplicates-minimum-dark-v11.layout.json",
+      "LayoutSha256": "D0257CD0651E46A889051DC489660CA9EBFBF4A53C2C6D41C3D7DFDF23834412",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "duplicates",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "duplicates-minimum-light-v11.png",
+      "Sha256": "1B0C4CD53E94EDD9BCEB78DDD9741CF035D75E4085B384F4E8D59CBBF82380D6",
+      "LayoutFile": "duplicates-minimum-light-v11.layout.json",
+      "LayoutSha256": "D0257CD0651E46A889051DC489660CA9EBFBF4A53C2C6D41C3D7DFDF23834412",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "programs-wide-dark-v11.png",
+      "Sha256": "18468018D39CE343B7DE623B7DC76FF6505AE640641E670B299D02D78B0BB8DE",
+      "LayoutFile": "programs-wide-dark-v11.layout.json",
+      "LayoutSha256": "B35EDB256E9DC6D922948E937D0B66719D0AF09F974C8DFB360107A6086E1F12",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "programs-wide-light-v11.png",
+      "Sha256": "24A2721C530C5D763BB258F2DA3DD44F4BD77C8307F0BDFD25562FAA8A3CD449",
+      "LayoutFile": "programs-wide-light-v11.layout.json",
+      "LayoutSha256": "B35EDB256E9DC6D922948E937D0B66719D0AF09F974C8DFB360107A6086E1F12",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "programs-minimum-dark-v11.png",
+      "Sha256": "B01EB6BDFD219E2919D77379FAF7E20D39B6A3CD3621F81A4BBC6E4418CADC76",
+      "LayoutFile": "programs-minimum-dark-v11.layout.json",
+      "LayoutSha256": "C848ABD71D7EC00BA53E2E823DDC853B209502F6B21E9B65722175FB3DDBEAB2",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "programs",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "programs-minimum-light-v11.png",
+      "Sha256": "A0546817499BDBA4BEAD54B2ED8CBF85065C55D8286D82F38EE5A47EE424C66C",
+      "LayoutFile": "programs-minimum-light-v11.layout.json",
+      "LayoutSha256": "C848ABD71D7EC00BA53E2E823DDC853B209502F6B21E9B65722175FB3DDBEAB2",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "startup-wide-dark-v11.png",
+      "Sha256": "C9F7EBB8734ADC89C7A773E9BEDEDD7F85194E5B8EF0C4AFF750318E020E039A",
+      "LayoutFile": "startup-wide-dark-v11.layout.json",
+      "LayoutSha256": "FC221BF891C3C040FBE3C0334C3841A52AF03A6CFF601BB347F567E7383E4CD8",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "startup-wide-light-v11.png",
+      "Sha256": "673FE53394EC37715D1C16981C02EE01E02F07FC4AF2582085E207D3CA132BAC",
+      "LayoutFile": "startup-wide-light-v11.layout.json",
+      "LayoutSha256": "FC221BF891C3C040FBE3C0334C3841A52AF03A6CFF601BB347F567E7383E4CD8",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "startup-minimum-dark-v11.png",
+      "Sha256": "24D9E28EBC4FA0841554468097D09269A7D157E2D698126DD195BB52B353F607",
+      "LayoutFile": "startup-minimum-dark-v11.layout.json",
+      "LayoutSha256": "7FA0E2D18550582D36F8E7CAD6D6F5AB9A546543343F756EC85C9E9ABB078C47",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "startup",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "startup-minimum-light-v11.png",
+      "Sha256": "D3A09C3D95C1627E1AEF7017607D13D9CF3F18181FD656EEFF73E78CB210A8AD",
+      "LayoutFile": "startup-minimum-light-v11.layout.json",
+      "LayoutSha256": "7FA0E2D18550582D36F8E7CAD6D6F5AB9A546543343F756EC85C9E9ABB078C47",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "software-wide-dark-v11.png",
+      "Sha256": "D96B85D4AB8A702F44E45E0F380001763984D84A0E3F8B4E43B2C3B11A676074",
+      "LayoutFile": "software-wide-dark-v11.layout.json",
+      "LayoutSha256": "5F0EB6B6633270FA9871DB6C312FE13AE359AF32756B7D015159701F10286BA3",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "software-wide-light-v11.png",
+      "Sha256": "81F8B63E6A48F7C9EC3CF771A998E587274592E8179A6EFC3BC70E9BDFA9DB88",
+      "LayoutFile": "software-wide-light-v11.layout.json",
+      "LayoutSha256": "5F0EB6B6633270FA9871DB6C312FE13AE359AF32756B7D015159701F10286BA3",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "software-minimum-dark-v11.png",
+      "Sha256": "3A164DC00A0A2B77FEEB936EE2A206032D72ED32BD011949E4FA3968530F0DC3",
+      "LayoutFile": "software-minimum-dark-v11.layout.json",
+      "LayoutSha256": "CEC9FD80F5F9528866647F7234F0046341E25BA9F0DB19C4DE65A77AD023348E",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "software",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "software-minimum-light-v11.png",
+      "Sha256": "A15A13A26B9B4620CBA24210C6678F3568EF2894F4839593C32E8CC5A2FFEDE5",
+      "LayoutFile": "software-minimum-light-v11.layout.json",
+      "LayoutSha256": "CEC9FD80F5F9528866647F7234F0046341E25BA9F0DB19C4DE65A77AD023348E",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "disk",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "disk-wide-dark-v11.png",
+      "Sha256": "AB5795410B9B1C2BEB47F6C18A57FB8200957D88819F7626F6AE7D54734E50F0",
+      "LayoutFile": "disk-wide-dark-v11.layout.json",
+      "LayoutSha256": "4D80E5CA393D98D7147CDF01F42C90C49EEB244D21628DF0F947C5FE898CA73A",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "disk",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "disk-wide-light-v11.png",
+      "Sha256": "5B09C1CCB2E7B0283CBD10D76BF8D0F5CD60E762956275ED82831129EB057DDA",
+      "LayoutFile": "disk-wide-light-v11.layout.json",
+      "LayoutSha256": "4D80E5CA393D98D7147CDF01F42C90C49EEB244D21628DF0F947C5FE898CA73A",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "disk",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "disk-minimum-dark-v11.png",
+      "Sha256": "2A9C499BA2BC179834600BCF76F2961D6B820725369F480EFA31A09D45607FC0",
+      "LayoutFile": "disk-minimum-dark-v11.layout.json",
+      "LayoutSha256": "722B7FC161F3F113451581ECF886245A7980B2F3DFDF46179477D1E4C093ED45",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "disk",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "disk-minimum-light-v11.png",
+      "Sha256": "4790594D1B6E9F9A35B183E3FEF6CC53569F5182C17C1993550C49D5E53843A3",
+      "LayoutFile": "disk-minimum-light-v11.layout.json",
+      "LayoutSha256": "722B7FC161F3F113451581ECF886245A7980B2F3DFDF46179477D1E4C093ED45",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "history",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "history-wide-dark-v11.png",
+      "Sha256": "A63220B06450E64BBD92C0CD3219B1C4880BA014E48FBB87B48B2B8EEABD6AC3",
+      "LayoutFile": "history-wide-dark-v11.layout.json",
+      "LayoutSha256": "99290480697DF9742EFAB4B76510125F5CE864739946A89E410AF18A2938E9E6",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "history",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "history-wide-light-v11.png",
+      "Sha256": "A36F60AA5A56259858B0AFE90A302DB8E590530B01D8A4AB78113320D37650B1",
+      "LayoutFile": "history-wide-light-v11.layout.json",
+      "LayoutSha256": "99290480697DF9742EFAB4B76510125F5CE864739946A89E410AF18A2938E9E6",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "history",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "history-minimum-dark-v11.png",
+      "Sha256": "A5C6343B28761E9DEC6216C84FB2FF6472C3C8673A495F1A4A454E7F7CBEAE79",
+      "LayoutFile": "history-minimum-dark-v11.layout.json",
+      "LayoutSha256": "99290480697DF9742EFAB4B76510125F5CE864739946A89E410AF18A2938E9E6",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "history",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "history-minimum-light-v11.png",
+      "Sha256": "DA30F7B91AA8F6C88D6078817369F029C998E4131382DC33F17A127CDF988208",
+      "LayoutFile": "history-minimum-light-v11.layout.json",
+      "LayoutSha256": "99290480697DF9742EFAB4B76510125F5CE864739946A89E410AF18A2938E9E6",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "settings-wide-dark-v11.png",
+      "Sha256": "EA7D417AD2333C43C967B16635E75AC100217E1C2686382A7EDD2040146099DA",
+      "LayoutFile": "settings-wide-dark-v11.layout.json",
+      "LayoutSha256": "2AADFC5AC8B106D2B1AE96C5D190CF890DE0B5E8D28F06C317EF4F0A535B9496",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "settings-wide-light-v11.png",
+      "Sha256": "F1F3D8EA6633B248486B215B8FDA387B2A6FEFA1692C66AEBAE7637A2152B47D",
+      "LayoutFile": "settings-wide-light-v11.layout.json",
+      "LayoutSha256": "2AADFC5AC8B106D2B1AE96C5D190CF890DE0B5E8D28F06C317EF4F0A535B9496",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "settings-minimum-dark-v11.png",
+      "Sha256": "08E621F2FBE86705FDC42EEF1949A29C3E1E197C31B397A8F85A8EDB17E46615",
+      "LayoutFile": "settings-minimum-dark-v11.layout.json",
+      "LayoutSha256": "66456CCC56178D5694195BD049C187181F9E21574976C3DABD6546E59A1D3D0D",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "settings",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "settings-minimum-light-v11.png",
+      "Sha256": "C7F8C9F3F5B59ED0B221D90D659B5D331C3DD73811CCED4A857D21D1CEFA2047",
+      "LayoutFile": "settings-minimum-light-v11.layout.json",
+      "LayoutSha256": "66456CCC56178D5694195BD049C187181F9E21574976C3DABD6546E59A1D3D0D",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "browser-wide-dark-v11.png",
+      "Sha256": "9AC4B676E25669E87228D2EA152B178962F0C1B9F22BF6142369B57F9CC67E52",
+      "LayoutFile": "browser-wide-dark-v11.layout.json",
+      "LayoutSha256": "2990DBE2C7878201C0A41C55C1EB6A3654FD731A68C1F0CCCF7BC072EAFF578A",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "browser-wide-light-v11.png",
+      "Sha256": "F549D08A1C35767E8079872C41434DBE77BF4041579AD2FE44CD07A75D82ED2F",
+      "LayoutFile": "browser-wide-light-v11.layout.json",
+      "LayoutSha256": "2990DBE2C7878201C0A41C55C1EB6A3654FD731A68C1F0CCCF7BC072EAFF578A",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "browser-minimum-dark-v11.png",
+      "Sha256": "58EE2DC3A95AB47BF3803B96716ED2D656699A1F3DC006CDBA1FEEBD1031E90B",
+      "LayoutFile": "browser-minimum-dark-v11.layout.json",
+      "LayoutSha256": "A6DC805325A9923F83C1AA86914BD4091879CE39AF238574F434E3485BF5A028",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "browser",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "browser-minimum-light-v11.png",
+      "Sha256": "C85017FC5B40871DECE246BFC9F43867E962BB941242F5E0FB32ED299AF9E558",
+      "LayoutFile": "browser-minimum-light-v11.layout.json",
+      "LayoutSha256": "A6DC805325A9923F83C1AA86914BD4091879CE39AF238574F434E3485BF5A028",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "wide",
+      "Theme": "dark",
+      "File": "recyclebin-wide-dark-v11.png",
+      "Sha256": "5CC2B9ADB91699C146CA1D44D6DDAD13DD058CED26A950C615CB6301CFC85CA6",
+      "LayoutFile": "recyclebin-wide-dark-v11.layout.json",
+      "LayoutSha256": "2B197F3ABF187304C358E370501FE8819EF3A9454B2B7528D1377444EB567C24",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "wide",
+      "Theme": "light",
+      "File": "recyclebin-wide-light-v11.png",
+      "Sha256": "6EDC8A45605CDD04C8931281883B23D5789A7021E5EC08588638395BC6CDDC86",
+      "LayoutFile": "recyclebin-wide-light-v11.layout.json",
+      "LayoutSha256": "2B197F3ABF187304C358E370501FE8819EF3A9454B2B7528D1377444EB567C24",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "minimum",
+      "Theme": "dark",
+      "File": "recyclebin-minimum-dark-v11.png",
+      "Sha256": "13E34A78CD5C3A5CC4109EBEBF8CD8614F0D94E230B0408B544311C273472035",
+      "LayoutFile": "recyclebin-minimum-dark-v11.layout.json",
+      "LayoutSha256": "42BC9FF443903F66DBA4FB2FAD1323995C7246487672B899DE366BE8EFEBA01B",
+      "StoredWithSource": false
+    },
+    {
+      "Page": "recyclebin",
+      "Size": "minimum",
+      "Theme": "light",
+      "File": "recyclebin-minimum-light-v11.png",
+      "Sha256": "9B861D5591B7E54FC41F86168F8DC192F2AF7175FE2C87224878FFEF15FEFB05",
+      "LayoutFile": "recyclebin-minimum-light-v11.layout.json",
+      "LayoutSha256": "42BC9FF443903F66DBA4FB2FAD1323995C7246487672B899DE366BE8EFEBA01B",
+      "StoredWithSource": false
+    }
+  ],
+  "Limitations": "Pre-install geometry checkpoint. Final source changes scrollbar handle colour/opacity after these frames. No installed-build, hover/menu, click-through, full parity or pixel-perfect acceptance claim. Populated/private frames remain excluded."
+}

@@ -470,16 +470,21 @@ impl App {
                 });
             });
             ui.add_space(8.);
-            ui.horizontal_wrapped(|ui| {
+            theme::control_row(ui, |ui| {
                 let search_width = (ui.available_width() - 220.).clamp(170., 340.);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.recycle_bin_ui.search)
-                        .desired_width(search_width)
-                        .hint_text("Search name or original location"),
+                theme::input(
+                    ui,
+                    &mut self.recycle_bin_ui.search,
+                    search_width,
+                    "Search name or original location",
+                    true,
                 );
-                egui::ComboBox::from_id_salt("recycle-bin-filter")
-                    .selected_text(filter_label(self.recycle_bin_ui.filter))
-                    .show_ui(ui, |ui| {
+                theme::selector(
+                    ui,
+                    "recycle-bin-filter",
+                    filter_label(self.recycle_bin_ui.filter),
+                    &["All items", "Files", "Folders", "Unknown size"],
+                    |ui| {
                         ui.selectable_value(
                             &mut self.recycle_bin_ui.filter,
                             ItemFilter::All,
@@ -500,7 +505,8 @@ impl App {
                             ItemFilter::Unknown,
                             "Unknown size",
                         );
-                    });
+                    },
+                );
             });
             let query = self.recycle_bin_ui.search.trim().to_ascii_lowercase();
             let visible = inventory_items
@@ -515,7 +521,7 @@ impl App {
                 .map(RecycleBinItem::id)
                 .collect::<Vec<_>>();
             ui.add_space(6.);
-            ui.horizontal_wrapped(|ui| {
+            theme::control_row(ui, |ui| {
                 theme::muted(
                     ui,
                     format!(
@@ -525,7 +531,7 @@ impl App {
                     ),
                     t,
                 );
-                if theme::secondary(
+                if theme::field_action(
                     ui,
                     "Select visible",
                     !busy && complete && !visible_ids.is_empty(),
@@ -534,7 +540,7 @@ impl App {
                         .selected_ids
                         .extend(visible_ids.iter().copied());
                 }
-                if theme::secondary(ui, "Clear selection", !busy) {
+                if theme::field_action(ui, "Clear selection", !busy) {
                     self.recycle_bin_ui.selected_ids.clear();
                 }
             });
@@ -576,9 +582,10 @@ impl App {
                                 .iter()
                                 .all(|id| self.recycle_bin_ui.selected_ids.contains(id));
                         let mut all_visible_selected = all_visible_selected;
-                        let select_response = ui.add_enabled(
-                            !busy && complete && !visible_ids.is_empty(),
+                        let select_response = theme::checkbox_widget(
+                            ui,
                             egui::Checkbox::without_text(&mut all_visible_selected),
+                            !busy && complete && !visible_ids.is_empty(),
                         );
                         if select_response.changed() {
                             if all_visible_selected {
@@ -609,9 +616,10 @@ impl App {
                                     let actionable = complete && item.is_size_readable();
                                     let mut selected =
                                         self.recycle_bin_ui.selected_ids.contains(&item.id());
-                                    let response = ui.add_enabled(
-                                        !busy && actionable,
+                                    let response = theme::checkbox_widget(
+                                        ui,
                                         egui::Checkbox::without_text(&mut selected),
+                                        !busy && actionable,
                                     );
                                     if response.changed() {
                                         if selected {
@@ -898,9 +906,11 @@ impl App {
                             "Permanent purge removes selected items through the operating-system recycle-bin API. It cannot be undone.",
                         );
                         ui.add_space(8.);
-                        ui.checkbox(
+                        theme::checkbox(
+                            ui,
                             &mut self.recycle_bin_ui.acknowledge_purge,
                             "I understand that permanent purge cannot be undone",
+                            true,
                         );
                         ui.add_space(10.);
                         ui.label(RichText::new("Items in this review").family(theme::semibold()));

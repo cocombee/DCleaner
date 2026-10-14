@@ -4,6 +4,281 @@ pub const LABEL_GAP: f32 = 8.;
 pub const CONTROL_HEIGHT: f32 = 36.;
 pub const CONTROL_RADIUS: u8 = 18;
 pub const SECTION_RADIUS: u8 = 16;
+pub const FIELD_HEIGHT: f32 = 32.;
+pub const FIELD_RADIUS: u8 = 8;
+pub const TAB_HEIGHT: f32 = 28.;
+pub const TABLE_ACTION_HEIGHT: f32 = 22.;
+
+#[cfg(debug_assertions)]
+#[derive(Clone, Default, serde::Serialize)]
+struct GeometryFrame {
+    controls: Vec<ControlGeometry>,
+}
+#[cfg(debug_assertions)]
+#[derive(Clone, serde::Serialize)]
+struct ControlGeometry {
+    role: String,
+    rect: [f32; 4],
+    radius: u8,
+}
+#[cfg(debug_assertions)]
+pub fn begin_geometry_frame(ctx: &egui::Context) {
+    if std::env::args().any(|arg| arg == "--render-qa") {
+        ctx.data_mut(|data| {
+            data.insert_temp(
+                egui::Id::new("native-control-geometry"),
+                GeometryFrame::default(),
+            )
+        });
+    }
+}
+#[cfg(debug_assertions)]
+pub fn geometry_json(ctx: &egui::Context) -> serde_json::Value {
+    ctx.data(|data| {
+        serde_json::to_value(
+            data.get_temp::<GeometryFrame>(egui::Id::new("native-control-geometry"))
+                .unwrap_or_default(),
+        )
+        .unwrap_or_default()
+    })
+}
+fn record_control(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
+    #[cfg(debug_assertions)]
+    ui.ctx().data_mut(|data| {
+        let id = egui::Id::new("native-control-geometry");
+        if let Some(mut frame) = data.get_temp::<GeometryFrame>(id) {
+            frame.controls.push(ControlGeometry {
+                role: role.to_owned(),
+                rect: [rect.left(), rect.top(), rect.width(), rect.height()],
+                radius,
+            });
+            data.insert_temp(id, frame);
+        }
+    });
+    let _ = (ui, role, rect, radius);
+}
+
+fn field_style(ui: &mut egui::Ui) {
+    ui.spacing_mut().interact_size.y = FIELD_HEIGHT;
+    ui.spacing_mut().button_padding = Vec2::new(12., 6.);
+    let visuals = ui.visuals_mut();
+    for visual in [
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
+        visual.corner_radius = FIELD_RADIUS.into();
+    }
+}
+
+/// Sets the row height before laying out labels, so earlier labels are not
+/// positioned against a shorter default row than the fields that follow.
+pub fn control_row<R>(
+    ui: &mut egui::Ui,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    let response = ui
+        .scope(|ui| {
+            field_style(ui);
+            ui.horizontal_wrapped(contents)
+        })
+        .inner;
+    record_control(ui, "field-row", response.response.rect, 0);
+    response
+}
+
+pub fn action_row<R>(
+    ui: &mut egui::Ui,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = CONTROL_HEIGHT;
+        ui.horizontal_wrapped(contents)
+    })
+    .inner
+}
+
+pub fn tabs<R>(
+    ui: &mut egui::Ui,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = TAB_HEIGHT;
+        ui.spacing_mut().button_padding = Vec2::new(12., 4.);
+        ui.spacing_mut().item_spacing.x = 4.;
+        let visuals = ui.visuals_mut();
+        for visual in [
+            &mut visuals.widgets.inactive,
+            &mut visuals.widgets.hovered,
+            &mut visuals.widgets.active,
+            &mut visuals.widgets.open,
+        ] {
+            visual.corner_radius = 14.into();
+        }
+        ui.horizontal_wrapped(contents)
+    })
+    .inner
+}
+
+pub fn tab(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
+    let response = ui.selectable_label(
+        selected,
+        RichText::new(label).family(if selected {
+            semibold()
+        } else {
+            FontFamily::Proportional
+        }),
+    );
+    record_control(ui, "tab", response.rect, 14);
+    response
+}
+
+pub fn tab_value<T: PartialEq>(
+    ui: &mut egui::Ui,
+    current: &mut T,
+    value: T,
+    label: &str,
+) -> egui::Response {
+    let mut response = tab(ui, *current == value, label);
+    if response.clicked() && *current != value {
+        *current = value;
+        response.mark_changed();
+    }
+    response
+}
+
+pub fn input(
+    ui: &mut egui::Ui,
+    value: &mut String,
+    width: f32,
+    hint: &str,
+    enabled: bool,
+) -> egui::Response {
+    let frame = egui::Frame::new()
+        .fill(ui.visuals().extreme_bg_color)
+        .stroke(ui.visuals().widgets.inactive.bg_stroke)
+        .corner_radius(FIELD_RADIUS)
+        .inner_margin(egui::Margin::symmetric(10, 0));
+    let response = ui.add_enabled(
+        enabled,
+        egui::TextEdit::singleline(value)
+            .desired_width(width.max(60.))
+            .min_size(Vec2::new(width.max(60.), FIELD_HEIGHT))
+            .vertical_align(egui::Align::Center)
+            .frame(frame)
+            .clip_text(true)
+            .hint_text(hint),
+    );
+    focus_ring(ui, &response, FIELD_RADIUS + 2);
+    record_control(ui, "input", response.rect, FIELD_RADIUS);
+    response
+}
+
+pub fn selector_width(ui: &egui::Ui, labels: &[&str]) -> f32 {
+    let font = ui.style().text_styles[&egui::TextStyle::Button].clone();
+    let label_width = labels
+        .iter()
+        .map(|label| {
+            ui.painter()
+                .layout_no_wrap((*label).to_owned(), font.clone(), ui.visuals().text_color())
+                .size()
+                .x
+        })
+        .fold(0., f32::max);
+    (label_width + 24. + ui.spacing().icon_width + ui.spacing().icon_spacing + 2.).ceil()
+}
+
+pub fn selector<R>(
+    ui: &mut egui::Ui,
+    id: impl std::hash::Hash + std::fmt::Debug,
+    selected: &str,
+    choices: &[&str],
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<Option<R>> {
+    ui.scope(|ui| {
+        field_style(ui);
+        let width = selector_width(ui, choices).max(selector_width(ui, &[selected]));
+        let response = egui::ComboBox::from_id_salt(id)
+            .width(width)
+            .selected_text(selected)
+            .show_ui(ui, contents);
+        focus_ring(ui, &response.response, FIELD_RADIUS + 2);
+        record_control(ui, "selector", response.response.rect, FIELD_RADIUS);
+        response
+    })
+    .inner
+}
+
+pub fn search_width(ui: &egui::Ui, choices: &[&str]) -> f32 {
+    let font = ui.style().text_styles[&egui::TextStyle::Body].clone();
+    let text_width = |text: &str| {
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), font.clone(), ui.visuals().text_color())
+            .size()
+            .x
+    };
+    let fixed = text_width("Search")
+        + text_width("Sort by")
+        + text_width("Descending")
+        + selector_width(ui, choices)
+        + ui.spacing().icon_width
+        + ui.spacing().icon_spacing
+        + 48.;
+    (ui.available_width() - fixed).clamp(150., 320.)
+}
+
+pub fn field_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
+    let response = ui
+        .scope(|ui| {
+            ui.spacing_mut().button_padding = Vec2::new(12., 4.);
+            ui.add_enabled(
+                enabled,
+                egui::Button::new(label)
+                    .corner_radius(16)
+                    .min_size(Vec2::new(0., FIELD_HEIGHT)),
+            )
+        })
+        .inner;
+    focus_ring(ui, &response, 18);
+    record_control(ui, "field-action", response.rect, 16);
+    response.clicked()
+}
+
+pub fn checkbox<'a>(
+    ui: &mut egui::Ui,
+    checked: &'a mut bool,
+    label: impl egui::IntoAtoms<'a>,
+    enabled: bool,
+) -> egui::Response {
+    checkbox_widget(ui, egui::Checkbox::new(checked, label), enabled)
+}
+
+pub fn checkbox_widget(
+    ui: &mut egui::Ui,
+    checkbox: egui::Checkbox<'_>,
+    enabled: bool,
+) -> egui::Response {
+    let response = ui
+        .scope(|ui| {
+            let visuals = ui.visuals_mut();
+            for visual in [
+                &mut visuals.widgets.inactive,
+                &mut visuals.widgets.hovered,
+                &mut visuals.widgets.active,
+                &mut visuals.widgets.open,
+                &mut visuals.widgets.noninteractive,
+            ] {
+                visual.corner_radius = 3.into();
+            }
+            ui.add_enabled(enabled, checkbox)
+        })
+        .inner;
+    focus_ring(ui, &response, 5);
+    record_control(ui, "checkbox", response.rect, 3);
+    response
+}
+
 pub fn semibold() -> FontFamily {
     FontFamily::Name("Inter Semibold".into())
 }
@@ -87,6 +362,9 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.visuals.widgets.active.weak_bg_fill = t.tint;
     style.spacing.item_spacing = Vec2::new(LABEL_GAP, LABEL_GAP);
     style.spacing.button_padding = Vec2::new(16., 8.);
+    style.spacing.scroll = egui::style::ScrollStyle::solid();
+    style.spacing.scroll.foreground_color = true;
+    style.spacing.scroll.dormant_handle_opacity = 0.35;
     style.text_styles.insert(
         egui::TextStyle::Body,
         FontId::new(13., FontFamily::Proportional),
@@ -148,6 +426,7 @@ pub fn primary(ui: &mut egui::Ui, label: &str, t: Tokens, enabled: bool) -> bool
             .min_size(Vec2::new(120., CONTROL_HEIGHT)),
     );
     focus_ring(ui, &response, CONTROL_RADIUS + 2);
+    record_control(ui, "primary", response.rect, CONTROL_RADIUS);
     response.clicked()
 }
 pub fn secondary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
@@ -169,15 +448,22 @@ pub fn secondary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
                     .min_size(Vec2::new(100., CONTROL_HEIGHT)),
             );
             focus_ring(ui, &response, CONTROL_RADIUS + 2);
+            record_control(ui, "secondary", response.rect, CONTROL_RADIUS);
             response.clicked()
         },
     )
     .inner
 }
 pub fn row_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> egui::Response {
+    compact_action(ui, label, enabled, TABLE_ACTION_HEIGHT)
+}
+pub fn finding_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> egui::Response {
+    compact_action(ui, label, enabled, 28.)
+}
+fn compact_action(ui: &mut egui::Ui, label: &str, enabled: bool, height: f32) -> egui::Response {
     let response = ui
         .scope(|ui| {
-            ui.spacing_mut().button_padding = Vec2::new(10., 4.);
+            ui.spacing_mut().button_padding = Vec2::new(10., 2.);
             let font = FontId::new(12., semibold());
             let width = (ui
                 .painter()
@@ -189,12 +475,22 @@ pub fn row_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> egui::Respon
             ui.add_enabled(
                 enabled,
                 egui::Button::new(RichText::new(label).family(semibold()).size(12.))
-                    .corner_radius(14)
-                    .min_size(Vec2::new(width, 28.)),
+                    .corner_radius((height / 2.) as u8)
+                    .min_size(Vec2::new(width, height)),
             )
         })
         .inner;
-    focus_ring(ui, &response, 16);
+    focus_ring(ui, &response, (height / 2.) as u8 + 2);
+    record_control(
+        ui,
+        if height == TABLE_ACTION_HEIGHT {
+            "table-action"
+        } else {
+            "finding-action"
+        },
+        response.rect,
+        (height / 2.) as u8,
+    );
     response
 }
 pub fn table_cell(
@@ -221,8 +517,8 @@ pub fn row_more(ui: &mut egui::Ui, enabled: bool) -> egui::Response {
             ui.add_enabled(
                 enabled,
                 egui::Button::new("")
-                    .min_size(Vec2::splat(28.))
-                    .corner_radius(14),
+                    .min_size(Vec2::splat(TABLE_ACTION_HEIGHT))
+                    .corner_radius((TABLE_ACTION_HEIGHT / 2.) as u8),
             )
         })
         .inner;
@@ -234,7 +530,13 @@ pub fn row_more(ui: &mut egui::Ui, enabled: bool) -> egui::Response {
         ui.painter()
             .circle_filled(response.rect.center() + Vec2::new(offset, 0.), 1.2, colour);
     }
-    focus_ring(ui, &response, 16);
+    focus_ring(ui, &response, (TABLE_ACTION_HEIGHT / 2.) as u8 + 2);
+    record_control(
+        ui,
+        "row-more",
+        response.rect,
+        (TABLE_ACTION_HEIGHT / 2.) as u8,
+    );
     response.on_hover_text("More options")
 }
 #[cfg(windows)]
@@ -436,14 +738,18 @@ pub fn section_navigation(
 ) -> bool {
     let response = ui
         .add_enabled_ui(enabled, |ui| {
+            ui.spacing_mut().button_padding = Vec2::new(8., 6.);
             ui.add_sized(
                 Vec2::new(ui.available_width(), 30.),
                 egui::Button::new((
-                    RichText::new(label).size(12.).color(if selected {
-                        t.foreground
-                    } else {
-                        t.muted
-                    }),
+                    RichText::new(label)
+                        .family(if selected {
+                            semibold()
+                        } else {
+                            FontFamily::Proportional
+                        })
+                        .size(12.)
+                        .color(if selected { t.foreground } else { t.muted }),
                     egui::Atom::grow(),
                 ))
                 .wrap_mode(egui::TextWrapMode::Truncate)

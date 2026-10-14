@@ -464,7 +464,7 @@ impl App {
         let mut inventory_changed = false;
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            theme::action_row(ui, |ui| {
                 ui.label(RichText::new("Browser profiles").family(theme::semibold()));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if theme::secondary(ui, "Refresh profiles", !busy) {
@@ -490,9 +490,9 @@ impl App {
             } else {
                 let profile_count = self.privacy_ui.profiles.len();
                 let checked = self.privacy_ui.selected_profiles.len();
-                ui.horizontal_wrapped(|ui| {
+                theme::control_row(ui, |ui| {
                     theme::muted(ui, format!("{checked} of {profile_count} profiles selected"), t);
-                    if theme::secondary(ui, "Select all", !busy) {
+                    if theme::field_action(ui, "Select all", !busy) {
                         self.privacy_ui.selected_profiles = self
                             .privacy_ui
                             .profiles
@@ -501,7 +501,7 @@ impl App {
                             .collect();
                         inventory_changed = true;
                     }
-                    if theme::secondary(ui, "Clear", !busy) {
+                    if theme::field_action(ui, "Clear", !busy) {
                         self.privacy_ui.selected_profiles.clear();
                         inventory_changed = true;
                     }
@@ -516,14 +516,12 @@ impl App {
                                 .privacy_ui
                                 .selected_profiles
                                 .contains(&profile.id);
-                            if ui
-                                .add_enabled(
-                                    !busy,
-                                    egui::Checkbox::new(
-                                        &mut selected,
-                                        format!("{} · {}", profile.browser.label(), profile.name),
-                                    ),
-                                )
+                            if theme::checkbox(
+                                ui,
+                                &mut selected,
+                                format!("{} · {}", profile.browser.label(), profile.name),
+                                !busy,
+                            )
                                 .changed()
                             {
                                 if selected {
@@ -554,9 +552,7 @@ impl App {
                     let enabled = !busy
                         && (category != PrivacyCategory::Cookies
                             || self.privacy_ui.cookie_settings_readable);
-                    if ui
-                        .add_enabled(enabled, egui::Checkbox::new(&mut selected, label))
-                        .changed()
+                    if theme::checkbox(ui, &mut selected, label, enabled).changed()
                     {
                         if selected {
                             self.privacy_ui.categories.insert(category);
@@ -574,7 +570,7 @@ impl App {
             );
             if !self.privacy_ui.running.is_empty() {
                 ui.add_space(4.);
-                ui.horizontal_wrapped(|ui| {
+                theme::action_row(ui, |ui| {
                     ui.colored_label(
                         t.attention,
                         format!(
@@ -592,7 +588,7 @@ impl App {
                     }
                 });
             } else {
-                ui.horizontal_wrapped(|ui| {
+                theme::action_row(ui, |ui| {
                     theme::muted(ui, "No supported browser process is currently running.", t);
                     if theme::secondary(ui, "Refresh status", !busy) {
                         self.refresh_running_browsers(ctx);
@@ -631,14 +627,9 @@ impl App {
                 theme::muted(ui, "Matching cookies stay out of cleanup results", t);
             });
             ui.add_space(6.);
-            ui.horizontal_wrapped(|ui| {
-                ui.add_enabled(
-                    !busy,
-                    egui::TextEdit::singleline(&mut self.privacy_ui.cookie_domain_input)
-                        .desired_width(245.)
-                        .hint_text("example.com"),
-                );
-                if theme::secondary(ui, "Add domain", !busy) {
+            theme::control_row(ui, |ui| {
+                theme::input(ui, &mut self.privacy_ui.cookie_domain_input, 245., "example.com", !busy);
+                if theme::field_action(ui, "Add domain", !busy) {
                     match privacy::normalize_cookie_domain(&self.privacy_ui.cookie_domain_input) {
                         Ok(domain) => {
                             let mut domains = self.privacy_ui.cookie_settings.keep_domains.clone();
@@ -666,7 +657,7 @@ impl App {
             } else {
                 let mut remove = None;
                 for (index, domain) in self.privacy_ui.cookie_settings.keep_domains.iter().enumerate() {
-                    ui.horizontal(|ui| {
+                    theme::action_row(ui, |ui| {
                         ui.label(domain);
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if theme::secondary(ui, "Remove", !busy) {
@@ -757,15 +748,16 @@ impl App {
                 );
             }
             ui.add_space(6.);
-            ui.horizontal_wrapped(|ui| {
+            theme::control_row(ui, |ui| {
                 ui.label("Search");
-                ui.add_enabled(
+                theme::input(
+                    ui,
+                    &mut self.privacy_ui.search,
+                    220.,
+                    "Site, profile, category, or record ID",
                     !busy,
-                    egui::TextEdit::singleline(&mut self.privacy_ui.search)
-                        .desired_width(220.)
-                        .hint_text("Site, profile, category, or record ID"),
                 );
-                if theme::secondary(ui, "Select visible", !busy && !report.cancelled) {
+                if theme::field_action(ui, "Select visible", !busy && !report.cancelled) {
                     for record in report
                         .records
                         .iter()
@@ -774,7 +766,7 @@ impl App {
                         self.privacy_ui.selected_ids.insert(record.id);
                     }
                 }
-                if theme::secondary(ui, "Clear selection", !busy) {
+                if theme::field_action(ui, "Clear selection", !busy) {
                     self.privacy_ui.selected_ids.clear();
                 }
             });
@@ -811,12 +803,12 @@ impl App {
                                     }
                                     let mut selected =
                                         self.privacy_ui.selected_ids.contains(&record.id);
-                                    if ui
-                                        .add_enabled(
-                                            !busy && !report.cancelled,
-                                            egui::Checkbox::without_text(&mut selected),
-                                        )
-                                        .changed()
+                                    if theme::checkbox_widget(
+                                        ui,
+                                        egui::Checkbox::without_text(&mut selected),
+                                        !busy && !report.cancelled,
+                                    )
+                                    .changed()
                                     {
                                         if selected {
                                             self.privacy_ui.selected_ids.insert(record.id);
@@ -835,15 +827,15 @@ impl App {
                                     ui.add(egui::Label::new(&record.site).truncate())
                                         .on_hover_text(&record.site);
                                     ui.horizontal(|ui| {
-                                        if ui.small_button("Details").clicked() {
+                                        if theme::row_action(ui, "Details", true).clicked() {
                                             self.privacy_ui.detail_id = Some(record.id);
                                         }
-                                        if ui
-                                            .add_enabled(
-                                                !busy && !report.cancelled,
-                                                egui::Button::new("Review"),
-                                            )
-                                            .clicked()
+                                        if theme::row_action(
+                                            ui,
+                                            "Review",
+                                            !busy && !report.cancelled,
+                                        )
+                                        .clicked()
                                         {
                                             self.privacy_ui.selected_ids.clear();
                                             self.privacy_ui.selected_ids.insert(record.id);
@@ -892,7 +884,7 @@ impl App {
         let options = self.privacy_ui.restore_options.clone();
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            theme::action_row(ui, |ui| {
                 ui.label(RichText::new("Browser recovery copies").family(theme::semibold()));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if theme::secondary(ui, "Refresh recovery", !busy) {
@@ -1115,12 +1107,12 @@ impl App {
                     let key = (process.browser, process.pid);
                     let mut selected = self.privacy_ui.selected_processes.contains(&key);
                     ui.horizontal(|ui| {
-                        if ui
-                            .add_enabled_ui(!busy, |ui| {
-                                ui.checkbox(&mut selected, "")
-                            })
-                            .inner
-                            .changed()
+                        if theme::checkbox_widget(
+                            ui,
+                            egui::Checkbox::without_text(&mut selected),
+                            !busy,
+                        )
+                        .changed()
                         {
                             if selected {
                                 self.privacy_ui.selected_processes.insert(key);

@@ -1,0 +1,64 @@
+{
+  "controls": [
+    {
+      "radius": 18,
+      "rect": [
+        289.0,
+        766.0,
+        157.1875,
+        36.0
+      ],
+      "role": "primary"
+    },
+    {
+      "radius": 14,
+      "rect": [
+        1114.0,
+        163.5,
+        72.0,
+        28.0
+      ],
+      "role": "finding-action"
+    },
+    {
+      "radius": 14,
+      "rect": [
+        1114.0,
+        244.5,
+        72.0,
+        28.0
+      ],
+      "role": "finding-action"
+    },
+    {
+      "radius": 14,
+      "rect": [
+        1114.0,
+        325.5,
+        72.0,
+        28.0
+      ],
+      "role": "finding-action"
+    },
+    {
+      "radius": 14,
+      "rect": [
+        1114.0,
+        406.5,
+        72.0,
+        28.0
+      ],
+      "role": "finding-action"
+    },
+    {
+      "radius": 11,
+      "rect": [
+        288.0,
+        591.0,
+        81.03125,
+        22.0
+      ],
+      "role": "table-action"
+    }
+  ]
+}

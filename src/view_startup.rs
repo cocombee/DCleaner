@@ -625,12 +625,9 @@ impl App {
     }
 
     fn startup_tabs(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
+        theme::tabs(ui, |ui| {
             for section in StartupSection::ALL {
-                if ui
-                    .selectable_label(self.startup_ui.section == section, section.label())
-                    .clicked()
-                {
+                if theme::tab(ui, self.startup_ui.section == section, section.label()).clicked() {
                     self.startup_ui.section = section;
                     self.startup_ui.selected = None;
                 }
@@ -639,29 +636,35 @@ impl App {
     }
 
     fn startup_search_and_sort(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Search").family(theme::semibold()))
+        let choices: Vec<_> = SortColumn::ALL.iter().map(|sort| sort.label()).collect();
+        let width = theme::search_width(ui, &choices);
+        let t = theme::tokens(self.prefs.dark);
+        theme::control_row(ui, |ui| {
+            ui.label(RichText::new("Search").color(t.muted))
                 .on_hover_text("Search uses only details Windows returned.");
-            ui.add(
-                egui::TextEdit::singleline(&mut self.startup_ui.query)
-                    .hint_text("Name, publisher, path, command or identity")
-                    .desired_width(300.),
+            theme::input(
+                ui,
+                &mut self.startup_ui.query,
+                width,
+                "Name, publisher, path or identity",
+                true,
             );
-            ui.label("Sort by");
-            egui::ComboBox::from_id_salt("startup-sort")
-                .selected_text(self.startup_ui.sort.label())
-                .show_ui(ui, |ui| {
+            ui.add_space(8.);
+            ui.label(RichText::new("Sort by").color(t.muted));
+            theme::selector(
+                ui,
+                "startup-sort",
+                self.startup_ui.sort.label(),
+                &choices,
+                |ui| {
                     for sort in SortColumn::ALL {
                         ui.selectable_value(&mut self.startup_ui.sort, sort, sort.label());
                     }
-                });
-            ui.checkbox(&mut self.startup_ui.descending, "Descending");
-            if !self.startup_ui.query.is_empty()
-                && ui
-                    .small_button("Clear")
-                    .on_hover_text("Clear search")
-                    .clicked()
-            {
+                },
+            );
+            ui.add_space(8.);
+            theme::checkbox(ui, &mut self.startup_ui.descending, "Descending", true);
+            if !self.startup_ui.query.is_empty() && theme::field_action(ui, "Clear", true) {
                 self.startup_ui.query.clear();
             }
         });

@@ -599,15 +599,12 @@ impl App {
         });
     }
     fn clean_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        ui.horizontal(|ui| {
+        theme::tabs(ui, |ui| {
             ui.add_enabled_ui(!self.busy(), |ui| {
-                if ui
-                    .selectable_value(&mut self.clean_browser, false, "Junk")
-                    .clicked()
-                {
+                if theme::tab_value(ui, &mut self.clean_browser, false, "Junk").clicked() {
                     self.clean_bin = false;
                 }
-                ui.selectable_value(&mut self.clean_browser, true, "Browser");
+                theme::tab_value(ui, &mut self.clean_browser, true, "Browser");
             });
         });
         ui.add_space(16.);
@@ -638,10 +635,10 @@ impl App {
                     .corner_radius(12),
             )
             .show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
+                theme::tabs(ui, |ui| {
                     let os = if cfg!(windows) { "Windows" } else { "macOS" };
                     for group in [os, "Applications"] {
-                        if ui.selectable_label(self.group == group, group).clicked() {
+                        if theme::tab(ui, self.group == group, group).clicked() {
                             self.group = group.into();
                         }
                     }
@@ -662,23 +659,84 @@ impl App {
                     let mut changed = false;
                     for category in categories.iter().filter(|c| c.group == self.group) {
                         let mut checked = self.prefs.selected_categories.contains(&category.id);
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add_enabled(
+                        let text_width =
+                            (ui.available_width() - ui.spacing().icon_width - 8.).max(80.);
+                        let title_height = ui
+                            .painter()
+                            .layout(
+                                category.name.clone(),
+                                ui.style().text_styles[&egui::TextStyle::Body].clone(),
+                                t.foreground,
+                                text_width,
+                            )
+                            .size()
+                            .y;
+                        let detail_height = ui
+                            .painter()
+                            .layout(
+                                category.description.clone(),
+                                egui::FontId::proportional(12.),
+                                t.muted,
+                                text_width,
+                            )
+                            .size()
+                            .y;
+                        let row_height = title_height + 4. + detail_height;
+                        let mut row_changed = false;
+                        ui.allocate_ui_with_layout(
+                            Vec2::new(ui.available_width(), row_height),
+                            Layout::left_to_right(Align::Center),
+                            |ui| {
+                                ui.set_min_height(row_height);
+                                let check = theme::checkbox_widget(
+                                    ui,
+                                    egui::Checkbox::without_text(&mut checked),
                                     !busy,
-                                    egui::Checkbox::new(&mut checked, &category.name),
                                 )
-                                .changed()
-                            {
-                                changed = true;
-                                if checked {
-                                    self.prefs.selected_categories.push(category.id.clone());
-                                } else {
-                                    self.prefs.selected_categories.retain(|i| i != &category.id);
-                                }
+                                .on_hover_text(&category.name);
+                                check.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::WidgetType::Checkbox,
+                                        !busy,
+                                        checked,
+                                        &category.name,
+                                    )
+                                });
+                                row_changed |= check.changed();
+                                ui.vertical(|ui| {
+                                    ui.set_width(text_width);
+                                    ui.spacing_mut().item_spacing.y = 4.;
+                                    let title = ui.add_enabled(
+                                        !busy,
+                                        egui::Label::new(&category.name)
+                                            .sense(egui::Sense::click()),
+                                    );
+                                    let detail = ui.add_enabled(
+                                        !busy,
+                                        egui::Label::new(
+                                            RichText::new(&category.description)
+                                                .size(12.)
+                                                .color(t.muted),
+                                        )
+                                        .sense(egui::Sense::click()),
+                                    );
+                                    if title.clicked() || detail.clicked() {
+                                        checked = !checked;
+                                        row_changed = true;
+                                    }
+                                });
+                            },
+                        );
+                        if row_changed {
+                            changed = true;
+                            if checked {
+                                self.prefs.selected_categories.push(category.id.clone());
+                            } else {
+                                self.prefs
+                                    .selected_categories
+                                    .retain(|id| id != &category.id);
                             }
-                        });
-                        theme::muted(ui, &category.description, t);
+                        }
                         ui.add_space(8.);
                     }
                     if changed {
@@ -700,17 +758,18 @@ impl App {
         theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);
             if let Some(analysis)=self.analysis.clone(){
                 ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(25.).family(theme::semibold()));theme::muted(ui,format!("{} files · {:.1}s elapsed{}",analysis.count(),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
-                ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search file paths or categories…").desired_width(ui.available_width()));ui.add_space(10.);
+                let search_width=ui.available_width();
+                theme::input(ui,&mut self.search,search_width,"Search file paths or categories…",true);ui.add_space(10.);
                 let query=self.search.to_lowercase();let busy=self.busy();
                 for category in &analysis.categories{
                     if !query.is_empty()&&!category.name.to_lowercase().contains(&query)&&!category.files.iter().any(|f|f.path.to_string_lossy().to_lowercase().contains(&query)){continue;}
                     let status=if category.truncated{"Partial scan"}else if !category.available{"Not found"}else if category.files.is_empty(){"No eligible files"}else{""};
-                    ui.horizontal(|ui|{let mut all=!category.files.is_empty()&&category.files.iter().all(|f|self.selected.contains(&f.id));if ui.add_enabled(!busy&&!analysis.cancelled&&!category.files.is_empty(),egui::Checkbox::without_text(&mut all)).changed(){for f in &category.files{if all{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}}
+                    ui.horizontal(|ui|{let mut all=!category.files.is_empty()&&category.files.iter().all(|f|self.selected.contains(&f.id));if theme::checkbox_widget(ui,egui::Checkbox::without_text(&mut all),!busy&&!analysis.cancelled&&!category.files.is_empty()).changed(){for f in &category.files{if all{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}}
                         ui.label(&category.name);ui.with_layout(Layout::right_to_left(Align::Center),|ui|{ui.label(size(category.bytes()));theme::muted(ui,format!("{} files   {status}",category.files.len()),t);});});
                     if category.skipped>0{theme::muted(ui,format!("{} inaccessible or linked locations skipped",category.skipped),t);}
                     egui::CollapsingHeader::new(format!("View files — {}",category.name)).id_salt(&category.id).show(ui,|ui|{
                         egui::ScrollArea::vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
-                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if ui.add_enabled(!busy&&!analysis.cancelled,egui::Checkbox::without_text(&mut selected)).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(11.)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(11.));});}
+                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,egui::Checkbox::without_text(&mut selected),!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(11.)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(11.));});}
                             if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
                         });});ui.separator();
                 }
@@ -794,9 +853,15 @@ impl App {
     }
     fn settings_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());ui.label(RichText::new("Cleaning preferences").family(theme::semibold()));ui.add_space(12.);theme::muted(ui,"Minimum file age",t);
-            let mut changed=false;ui.add_enabled_ui(self.settings_readable&&!self.busy(),|ui|{egui::ComboBox::from_id_salt("age").selected_text(format!("{} days or older",self.prefs.minimum_age_days)).show_ui(ui,|ui|{for days in [1,7,14,30,90]{changed|=ui.selectable_value(&mut self.prefs.minimum_age_days,days,format!("{days} days or older")).changed();}});});
+            let mut changed=false;
+            let age_labels:Vec<_>=[1,7,14,30,90].iter().map(|days|format!("{days} days or older")).collect();
+            let age_choices:Vec<_>=age_labels.iter().map(String::as_str).collect();
+            let selected_age=format!("{} days or older",self.prefs.minimum_age_days);
+            ui.add_enabled_ui(self.settings_readable&&!self.busy(),|ui|{
+                theme::selector(ui,"age",&selected_age,&age_choices,|ui|{for days in [1,7,14,30,90]{changed|=ui.selectable_value(&mut self.prefs.minimum_age_days,days,format!("{days} days or older")).changed();}});
+            });
             if changed{self.invalidate();}ui.add_space(20.);ui.separator();ui.add_space(20.);ui.label(RichText::new("Appearance").family(theme::semibold()));ui.add_space(8.);
-            if ui.checkbox(&mut self.prefs.dark,"Dark mode").changed(){theme::apply(ctx,self.prefs.dark);self.persist();}
+            if theme::checkbox(ui,&mut self.prefs.dark,"Dark mode",true).changed(){theme::apply(ctx,self.prefs.dark);self.persist();}
             ui.add_space(20.);ui.separator();ui.add_space(20.);ui.label(RichText::new("DCleaner 0.1.0 · Native Rust").family(theme::semibold()));theme::muted(ui,"Navy workspace, blue actions and Inter typography.",t);ui.add_space(8.);theme::muted(ui,"This foundation supports temp/cache cleanup, folder analysis and durable history. Full CCleaner parity is tracked in the project plan.",t);
             ui.add_space(8.);theme::muted(ui,format!("Data directory: {}",self.data_dir.display()),t);
         });
@@ -806,6 +871,8 @@ impl eframe::App for App {
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll();
         let ctx = root.ctx().clone();
+        #[cfg(debug_assertions)]
+        theme::begin_geometry_frame(&ctx);
         self.startup_refresh_external_state(&ctx);
         let t = theme::tokens(self.prefs.dark);
         let busy = self.busy();
@@ -881,21 +948,28 @@ impl eframe::App for App {
                     egui::Frame::new()
                         .fill(t.sidebar)
                         .inner_margin(egui::Margin {
-                            left: 14,
-                            right: 14,
+                            left: 12,
+                            right: 16,
                             top: if cfg!(windows) { 42 } else { 28 },
                             bottom: 28,
                         }),
                 )
                 .show(root, |ui| {
                     ui.spacing_mut().item_spacing.y = 4.;
-                    ui.label(
-                        RichText::new("DCLEANER")
-                            .family(theme::semibold())
-                            .size(11.)
-                            .color(t.muted),
-                    );
-                    ui.add_space(12.);
+                    egui::Frame::NONE
+                        .inner_margin(egui::Margin {
+                            left: 8,
+                            ..Default::default()
+                        })
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new("DCLEANER")
+                                    .family(theme::semibold())
+                                    .size(11.)
+                                    .color(t.muted),
+                            );
+                        });
+                    ui.add_space(6.);
                     for page in PAGES {
                         if page == Page::Settings {
                             continue;
@@ -904,7 +978,7 @@ impl eframe::App for App {
                             self.page = page;
                             self.search.clear();
                         }
-                        ui.add_space(3.);
+                        ui.add_space(2.);
                     }
                     ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
                         theme::muted(ui, "DCleaner · 0.1.0", t);
@@ -924,31 +998,34 @@ impl eframe::App for App {
                             .stroke(egui::Stroke::new(1., t.border))
                             .inner_margin(egui::Margin::symmetric(28, 18)),
                     )
-                    .show(ui, |ui| match self.page {
-                        Page::Clean if self.clean_browser => self.privacy_footer(ui, t, &ctx),
-                        Page::Clean if self.clean_bin => self.recycle_bin_footer(ui, t, &ctx),
-                        Page::Clean => self.clean_footer(ui, t, &ctx),
-                        Page::Duplicates => self.duplicates_footer(ui, t, &ctx),
-                        Page::Programs => self.programs_footer(ui, t, &ctx),
-                        Page::Startup => self.startup_footer(ui, t, &ctx),
-                        Page::Software => self.software_footer(ui, t, &ctx),
-                        Page::Overview => {
-                            if theme::primary(
-                                ui,
-                                "Scan temporary files",
-                                t,
-                                !busy && !self.prefs.selected_categories.is_empty(),
-                            ) {
-                                self.begin_scan(&ctx);
+                    .show(ui, |ui| {
+                        ui.spacing_mut().interact_size.y = theme::CONTROL_HEIGHT;
+                        match self.page {
+                            Page::Clean if self.clean_browser => self.privacy_footer(ui, t, &ctx),
+                            Page::Clean if self.clean_bin => self.recycle_bin_footer(ui, t, &ctx),
+                            Page::Clean => self.clean_footer(ui, t, &ctx),
+                            Page::Duplicates => self.duplicates_footer(ui, t, &ctx),
+                            Page::Programs => self.programs_footer(ui, t, &ctx),
+                            Page::Startup => self.startup_footer(ui, t, &ctx),
+                            Page::Software => self.software_footer(ui, t, &ctx),
+                            Page::Overview => {
+                                if theme::primary(
+                                    ui,
+                                    "Scan temporary files",
+                                    t,
+                                    !busy && !self.prefs.selected_categories.is_empty(),
+                                ) {
+                                    self.begin_scan(&ctx);
+                                }
                             }
-                        }
-                        Page::Disk => {
-                            if theme::primary(ui, "Choose folder", t, !busy) {
-                                self.begin_disk(&ctx);
+                            Page::Disk => {
+                                if theme::primary(ui, "Choose folder", t, !busy) {
+                                    self.begin_disk(&ctx);
+                                }
                             }
-                        }
-                        _ => {
-                            theme::muted(ui, "On this device", t);
+                            _ => {
+                                theme::muted(ui, "On this device", t);
+                            }
                         }
                     });
                 egui::Frame::new()
@@ -1073,49 +1150,54 @@ fn finding_row(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             let title_width = (ui.available_width() - 24. - 16. - 130. - 72. - 24.).max(150.);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 12.;
-                let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.), egui::Sense::hover());
-                theme::paint_icon(ui.painter(), rect, icon, t.muted);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(title_width, 34.),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.set_min_width(title_width);
-                        ui.set_max_width(title_width);
-                        ui.vertical(|ui| {
-                            ui.spacing_mut().item_spacing.y = 3.;
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(title).family(theme::semibold()).size(14.),
+            ui.allocate_ui_with_layout(
+                Vec2::new(ui.available_width(), 34.),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_min_height(34.);
+                    ui.spacing_mut().item_spacing.x = 12.;
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.), egui::Sense::hover());
+                    theme::paint_icon(ui.painter(), rect, icon, t.muted);
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(title_width, 34.),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            ui.set_min_width(title_width);
+                            ui.set_max_width(title_width);
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 3.;
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(title).family(theme::semibold()).size(14.),
+                                    )
+                                    .truncate(),
+                                );
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(description).color(t.muted).size(12.),
+                                    )
+                                    .truncate(),
                                 )
-                                .truncate(),
-                            );
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(description).color(t.muted).size(12.),
-                                )
-                                .truncate(),
-                            )
-                            .on_hover_text(description);
-                        });
-                    },
-                );
-                theme::table_cell(
-                    ui,
-                    RichText::new(status)
-                        .color(if status == "Not scanned" {
-                            t.muted
-                        } else {
-                            t.attention
-                        })
-                        .family(theme::semibold())
-                        .size(12.),
-                    130.,
-                    28.,
-                );
-                theme::row_action(ui, "Review", enabled).clicked()
-            })
+                                .on_hover_text(description);
+                            });
+                        },
+                    );
+                    theme::table_cell(
+                        ui,
+                        RichText::new(status)
+                            .color(if status == "Not scanned" {
+                                t.muted
+                            } else {
+                                t.attention
+                            })
+                            .family(theme::semibold())
+                            .size(12.),
+                        130.,
+                        28.,
+                    );
+                    theme::finding_action(ui, "Review", enabled).clicked()
+                },
+            )
             .inner
         })
         .inner

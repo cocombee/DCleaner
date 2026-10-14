@@ -139,9 +139,11 @@ impl App {
                     t.attention,
                     "Every copy in at least one group is selected. Continuing can remove all copies in that group.",
                 );
-                ui.checkbox(
+                theme::checkbox(
+                    ui,
                     &mut self.duplicate_ui.acknowledge_all_copies,
                     "I reviewed the groups and want to continue",
+                    true,
                 );
             }
             ui.add_space(18.);
@@ -307,15 +309,13 @@ impl App {
             .spacing(Vec2::new(26., 4.))
             .show(ui, |ui| {
                 for (index, drive) in self.duplicate_ui.drives.iter_mut().enumerate() {
-                    settings_changed |= ui
-                        .add_enabled(
-                            !busy,
-                            egui::Checkbox::new(
-                                &mut drive.selected,
-                                drive.path.display().to_string(),
-                            ),
-                        )
-                        .changed();
+                    settings_changed |= theme::checkbox(
+                        ui,
+                        &mut drive.selected,
+                        drive.path.display().to_string(),
+                        !busy,
+                    )
+                    .changed();
                     if index % 2 == 1 {
                         ui.end_row();
                     }
@@ -361,7 +361,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.add(egui::Label::new(folder.display().to_string()).truncate())
                         .on_hover_text(folder.display().to_string());
-                    if ui.small_button("Remove").clicked() {
+                    if theme::row_action(ui, "Remove", !busy).clicked() {
                         remove_index = Some(index);
                     }
                 });
@@ -388,33 +388,24 @@ impl App {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Scan settings").family(theme::semibold()));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.checkbox(&mut self.duplicate_ui.options_open, "Show options");
+                    theme::checkbox(
+                        ui,
+                        &mut self.duplicate_ui.options_open,
+                        "Show options",
+                        true,
+                    );
                 });
             });
-            ui.horizontal_wrapped(|ui| {
+            theme::control_row(ui, |ui| {
                 theme::muted(ui, "Minimum file size", t);
-                scan_option_changed |= ui
-                    .add_enabled(
-                        !busy,
-                        egui::TextEdit::singleline(&mut self.duplicate_ui.minimum_size_text)
-                            .desired_width(110.)
-                            .hint_text("65536"),
-                    )
-                    .changed();
+                scan_option_changed |= theme::input(ui, &mut self.duplicate_ui.minimum_size_text, 110., "65536", !busy).changed();
                 theme::muted(ui, "bytes · default 65,536 bytes", t);
             });
             if self.duplicate_ui.options_open {
                 ui.add_space(8.);
-                ui.horizontal_wrapped(|ui| {
+                theme::control_row(ui, |ui| {
                     theme::muted(ui, "File types", t);
-                    scan_option_changed |= ui
-                        .add_enabled(
-                            !busy,
-                            egui::TextEdit::singleline(&mut self.duplicate_ui.file_types_text)
-                                .desired_width(260.)
-                                .hint_text("All types, or: jpg, pdf, tar.gz"),
-                        )
-                        .changed();
+                    scan_option_changed |= theme::input(ui, &mut self.duplicate_ui.file_types_text, 260., "All types, or: jpg, pdf, tar.gz", !busy).changed();
                 });
                 theme::muted(
                     ui,
@@ -423,41 +414,33 @@ impl App {
                 );
                 ui.add_space(6.);
                 ui.horizontal_wrapped(|ui| {
-                    scan_option_changed |= ui
-                        .add_enabled(
-                            !busy,
-                            egui::Checkbox::new(
-                                &mut self.duplicate_ui.options.include_hidden,
-                                "Include hidden files",
-                            ),
-                        )
+                    scan_option_changed |= theme::checkbox(
+                        ui,
+                        &mut self.duplicate_ui.options.include_hidden,
+                        "Include hidden files",
+                        !busy,
+                    )
                         .changed();
-                    scan_option_changed |= ui
-                        .add_enabled(
-                            !busy,
-                            egui::Checkbox::new(
-                                &mut self.duplicate_ui.options.include_system,
-                                "Include system files",
-                            ),
-                        )
+                    scan_option_changed |= theme::checkbox(
+                        ui,
+                        &mut self.duplicate_ui.options.include_system,
+                        "Include system files",
+                        !busy,
+                    )
                         .changed();
-                    scan_option_changed |= ui
-                        .add_enabled(
-                            !busy,
-                            egui::Checkbox::new(
-                                &mut self.duplicate_ui.options.include_read_only,
-                                "Include read-only files",
-                            ),
-                        )
+                    scan_option_changed |= theme::checkbox(
+                        ui,
+                        &mut self.duplicate_ui.options.include_read_only,
+                        "Include read-only files",
+                        !busy,
+                    )
                         .changed();
-                    scan_option_changed |= ui
-                        .add_enabled(
-                            !busy,
-                            egui::Checkbox::new(
-                                &mut self.duplicate_ui.options.include_compressed,
-                                "Include compressed files",
-                            ),
-                        )
+                    scan_option_changed |= theme::checkbox(
+                        ui,
+                        &mut self.duplicate_ui.options.include_compressed,
+                        "Include compressed files",
+                        !busy,
+                    )
                         .changed();
                 });
                 theme::muted(
@@ -596,15 +579,13 @@ impl App {
                                 .show(ui, |ui| {
                                     ui.horizontal_wrapped(|ui| {
                                         let mut all_selected = group.files.iter().all(|file| file.selected);
-                                        if ui
-                                            .add_enabled(
-                                                !busy && !cancelled,
-                                                egui::Checkbox::new(
-                                                    &mut all_selected,
-                                                    "Select every copy in this group",
-                                                ),
-                                            )
-                                            .changed()
+                                        if theme::checkbox(
+                                            ui,
+                                            &mut all_selected,
+                                            "Select every copy in this group",
+                                            !busy && !cancelled,
+                                        )
+                                        .changed()
                                         {
                                             for file in &mut group.files {
                                                 file.selected = all_selected;
@@ -623,9 +604,10 @@ impl App {
                                         {
                                             let file = &mut group.files[file_index];
                                             ui.horizontal(|ui| {
-                                            ui.add_enabled(
-                                                !busy && !cancelled,
+                                            theme::checkbox_widget(
+                                                ui,
                                                 egui::Checkbox::without_text(&mut file.selected),
+                                                !busy && !cancelled,
                                             );
                                             ui.vertical(|ui| {
                                                 let path = file.candidate.path.display().to_string();
@@ -663,11 +645,7 @@ impl App {
                                                 ui.with_layout(
                                                     Layout::right_to_left(Align::Center),
                                                     |ui| {
-                                                        keep_this_copy = ui
-                                                            .add_enabled(
-                                                                !busy && !cancelled,
-                                                                egui::Button::new("Keep this copy"),
-                                                            )
+                                                        keep_this_copy = theme::row_action(ui, "Keep this copy", !busy && !cancelled)
                                                             .on_hover_text(
                                                                 "Keep this file and select the other copies in this group for review.",
                                                             )

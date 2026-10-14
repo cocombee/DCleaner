@@ -68,4 +68,25 @@ The subsequent logo pass adds exact-product MSI artwork discovery when a GUID-ke
 
 The [follow-up frame index](design/evidence/native-logo-frame-index.json) records the v9 executable and 16 native frames for the four changed pages, at both sizes and themes. Inspection confirms actual Audient/Chrome/Drive/Corsair/Edge artwork in Startup and the registered 7-Zip artwork in both Programs and Software. The latest empty [navy overview](design/evidence/health-wide-dark-v9.png) shows distinct Browser and Software Updater glyphs. The canonical Windows installation was replaced with release SHA-256 `8DEF17865F859F2B1119C6C52D1BDF5BDD8D2D6F7D71F86DDDB40CCE3509B9BF`; debug render hashes are separately recorded and must not be confused with the release binary.
 
+## Shared geometry correction checkpoint
+
+The user's spacing/corner/button/field/alignment correction is applied through `theme.rs` and its callers. Fields and adjacent field actions are 32px high; fields use an 8px radius with a 10px text inset. The default widget margin had previously been discarded by the custom TextEdit frame, so merely setting a TextEdit margin did not correct painted padding. Labels now enter their 32px row before any child is placed. Selector width measures the longest choice, current value, font, insets and arrow. Checkbox-only styling uses a 3px radius so a neighboring field's 8px radius cannot turn it circular.
+
+| Family | Geometry and evidence |
+| --- | --- |
+| Main/section navigation | 64px rail and 196px section pane; section selection starts at x76 with text at approximately x84, 30px selection height and 36px pitch. This follows the reference app-interior selection/text anchors at approximately x76/x83; glyph rasterization still needs final installed comparison |
+| Fields/selector row | Common 32px visible frame height, measured width, 8px field corners; square checkboxes remain distinct. The 760px Startup frame has aligned field frames and retains all Search/Sort/Descending controls after scrollbar space is reserved |
+| Tabs | 28px high capsules with 4px spacing, selected semibold and unselected regular type |
+| Table actions | 22px high, 11px radius, separate 22px More control, centered in existing 44px table rows. Header and body columns share their owner widths |
+| Finding actions | 28px high, 14px radius; icon, title/detail group, status and action share the measured content-row center |
+| Footer actions | 36px high, 18px radius. Footer row height is established before status/selection labels are placed |
+| Selection with details | Custom Clean measures title plus wrapped description first, centers its checkbox against that group, and indents both text lines together. Checkbox and text activation remain connected to the same category identity |
+| Scrollbars | Reserve their own width instead of covering the final control or summary text. Native v11 frames verify the reserved space; final handle paint changed to foreground-based low opacity after that capture |
+
+The [geometry frame index](design/evidence/native-geometry-frame-index.json) records 44 previously captured actual native frames at both sizes/themes, with corresponding label-free control rectangle/radius JSON hashes. Eight safe empty Health/Custom Clean frames and their layout records are attached, including [navy findings](design/evidence/health-wide-dark-v11.png) and [minimum Custom Clean](design/evidence/clean-minimum-light-v11.png). Populated frames remain private. A rectangle/radius record is useful geometry evidence, not proof of painted glyph alignment, correct operation, all states, or full functional parity.
+
+Background validation passed 98 ordinary tests, six opt-in native checks excluded, Rust formatting and the native release build. Candidate release SHA-256 is `6574A18481DF10BC6E7FE0F35D065908FEBC5A243A00D83FC53D2AA8BB008E06`. It is **not installed**; the canonical installation still has the older `8DEF...B9BF` build. The candidate includes the last scrollbar paint adjustment, so its pixels are not asserted identical to the v11 debug frames. Final installed geometry, dialogs/menus/hover/focus/disabled cases and every missing workflow remain open.
+
+The native export batch opened real application windows and could take focus. The user subsequently prohibited physical desktop actions until confirming one install for inspection. No additional live capture, app launch, mouse/keyboard automation, or installation is authorized before that confirmation; saved-image inspection and background source/tests continue.
+
 Computed token contrast against current surfaces: dark body 12.84:1, dark muted text 6.80:1, white primary-button text 4.47:1, light muted text 5.37:1. The primary blue matches the supplied artwork; its current small white text is below the 4.5:1 normal-text threshold, so these measurements are not an accessibility pass. Shared buttons/navigation paint an explicit keyboard-focus ring. Every complete screen/state/theme still requires inspection; token checks alone do not pass the delivery gate.

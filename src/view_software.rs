@@ -117,15 +117,17 @@ impl App {
             .unwrap_or_else(|| "Inventory not loaded".into());
         ui.set_width(ui.available_width());
         ui.horizontal_wrapped(|ui| {
-            for (tab, label) in [
-                (SoftwareTab::All, "All"),
-                (SoftwareTab::Outdated, "Outdated"),
-                (SoftwareTab::Current, "Current"),
-                (SoftwareTab::Skipped, "Skipped version"),
-                (SoftwareTab::Ignored, "Ignored"),
-            ] {
-                ui.selectable_value(&mut self.software_ui.tab, tab, label);
-            }
+            theme::tabs(ui, |ui| {
+                for (tab, label) in [
+                    (SoftwareTab::All, "All"),
+                    (SoftwareTab::Outdated, "Outdated"),
+                    (SoftwareTab::Current, "Current"),
+                    (SoftwareTab::Skipped, "Skipped version"),
+                    (SoftwareTab::Ignored, "Ignored"),
+                ] {
+                    theme::tab_value(ui, &mut self.software_ui.tab, tab, label);
+                }
+            });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 theme::muted(ui, count_text, t);
             });
@@ -133,21 +135,32 @@ impl App {
         ui.add_space(5.);
         ui.separator();
         ui.add_space(6.);
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Search");
-            ui.add_sized(
-                [240., theme::CONTROL_HEIGHT],
-                egui::TextEdit::singleline(&mut self.software_ui.query)
-                    .hint_text("Name, publisher, package ID…"),
+        let sort_choices = SoftwareSort::ALL.map(SoftwareSort::label);
+        theme::control_row(ui, |ui| {
+            let search_width = theme::search_width(ui, &sort_choices);
+            ui.label(RichText::new("Search").color(t.muted));
+            theme::input(
+                ui,
+                &mut self.software_ui.query,
+                search_width,
+                "Name, publisher, package ID…",
+                true,
             );
-            egui::ComboBox::from_id_salt("software-sort")
-                .selected_text(self.software_ui.sort.label())
-                .show_ui(ui, |ui| {
+            ui.add_space(8.);
+            ui.label(RichText::new("Sort by").color(t.muted));
+            theme::selector(
+                ui,
+                "software-sort",
+                self.software_ui.sort.label(),
+                &sort_choices,
+                |ui| {
                     for sort in SoftwareSort::ALL {
                         ui.selectable_value(&mut self.software_ui.sort, sort, sort.label());
                     }
-                });
-            ui.checkbox(&mut self.software_ui.descending, "Descending");
+                },
+            );
+            ui.add_space(8.);
+            theme::checkbox(ui, &mut self.software_ui.descending, "Descending", true);
         });
         if self.software_ui.loading {
             ui.add_space(8.);
@@ -316,7 +329,7 @@ impl App {
                         ui.add_space(8.);
                         egui::ScrollArea::vertical()
                             .max_height(body_height)
-                            .auto_shrink([false, false])
+                            .auto_shrink([false, true])
                             .show(ui, |body| self.software_details(body, t, &item));
                         ui.add_space(8.);
                         ui.separator();
@@ -343,7 +356,7 @@ impl App {
                         ui.add_space(8.);
                         egui::ScrollArea::vertical()
                             .max_height(body_height)
-                            .auto_shrink([false, false])
+                            .auto_shrink([false, true])
                             .show(ui, |body| {
                                 theme::muted(
                                     body,

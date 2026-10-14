@@ -55,6 +55,11 @@ impl Capture {
                     .flat_map(|color| color.to_array())
                     .collect();
                 encoder.write_header()?.write_image_data(&pixels)?;
+                let geometry = crate::theme::geometry_json(ctx);
+                std::fs::write(
+                    self.path.with_extension("layout.json"),
+                    serde_json::to_vec_pretty(&geometry)?,
+                )?;
                 Ok(())
             })();
             if let Err(error) = output {
