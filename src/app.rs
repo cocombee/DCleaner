@@ -18,8 +18,12 @@ use std::{
     time::Duration,
 };
 use uuid::Uuid;
+#[path = "view_drivers.rs"]
+mod view_drivers;
 #[path = "view_duplicates.rs"]
 mod view_duplicates;
+#[path = "view_health.rs"]
+mod view_health;
 #[path = "view_privacy.rs"]
 mod view_privacy;
 #[path = "view_programs.rs"]
@@ -40,6 +44,7 @@ enum Page {
     Programs,
     Startup,
     Software,
+    Drivers,
     History,
     Settings,
 }
@@ -53,6 +58,7 @@ impl Page {
             Self::Programs => theme::Icon::Programs,
             Self::Startup => theme::Icon::Startup,
             Self::Software => theme::Icon::Update,
+            Self::Drivers => theme::Icon::Driver,
             Self::History => theme::Icon::History,
             Self::Settings => theme::Icon::Settings,
         }
@@ -66,6 +72,7 @@ impl Page {
             Self::Programs => "Review installed applications and their registered uninstallers.",
             Self::Startup => "Manage the programs and services that start automatically.",
             Self::Software => "Review available application updates and their current status.",
+            Self::Drivers => "Review present devices and exact driver offers from Windows Update.",
             Self::History => "Review confirmed changes and interrupted operations.",
             Self::Settings => "Set your cleaning preferences and appearance.",
         }
@@ -79,29 +86,33 @@ impl Page {
             Self::Programs => "Uninstaller",
             Self::Startup => "Startup Manager",
             Self::Software => "Software Updater",
+            Self::Drivers => "Driver Updater",
             Self::History => "Cleanup History",
             Self::Settings => "Settings",
         }
     }
 }
-const PAGES: [Page; 9] = [
+const PAGES: [Page; 10] = [
     Page::Overview,
     Page::Clean,
     Page::Programs,
     Page::Duplicates,
     Page::Startup,
     Page::Software,
+    Page::Drivers,
     Page::Disk,
     Page::History,
     Page::Settings,
 ];
 enum Event {
+    Health(view_health::HealthEvent),
     RecycleBin(view_recycle_bin::RecycleBinEvent),
     Privacy(view_privacy::PrivacyEvent),
     Software(view_software::SoftwareEvent),
     Duplicate(view_duplicates::DuplicateEvent),
     Programs(view_programs::ProgramsEvent),
     Startup(view_startup::StartupEvent),
+    Drivers(view_drivers::DriverEvent),
     Progress(String),
     Scanned(Result<Analysis, String>),
     Cleaned(Result<CleanupResult, String>),
@@ -117,6 +128,7 @@ struct DiskReport {
     partial: bool,
 }
 pub struct App {
+    health_ui: view_health::HealthUi,
     app_icons: crate::app_icons::IconCache,
     #[cfg(debug_assertions)]
     visual_capture: Option<crate::visual_qa::Capture>,
@@ -124,6 +136,7 @@ pub struct App {
     duplicate_ui: view_duplicates::DuplicateUi,
     program_ui: view_programs::ProgramsUi,
     startup_ui: view_startup::StartupUi,
+    drivers_ui: view_drivers::DriverUi,
     privacy_ui: view_privacy::PrivacyUi,
     recycle_bin_ui: view_recycle_bin::RecycleBinUi,
     clean_browser: bool,
@@ -149,6 +162,9 @@ pub struct App {
 }
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        Self::new_with_context(&cc.egui_ctx)
+    }
+    pub(crate) fn new_with_context(context: &egui::Context) -> Self {
         let mut fonts = egui::FontDefinitions::default();
         fonts.font_data.insert(
             "Inter".into(),
@@ -171,7 +187,7 @@ impl App {
             theme::semibold(),
             vec!["Inter Semibold".into(), "Inter".into()],
         );
-        cc.egui_ctx.set_fonts(fonts);
+        context.set_fonts(fonts);
         let (data_dir, mut error) = match platform::data_directory() {
             Ok(p) => (p, None),
             Err(e) => (PathBuf::new(), Some(e)),
@@ -193,17 +209,20 @@ impl App {
         #[cfg(debug_assertions)]
         let visual_capture = crate::visual_qa::Capture::from_environment();
         #[cfg(debug_assertions)]
+        let qa_mode =
+            visual_capture.is_some() || std::env::args().any(|arg| arg == "--render-offscreen-qa");
+        #[cfg(debug_assertions)]
         let prefs = {
             let mut prefs = prefs;
-            if visual_capture.is_some() {
+            if qa_mode {
                 prefs.dark = std::env::var("DCLEANER_QA_THEME").as_deref() != Ok("light");
             }
             prefs
         };
-        theme::apply(&cc.egui_ctx, prefs.dark);
+        theme::apply(context, prefs.dark);
         let initial_page = Page::Overview;
         #[cfg(debug_assertions)]
-        let initial_page = if visual_capture.is_some() {
+        let initial_page = if qa_mode {
             match std::env::var("DCLEANER_QA_PAGE").as_deref() {
                 Ok("clean") => Page::Clean,
                 Ok("browser") | Ok("recyclebin") => Page::Clean,
@@ -211,6 +230,7 @@ impl App {
                 Ok("programs") => Page::Programs,
                 Ok("startup") => Page::Startup,
                 Ok("software") => Page::Software,
+                Ok("drivers") => Page::Drivers,
                 Ok("disk") => Page::Disk,
                 Ok("history") => Page::History,
                 Ok("settings") => Page::Settings,
@@ -220,7 +240,7 @@ impl App {
             initial_page
         };
         #[cfg(debug_assertions)]
-        let (clean_browser, clean_bin) = if visual_capture.is_some() {
+        let (clean_browser, clean_bin) = if qa_mode {
             let page = std::env::var("DCLEANER_QA_PAGE").unwrap_or_default();
             (page == "browser", page == "recyclebin")
         } else {
@@ -229,12 +249,14 @@ impl App {
         #[cfg(not(debug_assertions))]
         let (clean_browser, clean_bin) = (false, false);
         Self {
+            health_ui: Default::default(),
             #[cfg(debug_assertions)]
             visual_capture,
             software_ui: Default::default(),
             duplicate_ui: Default::default(),
             program_ui: Default::default(),
             startup_ui: Default::default(),
+            drivers_ui: Default::default(),
             app_icons: Default::default(),
             privacy_ui: Default::default(),
             recycle_bin_ui: Default::default(),
@@ -385,6 +407,8 @@ impl App {
                 Event::Duplicate(event) => self.duplicates_event(event),
                 Event::Programs(event) => self.programs_event(event),
                 Event::Startup(event) => self.startup_event(event),
+                Event::Drivers(event) => self.drivers_event(event),
+                Event::Health(event) => self.health_event(event),
                 Event::Privacy(event) => self.privacy_event(event),
                 Event::RecycleBin(event) => self.recycle_bin_event(event),
                 Event::Progress(text) => self.progress = text,
@@ -867,8 +891,12 @@ impl App {
         });
     }
 }
-impl eframe::App for App {
-    fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
+impl App {
+    #[cfg(debug_assertions)]
+    pub(crate) fn qa_busy(&self) -> bool {
+        self.busy() || self.app_icons.is_loading()
+    }
+    pub(crate) fn paint(&mut self, root: &mut egui::Ui) {
         self.poll();
         let ctx = root.ctx().clone();
         #[cfg(debug_assertions)]
@@ -1008,16 +1036,8 @@ impl eframe::App for App {
                             Page::Programs => self.programs_footer(ui, t, &ctx),
                             Page::Startup => self.startup_footer(ui, t, &ctx),
                             Page::Software => self.software_footer(ui, t, &ctx),
-                            Page::Overview => {
-                                if theme::primary(
-                                    ui,
-                                    "Scan temporary files",
-                                    t,
-                                    !busy && !self.prefs.selected_categories.is_empty(),
-                                ) {
-                                    self.begin_scan(&ctx);
-                                }
-                            }
+                            Page::Drivers => self.drivers_footer(ui, t, &ctx),
+                            Page::Overview => self.health_footer(ui, t, &ctx),
                             Page::Disk => {
                                 if theme::primary(ui, "Choose folder", t, !busy) {
                                     self.begin_disk(&ctx);
@@ -1036,7 +1056,7 @@ impl eframe::App for App {
                         bottom: 28,
                     })
                     .show(ui, |ui| {
-                        ui.heading(if self.page == Page::Overview {
+                        ui.heading(if self.page == Page::Overview && !self.health_started() {
                             "Your scan results"
                         } else {
                             self.page.name()
@@ -1080,7 +1100,7 @@ impl eframe::App for App {
                                         });
                                     ui.add_space(12.);
                                 }
-                                if busy {
+                                if busy && self.page != Page::Overview {
                                     theme::card(t).show(ui, |ui| {
                                         ui.horizontal(|ui| {
                                             ui.spinner();
@@ -1099,13 +1119,14 @@ impl eframe::App for App {
                                     ui.add_space(20.);
                                 }
                                 match self.page {
-                                    Page::Overview => self.overview(ui, t),
+                                    Page::Overview => self.health_page(ui, t, &ctx),
                                     Page::Clean => self.clean_page(ui, t, &ctx),
                                     Page::Disk => self.disk_page(ui, t, &ctx),
                                     Page::Duplicates => self.duplicates_page(ui, t, &ctx),
                                     Page::Programs => self.programs_page(ui, t, &ctx),
                                     Page::Startup => self.startup_page(ui, t, &ctx),
                                     Page::Software => self.software_page(ui, t, &ctx),
+                                    Page::Drivers => self.drivers_page(ui, t, &ctx),
                                     Page::History => self.history_page(ui, t),
                                     Page::Settings => self.settings_page(ui, t, &ctx),
                                 }
@@ -1119,6 +1140,8 @@ impl eframe::App for App {
         self.programs_dialog(&ctx);
         self.startup_dialog(&ctx);
         self.software_dialog(&ctx);
+        self.drivers_dialog(&ctx);
+        self.health_dialog(&ctx);
         self.privacy_dialog(&ctx);
         self.recycle_bin_dialog(&ctx);
         #[cfg(debug_assertions)]
@@ -1134,6 +1157,11 @@ impl eframe::App for App {
         if self.confirm {
             egui::Modal::new(egui::Id::new("confirm-cleanup")).show(&ctx,|ui|{ui.set_width(400.);ui.heading("Ready to make some room?");ui.add_space(12.);ui.label(format!("Move {} selected files to {}? Changed or unavailable files are skipped. You can restore moved files from the system {}.",self.selected.len(),platform::trash_label(),platform::trash_label()));ui.add_space(20.);ui.horizontal(|ui|{if theme::secondary(ui,"Keep files",true){self.confirm=false;}if theme::primary(ui,"Move selected files",t,true){self.begin_clean(&ctx);}});});
         }
+    }
+}
+impl eframe::App for App {
+    fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.paint(root);
     }
 }
 fn finding_row(

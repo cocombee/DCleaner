@@ -1,10 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 mod app_icons;
+#[cfg(debug_assertions)]
+mod offscreen_qa;
 mod theme;
 #[cfg(debug_assertions)]
 mod visual_qa;
 fn main() -> eframe::Result {
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|arg| arg == "--render-offscreen-qa") {
+        return offscreen_qa::run()
+            .map_err(|error| eframe::Error::AppCreation(Box::new(std::io::Error::other(error))));
+    }
     if std::env::args().any(|arg| arg == "--scan-json") {
         let preferences = dcleaner::domain::Preferences::default();
         let result = dcleaner::scanner::analyze(

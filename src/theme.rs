@@ -23,7 +23,7 @@ struct ControlGeometry {
 }
 #[cfg(debug_assertions)]
 pub fn begin_geometry_frame(ctx: &egui::Context) {
-    if std::env::args().any(|arg| arg == "--render-qa") {
+    if std::env::args().any(|arg| arg == "--render-qa" || arg == "--render-offscreen-qa") {
         ctx.data_mut(|data| {
             data.insert_temp(
                 egui::Id::new("native-control-geometry"),
@@ -724,6 +724,7 @@ pub enum Icon {
     Programs,
     Browser,
     Update,
+    Driver,
     Startup,
     History,
     Settings,
@@ -787,8 +788,13 @@ pub fn navigation(
     );
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            egui::Button::new(atoms)
-                .gap(12.)
+            let button = if compact {
+                ui.spacing_mut().button_padding = Vec2::new(6., 6.);
+                egui::Button::new(egui::Atom::custom(id, Vec2::splat(20.))).gap(0.)
+            } else {
+                egui::Button::new(atoms).gap(12.)
+            };
+            button
                 .selected(selected)
                 .fill(if selected {
                     t.tint
@@ -815,6 +821,16 @@ pub fn navigation(
         );
     }
     focus_ring(ui, &response.response, 8);
+    record_control(
+        ui,
+        if compact {
+            "rail-navigation"
+        } else {
+            "navigation"
+        },
+        response.response.rect,
+        6,
+    );
     response.response.on_hover_text(label).clicked()
 }
 
@@ -853,6 +869,16 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
             line(&[(10., 15.), (10., 18.)]);
             line(&[(5., 12.), (8., 9.), (11., 11.), (15., 7.)]);
             line(&[(12., 7.), (15., 7.), (15., 10.)]);
+        }
+        Icon::Driver => {
+            line(&[(5., 5.), (15., 5.), (15., 15.), (5., 15.), (5., 5.)]);
+            line(&[(8., 8.), (12., 8.), (12., 12.), (8., 12.), (8., 8.)]);
+            for position in [7., 10., 13.] {
+                line(&[(position, 2.), (position, 5.)]);
+                line(&[(position, 15.), (position, 18.)]);
+                line(&[(2., position), (5., position)]);
+                line(&[(15., position), (18., position)]);
+            }
         }
         Icon::Startup => {
             line(&[(2., 3.), (18., 3.), (18., 14.), (2., 14.), (2., 3.)]);

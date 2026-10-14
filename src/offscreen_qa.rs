@@ -1,0 +1,389 @@
+//! Debug-only CPU rendering of the same egui layout, without a native window.
+//! This is layout evidence, not a substitute for installed/GPU visual acceptance.
+use eframe::egui::{self, ColorImage, TextureId, epaint};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::BufWriter,
+    path::Path,
+    time::{Duration, Instant},
+};
+
+#[derive(Default)]
+struct Textures {
+    images: HashMap<TextureId, ColorImage>,
+    pending_free: Vec<TextureId>,
+}
+impl Textures {
+    fn apply(&mut self, delta: &mut egui::TexturesDelta) -> Result<(), String> {
+        self.pending_free.extend(delta.free.drain());
+        for (id, updates) in std::mem::take(&mut delta.set) {
+            for update in updates {
+                let egui::ImageData::Color(image) = &update.image;
+                if image.width() > 8192 || image.height() > 8192 {
+                    return Err("Offscreen texture exceeds the QA limit.".into());
+                }
+                if let Some([x, y]) = update.pos {
+                    let original = self
+                        .images
+                        .get_mut(&id)
+                        .ok_or("Offscreen texture patch has no original.")?;
+                    if x + image.width() > original.width()
+                        || y + image.height() > original.height()
+                    {
+                        return Err("Offscreen texture patch is out of bounds.".into());
+                    }
+                    for row in 0..image.height() {
+                        let start = (y + row) * original.width() + x;
+                        original.pixels[start..start + image.width()].copy_from_slice(
+                            &image.pixels[row * image.width()..(row + 1) * image.width()],
+                        );
+                    }
+                } else {
+                    self.images.insert(id, (**image).clone());
+                }
+            }
+        }
+        Ok(())
+    }
+    fn finish_frame(&mut self) {
+        for id in self.pending_free.drain(..) {
+            self.images.remove(&id);
+        }
+    }
+}
+
+fn sample(image: &ColorImage, uv: egui::Pos2) -> [f32; 4] {
+    let x = (uv.x * image.width() as f32 - 0.5).clamp(0., image.width().saturating_sub(1) as f32);
+    let y = (uv.y * image.height() as f32 - 0.5).clamp(0., image.height().saturating_sub(1) as f32);
+    let x0 = x.floor() as usize;
+    let y0 = y.floor() as usize;
+    let x1 = (x0 + 1).min(image.width() - 1);
+    let y1 = (y0 + 1).min(image.height() - 1);
+    let colours = [
+        image[(x0, y0)].to_array(),
+        image[(x1, y0)].to_array(),
+        image[(x0, y1)].to_array(),
+        image[(x1, y1)].to_array(),
+    ];
+    let dx = x - x0 as f32;
+    let dy = y - y0 as f32;
+    std::array::from_fn(|channel| {
+        let upper = colours[0][channel] as f32 * (1. - dx) + colours[1][channel] as f32 * dx;
+        let lower = colours[2][channel] as f32 * (1. - dx) + colours[3][channel] as f32 * dx;
+        (upper * (1. - dy) + lower * dy) / 255.
+    })
+}
+
+fn edge(a: egui::Pos2, b: egui::Pos2, p: egui::Pos2) -> f64 {
+    (b.x as f64 - a.x as f64) * (p.y as f64 - a.y as f64)
+        - (b.y as f64 - a.y as f64) * (p.x as f64 - a.x as f64)
+}
+fn top_left(a: egui::Pos2, b: egui::Pos2) -> bool {
+    b.y < a.y || (b.y == a.y && b.x > a.x)
+}
+
+fn rasterize(
+    primitives: &[epaint::ClippedPrimitive],
+    textures: &Textures,
+    width: usize,
+    height: usize,
+    scale: f32,
+) -> Result<Vec<u8>, String> {
+    if width == 0
+        || height == 0
+        || width.saturating_mul(height) > 8_000_000
+        || !scale.is_finite()
+        || scale <= 0.
+    {
+        return Err("Invalid offscreen frame size.".into());
+    }
+    let mut pixels = vec![[0f32; 4]; width * height];
+    for primitive in primitives {
+        let epaint::Primitive::Mesh(mesh) = &primitive.primitive else {
+            return Err(
+                "A paint callback requires a native renderer; no partial QA image was written."
+                    .into(),
+            );
+        };
+        let image = textures
+            .images
+            .get(&mesh.texture_id)
+            .ok_or("Offscreen mesh texture is missing.")?;
+        if image.width() == 0 || image.height() == 0 {
+            return Err("Empty offscreen texture.".into());
+        }
+        let clip = primitive.clip_rect * scale;
+        for indices in mesh.indices.chunks_exact(3) {
+            let mut vertices = [
+                mesh.vertices[indices[0] as usize],
+                mesh.vertices[indices[1] as usize],
+                mesh.vertices[indices[2] as usize],
+            ];
+            for vertex in &mut vertices {
+                vertex.pos *= scale;
+            }
+            let mut area = edge(vertices[0].pos, vertices[1].pos, vertices[2].pos);
+            if area.abs() < 1e-12 {
+                continue;
+            }
+            if area < 0. {
+                vertices.swap(1, 2);
+                area = -area;
+            }
+            let [a, b, c] = vertices;
+            let left = a
+                .pos
+                .x
+                .min(b.pos.x)
+                .min(c.pos.x)
+                .max(clip.left())
+                .max(0.)
+                .floor() as usize;
+            let top = a
+                .pos
+                .y
+                .min(b.pos.y)
+                .min(c.pos.y)
+                .max(clip.top())
+                .max(0.)
+                .floor() as usize;
+            let right = a
+                .pos
+                .x
+                .max(b.pos.x)
+                .max(c.pos.x)
+                .min(clip.right())
+                .min(width as f32)
+                .ceil()
+                .max(0.) as usize;
+            let bottom = a
+                .pos
+                .y
+                .max(b.pos.y)
+                .max(c.pos.y)
+                .min(clip.bottom())
+                .min(height as f32)
+                .ceil()
+                .max(0.) as usize;
+            for y in top..bottom {
+                for x in left..right {
+                    let point = egui::pos2(x as f32 + 0.5, y as f32 + 0.5);
+                    if !clip.contains(point) {
+                        continue;
+                    }
+                    let weights = [
+                        edge(b.pos, c.pos, point),
+                        edge(c.pos, a.pos, point),
+                        edge(a.pos, b.pos, point),
+                    ];
+                    let inclusions = [
+                        top_left(b.pos, c.pos),
+                        top_left(c.pos, a.pos),
+                        top_left(a.pos, b.pos),
+                    ];
+                    if weights
+                        .iter()
+                        .zip(inclusions)
+                        .any(|(weight, inclusive)| *weight < 0. || (*weight == 0. && !inclusive))
+                    {
+                        continue;
+                    }
+                    let weights = weights.map(|weight| (weight / area) as f32);
+                    let uv = egui::pos2(
+                        a.uv.x * weights[0] + b.uv.x * weights[1] + c.uv.x * weights[2],
+                        a.uv.y * weights[0] + b.uv.y * weights[1] + c.uv.y * weights[2],
+                    );
+                    let texel = sample(image, uv);
+                    let colours = [a.color.to_array(), b.color.to_array(), c.color.to_array()];
+                    let source: [f32; 4] = std::array::from_fn(|channel| {
+                        texel[channel]
+                            * (colours[0][channel] as f32 * weights[0]
+                                + colours[1][channel] as f32 * weights[1]
+                                + colours[2][channel] as f32 * weights[2])
+                            / 255.
+                    });
+                    let target = &mut pixels[y * width + x];
+                    for channel in 0..4 {
+                        target[channel] = source[channel] + target[channel] * (1. - source[3]);
+                    }
+                }
+            }
+        }
+    }
+    Ok(pixels
+        .into_iter()
+        .flat_map(|pixel| {
+            let alpha = pixel[3].clamp(0., 1.);
+            std::array::from_fn::<u8, 4, _>(|channel| {
+                let value = if channel == 3 {
+                    alpha
+                } else if alpha > 0. {
+                    pixel[channel] / alpha
+                } else {
+                    0.
+                };
+                (value.clamp(0., 1.) * 255.).round() as u8
+            })
+        })
+        .collect())
+}
+
+fn save_png(path: &Path, width: usize, height: usize, pixels: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let file = File::create(path).map_err(|error| error.to_string())?;
+    let mut encoder = png::Encoder::new(BufWriter::new(file), width as u32, height as u32);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .and_then(|mut writer| writer.write_image_data(pixels))
+        .map_err(|error| error.to_string())
+}
+
+pub fn run() -> Result<(), String> {
+    let destination = std::path::PathBuf::from(
+        std::env::var_os("DCLEANER_QA_CAPTURE")
+            .ok_or("Offscreen QA needs an explicit output path.")?,
+    );
+    if !destination.is_absolute()
+        || destination
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("png")
+    {
+        return Err("Offscreen QA needs an absolute PNG path.".into());
+    }
+    let data_directory = std::path::PathBuf::from(std::env::var_os("DCLEANER_DATA_DIR").ok_or("Offscreen QA requires an isolated DCLEANER_DATA_DIR; normal application data is never used.")?);
+    if !data_directory.is_absolute() {
+        return Err("Offscreen QA data directory must be absolute.".into());
+    }
+    let dimensions = if std::env::var("DCLEANER_QA_SIZE").as_deref() == Ok("minimum") {
+        [760usize, 600]
+    } else {
+        [1240, 820]
+    };
+    let context = egui::Context::default();
+    let mut app = crate::app::App::new_with_context(&context);
+    let mut textures = Textures::default();
+    let started = Instant::now();
+    let mut idle_frames = 0;
+    loop {
+        let mut input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(dimensions[0] as f32, dimensions[1] as f32),
+            )),
+            time: Some(started.elapsed().as_secs_f64()),
+            focused: true,
+            ..Default::default()
+        };
+        if let Some(viewport) = input.viewports.get_mut(&egui::ViewportId::ROOT) {
+            viewport.native_pixels_per_point = Some(1.);
+            viewport.focused = Some(true);
+        }
+        let mut output = context.run_ui(input, |root| app.paint(root));
+        textures.apply(&mut output.textures_delta)?;
+        if app.qa_busy() {
+            idle_frames = 0;
+        } else {
+            idle_frames += 1;
+        }
+        if idle_frames >= 20 {
+            let primitives = context.tessellate(output.shapes, output.pixels_per_point);
+            let pixels = rasterize(
+                &primitives,
+                &textures,
+                dimensions[0],
+                dimensions[1],
+                output.pixels_per_point,
+            )?;
+            save_png(&destination, dimensions[0], dimensions[1], &pixels)?;
+            std::fs::write(
+                destination.with_extension("layout.json"),
+                serde_json::to_vec_pretty(&crate::theme::geometry_json(&context))
+                    .map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
+            std::fs::write(destination.with_extension("renderer.json"), serde_json::to_vec_pretty(&serde_json::json!({"renderer":"CPU rasterization of actual egui meshes; no OS window", "native_framebuffer":false,"physical_input":false,"installed_acceptance":false,"size":dimensions,"scale":output.pixels_per_point})).map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
+            return Ok(());
+        }
+        textures.finish_frame();
+        if started.elapsed() > Duration::from_secs(120) {
+            return Err("Offscreen QA timed out; no completed-frame claim.".into());
+        }
+        std::thread::sleep(Duration::from_millis(80));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::Color32;
+    fn rectangle(colour: Color32, clip: egui::Rect) -> epaint::ClippedPrimitive {
+        let mut mesh = epaint::Mesh::with_texture(TextureId::Managed(0));
+        mesh.add_colored_rect(
+            egui::Rect::from_min_max(egui::pos2(0., 0.), egui::pos2(4., 4.)),
+            colour,
+        );
+        epaint::ClippedPrimitive {
+            clip_rect: clip,
+            primitive: epaint::Primitive::Mesh(mesh),
+        }
+    }
+    fn white_texture() -> Textures {
+        Textures {
+            images: HashMap::from([(
+                TextureId::Managed(0),
+                ColorImage::filled([1, 1], Color32::WHITE),
+            )]),
+            pending_free: Vec::new(),
+        }
+    }
+    #[test]
+    fn shared_diagonal_is_blended_once_and_scissor_is_respected() {
+        let clip = egui::Rect::from_min_max(egui::pos2(1., 1.), egui::pos2(3., 3.));
+        let primitive = rectangle(Color32::from_rgba_premultiplied(128, 0, 0, 128), clip);
+        let pixels = rasterize(&[primitive], &white_texture(), 4, 4, 1.).unwrap();
+        for y in 0..4 {
+            for x in 0..4 {
+                let pixel = &pixels[(y * 4 + x) * 4..(y * 4 + x + 1) * 4];
+                if (1..3).contains(&x) && (1..3).contains(&y) {
+                    assert_eq!(pixel, &[255, 0, 0, 128]);
+                } else {
+                    assert_eq!(pixel, &[0, 0, 0, 0]);
+                }
+            }
+        }
+    }
+    #[test]
+    fn texture_patch_requires_a_bounded_existing_texture() {
+        let mut textures = white_texture();
+        let mut update = egui::TexturesDelta::default();
+        update.push(
+            TextureId::Managed(0),
+            epaint::ImageDelta::partial(
+                [0, 0],
+                ColorImage::filled([1, 1], Color32::BLUE),
+                egui::TextureOptions::LINEAR,
+            ),
+        );
+        textures.apply(&mut update).unwrap();
+        assert_eq!(
+            textures.images[&TextureId::Managed(0)].pixels[0],
+            Color32::BLUE
+        );
+        let mut invalid = egui::TexturesDelta::default();
+        invalid.push(
+            TextureId::Managed(0),
+            epaint::ImageDelta::partial(
+                [1, 0],
+                ColorImage::filled([1, 1], Color32::BLUE),
+                egui::TextureOptions::LINEAR,
+            ),
+        );
+        assert!(textures.apply(&mut invalid).is_err());
+    }
+}

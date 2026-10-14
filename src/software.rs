@@ -1168,8 +1168,11 @@ fn bounded_output(
     args: &[&str],
     timeout: Duration,
 ) -> Result<std::process::Output, SoftwareError> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut child = Command::new(program)
         .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

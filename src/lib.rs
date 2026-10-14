@@ -1,7 +1,10 @@
+pub mod clean_settings;
 pub mod cleanup;
 pub mod domain;
+pub mod drivers;
 pub mod duplicates;
 pub mod effects;
+pub mod health;
 pub mod instance;
 pub mod platform;
 pub mod privacy;
