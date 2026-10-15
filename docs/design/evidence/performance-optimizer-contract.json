@@ -1224,9 +1224,12 @@
       "The bounded +0x38 prelude tests one byte, saves another, clears two byte fields, and tail-transfers to 0x140842ef0 with derived flags. Its followed tail body lies outside the selected range and is unreviewed."
     ],
     "next_bounded_targets": [
-      "0x14088f320",
-      "0x14088f500",
-      "0x14088e9f0",
+      "0x1410532c0",
+      "0x141053420",
+      "0x141053500",
+      "0x141053950",
+      "0x141053fb0",
+      "0x14088db70",
       "0x140867910",
       "0x140867cc0"
     ],
@@ -1343,9 +1346,10 @@
       ],
       "next_semantic_targets": [
         "0x14084f700",
-        "0x14088f320",
-        "0x14088f500",
-        "0x14088e9f0",
+        "0x14088f850",
+        "0x14088fda0",
+        "0x1408f3e20",
+        "0x14088e6d0",
         "0x140867910",
         "0x140867cc0"
       ]
@@ -1687,7 +1691,7 @@
     ]
   },
   "service_component_effects_evidence": {
-    "method": "Three targeted canonical REA service sessions under the existing isolated direct-JVM workaround; declared code seeds come from decoded direct-call sites in earlier source-bound dossiers",
+    "method": "Five targeted canonical REA service sessions under the existing isolated direct-JVM workaround; declared code seeds come from decoded direct-call sites in earlier source-bound dossiers",
     "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
     "rea_version": "6.5.0",
     "ghidra_version": "12.1.4",
@@ -1698,8 +1702,8 @@
       "Subroutine References"
     ],
     "cfg_end_convention": "Exclusive",
-    "additional_populated_procedures": 6,
-    "fully_pe_scoped": 5,
+    "additional_populated_procedures": 16,
+    "fully_pe_scoped": 15,
     "scope_partial": 1,
     "profiles": [
       {
@@ -1756,7 +1760,7 @@
               "assembly_outside": 0,
               "cfg_blocks_crossing": 0,
               "flow_operations_outside": 0,
-              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
             }
           }
         ]
@@ -1793,7 +1797,7 @@
               "assembly_outside": 0,
               "cfg_blocks_crossing": 0,
               "flow_operations_outside": 0,
-              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
             }
           },
           {
@@ -1815,7 +1819,7 @@
               "assembly_outside": 0,
               "cfg_blocks_crossing": 0,
               "flow_operations_outside": 0,
-              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
             }
           },
           {
@@ -1837,7 +1841,7 @@
               "assembly_outside": 0,
               "cfg_blocks_crossing": 0,
               "flow_operations_outside": 0,
-              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
             }
           }
         ]
@@ -1874,7 +1878,271 @@
               "assembly_outside": 0,
               "cfg_blocks_crossing": 0,
               "flow_operations_outside": 0,
-              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          }
+        ]
+      },
+      {
+        "label": "debugger-registry",
+        "analysis_profile_digest": "95f3f4051985f09bc20a8ca0ac5f3065238fd4b3e9334e824b7b36d9000dfa02",
+        "seed_sha256": "f7d3b6bafb16447f06aff92c96fb2f5359df895e44b43ed7a052c38ae31a884f",
+        "function_seed_count": 3,
+        "code_seed_count": 8,
+        "reported_seed_outcomes_validated": true,
+        "session_closed": true,
+        "snapshot_records": 3,
+        "private_snapshot_sha256": "f29e83f120beaffa33c008546ab0da6fd81eee60de16686dafa8cc027d2279f7",
+        "private_summary_sha256": "ba00e741331212fb6a604bef85ed247e898a4221266f150365204035c5478239",
+        "private_callsite_provenance_sha256": "4d3bf97ab2e8e22749eee7bce159f914ccf300b2487fb5958ac50ae466b0ad8d",
+        "functions": [
+          {
+            "entry": "0x14088f320",
+            "evidence_id": "ev_453f81685c1101b1f4a45781a6ebc7b0318e757071f924b9be136f96834aa269",
+            "private_record_sha256": "e7e9f86da940aaf62bb04ad248ce5d97a33f10986a71fb491d075aafaa9c2077",
+            "pe_end_exclusive": "0x14088f4fc",
+            "registered_body_bytes": 476,
+            "assembly_lines": 114,
+            "cfg_blocks": 16,
+            "unresolved_calls": 1,
+            "flow": {
+              "retained_operations": 310,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x14088f500",
+            "evidence_id": "ev_a1bec25401227b43d700a68ccee0baeee4a303b7ffb14782ff45f09519ba48e4",
+            "private_record_sha256": "d35651798e14cf1e99ec2c8adf6a5f91f1d2358e00c2872aa9f963209f36613b",
+            "pe_end_exclusive": "0x14088f84a",
+            "registered_body_bytes": 842,
+            "assembly_lines": 215,
+            "cfg_blocks": 26,
+            "unresolved_calls": 3,
+            "flow": {
+              "retained_operations": 478,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x14088e9f0",
+            "evidence_id": "ev_36c1af8604330f988bebb7aa1fdbfd4e04ed24592e1b89dd3ac1f49cbfd0a96e",
+            "private_record_sha256": "e83fdd8ad465abea9685d677b4b143a7d8b99a1cebf014334ceadd057b1c25b3",
+            "pe_end_exclusive": "0x14088f258",
+            "registered_body_bytes": 2152,
+            "assembly_lines": 495,
+            "cfg_blocks": 64,
+            "unresolved_calls": 7,
+            "flow": {
+              "retained_operations": 2613,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          }
+        ]
+      },
+      {
+        "label": "registry-primitives",
+        "analysis_profile_digest": "bcdc7be0cbd7158a10a23ce2ba7c33807358f8481046da1b1386e07804551be8",
+        "seed_sha256": "8bdb9a4b8c6faae6489114039ec837e5f2f1fca0c6fb31d1c2bc85de3d8e4ea3",
+        "function_seed_count": 7,
+        "code_seed_count": 19,
+        "reported_seed_outcomes_validated": true,
+        "session_closed": true,
+        "snapshot_records": 7,
+        "private_snapshot_sha256": "8319f41ca488768c61349faef321a96269e463f4be0cdbe4b88e1a5f36920fc0",
+        "private_summary_sha256": "aad6cc143a1e8b6828511046c2daa5f27641e6224bdd4e39a3f8f0f8449430e9",
+        "private_callsite_provenance_sha256": "b37e6c5c10a366806b2a2bdfb7d7f83f5e1194754cc1405ae15fcd16e7dfdec2",
+        "functions": [
+          {
+            "entry": "0x141054b30",
+            "evidence_id": "ev_9c8976ff0643da6115454c3933101add468b7b405d747c7055e6b6e323643b7d",
+            "private_record_sha256": "8ecc7248122d0530ada4020e2b76676bde1b421c21d1189c435bfe4a33f5109f",
+            "pe_end_exclusive": "0x141054c00",
+            "registered_body_bytes": 208,
+            "assembly_lines": 66,
+            "cfg_blocks": 15,
+            "unresolved_calls": 0,
+            "flow": {
+              "retained_operations": 55,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x1410548b0",
+            "evidence_id": "ev_69b701fa9f0f0b48a41b7a4a99f13d1584d307259069cb6f9ffb3dbb863953c1",
+            "private_record_sha256": "625319172b5ef7227ed185aac67d3182714e81add94cbc7575675ba05bd650f3",
+            "pe_end_exclusive": "0x141054909",
+            "pe_unwind_ranges": [
+              {
+                "start": "0x1410548b0",
+                "end_exclusive": "0x141054909"
+              },
+              {
+                "start": "0x141054909",
+                "end_exclusive": "0x141054a11"
+              },
+              {
+                "start": "0x141054a11",
+                "end_exclusive": "0x141054a4a"
+              }
+            ],
+            "registered_body_bytes": 410,
+            "assembly_lines": 108,
+            "cfg_blocks": 18,
+            "unresolved_calls": 0,
+            "flow": {
+              "retained_operations": 154,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x14088f260",
+            "evidence_id": "ev_8c46174d02d456c73c97d9324db7f34d414f01530689f31003f01a64bf20586e",
+            "private_record_sha256": "038b665c0e1e8a37fbff18827c15d617f5d25c816bfdee13aa683fff7e197761",
+            "pe_end_exclusive": "0x14088f31b",
+            "registered_body_bytes": 187,
+            "assembly_lines": 54,
+            "cfg_blocks": 3,
+            "unresolved_calls": 0,
+            "flow": {
+              "retained_operations": 33,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x14088e6d0",
+            "evidence_id": "ev_90e6901e45a39b7358f46ac23f513880b6f1deb87753e3011ff944aa4d18d951",
+            "private_record_sha256": "60025df342070646c3acb55d277a49b45972457246f431987e706414704d19cf",
+            "pe_end_exclusive": "0x14088e9e8",
+            "registered_body_bytes": 792,
+            "assembly_lines": 180,
+            "cfg_blocks": 19,
+            "unresolved_calls": 2,
+            "flow": {
+              "retained_operations": 565,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x14088f850",
+            "evidence_id": "ev_2d7ba0313e617c36f04bd096835e85d396081e63e241f7c14debab42ac3e7f1b",
+            "private_record_sha256": "06231589635e38811310c94432d7e2590e8d8074eea3dcd8211a108cc482b8b8",
+            "pe_end_exclusive": "0x14088fd9a",
+            "registered_body_bytes": 1354,
+            "assembly_lines": 322,
+            "cfg_blocks": 48,
+            "unresolved_calls": 3,
+            "flow": {
+              "retained_operations": 1360,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x14088fda0",
+            "evidence_id": "ev_718c3e1fceff1d708399d70e2478491883aa3ecfaad4045099ab8b6c33d3605d",
+            "private_record_sha256": "5644fcaaa392ac758018028f3c067cb17a44c6923606c4c6c6557a74dba9c08e",
+            "pe_end_exclusive": "0x14089001b",
+            "registered_body_bytes": 635,
+            "assembly_lines": 155,
+            "cfg_blocks": 24,
+            "unresolved_calls": 2,
+            "flow": {
+              "retained_operations": 672,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x1408f3e20",
+            "evidence_id": "ev_49da52a4ba069dff0cc43757c35fbc3c11f346fc6324a18c1aa27ca4abba963b",
+            "private_record_sha256": "9d22f7e6851f075f0e4208519f28ad8386de49e3aa2e11c8dfff257989d119af",
+            "pe_end_exclusive": "0x1408f3fe8",
+            "registered_body_bytes": 453,
+            "assembly_lines": 80,
+            "cfg_blocks": 10,
+            "unresolved_calls": 0,
+            "flow": {
+              "retained_operations": 257,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE unwind scope only; direct callees and virtual effects are not automatically verified"
             }
           }
         ]
@@ -1885,19 +2153,24 @@
     "private_flags_review_sha256": "0d7fd5340b9e1710fe78d99323efd3e6ab9dcbab6c3f957a098c9274b383304f",
     "private_association_return_review_sha256": "1ae17e44d587150b9e89b727ef417f5bd5189a32ca98e1e1d4f24d30591caaf7",
     "private_debugger_effect_review_sha256": "79e5e2d3fb4550c252395c901707814fbacdd6f5e14bf55b694159aa4d20c2bd",
+    "private_registry_delegates_review_sha256": "39072e41ea962017b2adeb3be628b3329e6db2585860d9b91866fd24b5302619",
+    "private_filter_registration_review_sha256": "3dd231b4330ea73bbf0ab17f808d64cc8c13aef7956c67a3e950ee8ed6b84459",
+    "private_registry_writers_review_sha256": "eba3b0c17f127d00ea25be5143d3c59fa7cffb20cfbc93a3254942713da9882b",
     "findings": [
       "The entry loop applies a flag-dependent precheck, a shared-entry predicate and indirect status checks before collecting entries for a later indirect action. Status 0/2 admission and status 4 exclusion are raw observed branches, not verified component post-states.",
       "The action router distinguishes numeric arguments 0-3 and delegates to debugger, property and persistence routines. The literal property keys are disabledAfterReboot and autoRedeactivation; their names alone do not prove an effect.",
       "The association predicate obtains two manager-provided string collections and normalizes matches in the second to the selected key. A remaining differing key must produce a nonzero query-call result and a nonempty returned range for ActualProgramModifications. Record presence does not verify a native Sleeping state.",
       "Source-bound SQL constants establish persistence modes 1=read, 2=update an existing row, 3=insert when missing, 4=insert-or-update, 5=delete. The Data payload grammar and runtime write results remain unverified.",
-      "The debugger delegate constructs a subkey beneath Windows Image File Execution Options from its first pointer/count payload. Calls using raw flags 0x200 and conditionally 0x100 are present. Actual registry write/delete operations remain delegated to 0x14088f320, 0x14088f500 and 0x14088e9f0; no direct registry API is proved in this wrapper.",
+      "The debugger delegate constructs a subkey beneath Windows Image File Execution Options. Its filtered path prepares Debugger, FilterFullPath and UseFilter values; Debugger/FilterFullPath write failures can continue to later writes, while UseFilter failure invokes a cleanup delegate. No native read-back occurs in that wrapper.",
+      "The string writer accepts raw type codes 1/2 and computes bytes through a UTF-16 terminator. The underlying writer calls RegCreateKeyExW, RegSetValueExW and RegCloseKey; the value-write status becomes its boolean result and SetLastError value. An access-denied create can retry with raw option 0x4. This observed fallback is not a DCleaner privilege or readiness implementation.",
+      "One native writer spans three original metadata-chained unwind ranges; all its retained body, assembly, CFG and value-flow facets lie in their union. Registry cleanup, matching and hash-name helpers retain separate limits until their concrete semantics are reviewed.",
       "The bounded return-check helper preserves RAX/EAX/AL on its successful RET path. The state router has observed numeric 0/1 status routes, and the deactivation wrapper returns its prepared byte on that normal path; these are not component post-state receipts."
     ],
     "limits": [
-      "These six records add selected static observations; they do not complete the optimizer, service or original app.",
+      "These sixteen records add selected static observations; they do not complete the optimizer, service or original app.",
       "The entry-loop record includes one padding byte outside its PE scope; its associated assembly/CFG/flow details are explicitly retained and excluded from semantic conclusions.",
-      "Actual component mutations, complete app associations, impact, automatic reactivation/re-sleep, durable recovery and runtime post-state evidence remain required.",
-      "No DCleaner UI, install or desktop interaction occurred; this batch changes evidence only."
+      "Concrete non-registry component mutations, complete app associations, cleanup ownership, impact, automatic reactivation/re-sleep, durable recovery and runtime post-state evidence remain required.",
+      "The proprietary target was not executed. The independent DCleaner protocol codec has separate fixture evidence and does not implement transport, authentication, service readiness or native effects."
     ],
     "bounded_followups": [
       {
@@ -1962,11 +2235,36 @@
     "private_manager_dispatch_slots_sha256": "761f4936492fa7a2b99e4dcc88bfe478668e2c2d7cfac844094316df771e0ab5"
   },
   "service_canonical_coverage": {
-    "populated_unique_procedures": 10,
-    "fully_within_selected_pe_scope": 9,
+    "populated_unique_procedures": 20,
+    "fully_within_selected_pe_scope": 19,
     "scope_partial": 1,
     "excluded_placeholder_records": 3,
     "value_flow_truncated_procedures": 1,
     "limit": "Counts cover only the two explicitly enumerated targeted evidence sections. They are not a percentage or claim of full service, feature, runtime or application coverage."
+  },
+  "dcleaner_protocol": {
+    "source": "src/optimizer_protocol.rs",
+    "source_lf_sha256": "278130548592ab3b42d5e21358379342ea44d8f39b38014a20c4203e4a659ee8",
+    "version": 1,
+    "header_bytes": 12,
+    "maximum_payload_bytes": 8192,
+    "requests": [
+      "query_readiness",
+      "reactivate by owned lease/invocation IDs",
+      "query_invocation"
+    ],
+    "correlation": [
+      "request ID",
+      "direction",
+      "response variant",
+      "invocation ID"
+    ],
+    "fixture_tests_passed": 7,
+    "private_test_log_sha256": "b30dd39709c31479bfce8dce8921da3090cfad3b4ecc32d217381f21688856d7",
+    "transport_implemented": false,
+    "peer_authentication_implemented": false,
+    "service_readiness_implemented": false,
+    "native_effects_implemented": false,
+    "limit": "Independent DCleaner codec only; request identifiers and status messages are not effect authority, ownership or native completion proof."
   }
 }

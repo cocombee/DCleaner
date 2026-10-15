@@ -10,6 +10,7 @@ pub mod instance;
 #[cfg(windows)]
 pub(crate) mod native_hash;
 pub mod optimizer_identity;
+pub mod optimizer_protocol;
 pub mod optimizer_registration;
 pub mod platform;
 pub mod privacy;
