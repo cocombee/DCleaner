@@ -202,7 +202,17 @@ impl App {
         self.health_ui = HealthUi::default();
         self.health_ui.cookie_settings_readable = true;
         self.health_ui.initialized = true;
-        if matches!(case, "health-welcome" | "health-intro") {
+        if case == "health-activity" {
+            self.history = super::qa_core::history_fixture();
+        }
+        if case == "health-activity-unavailable" {
+            self.history.clear();
+            self.history_readable = false;
+        }
+        if matches!(
+            case,
+            "health-welcome" | "health-intro" | "health-activity" | "health-activity-unavailable"
+        ) {
             return Ok(());
         }
         self.health_ui.started = true;
@@ -270,6 +280,11 @@ impl App {
             return;
         };
         self.health_step_page(ui, t, ctx, step);
+    }
+
+    pub(super) fn rescan_health(&mut self, ctx: &egui::Context) {
+        self.health_ui.started = true;
+        self.begin_health_prerequisites(ctx);
     }
 
     pub(super) fn health_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
@@ -1253,9 +1268,11 @@ impl App {
                 theme::card(t).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
-                        category_checkbox_changed = theme::checkbox_widget(
+                        category_checkbox_changed = theme::checkbox_mixed(
                             ui,
-                            egui::Checkbox::without_text(&mut category_selected),
+                            &mut category_selected,
+                            actionable_selected > 0 && actionable_selected < actionable_ids.len(),
+                            (),
                             selection_enabled && !actionable_ids.is_empty(),
                         )
                         .changed();
@@ -1304,7 +1321,7 @@ impl App {
                     egui::ScrollArea::vertical()
                         .id_salt(("health-category-rows", step as u8, category.category as u8))
                         .max_height(260.)
-                        .auto_shrink([false, false])
+                        .auto_shrink([false, true])
                         .show(ui, |ui| {
                             for finding in rows {
                                 ui.set_min_width(available);
@@ -1312,7 +1329,7 @@ impl App {
                                     let mut row_selected = selected.contains(&finding.id);
                                     let response = theme::checkbox_widget(
                                         ui,
-                                        egui::Checkbox::without_text(&mut row_selected),
+                                        &mut row_selected,
                                         selection_enabled && finding.actionable,
                                     );
                                     if response.changed() {
@@ -1527,7 +1544,7 @@ impl App {
                             theme::action_row(ui, |ui| {
                                 if theme::checkbox_widget(
                                     ui,
-                                    egui::Checkbox::without_text(&mut selected),
+                                    &mut selected,
                                     !busy,
                                 )
                                 .changed()

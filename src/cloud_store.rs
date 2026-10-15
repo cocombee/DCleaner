@@ -163,6 +163,16 @@ pub struct AccountRecord {
 }
 
 impl AccountRecord {
+    #[cfg(debug_assertions)]
+    pub fn visual_preview_fixture(scope: AccountScope) -> Self {
+        Self {
+            id: Uuid::from_u128(0x4443_434c_4f55_4400_0000_0000_0000_0001),
+            scope,
+            client_id: "__inert_visual_fixture_no_credentials__".into(),
+            label: "Fixture Drive · synthetic account".into(),
+            generation: Uuid::from_u128(0x4443_434c_4f55_4400_0000_0000_0000_0002),
+        }
+    }
     pub const fn id(&self) -> Uuid {
         self.id
     }

@@ -177,10 +177,12 @@ impl App {
                 "Start with a read-only inventory of installed applications and possible background entries. Impact and sleep state are unavailable in this build.",
                 &[
                     (
+                        theme::Icon::Optimizer,
                         "Improve overall performance",
                         "Review app registrations and possible background entries; impact has not been measured.",
                     ),
                     (
+                        theme::Icon::Startup,
                         "More startup speed",
                         "Review startup-related registrations. Putting apps to sleep is unavailable in this build.",
                     ),

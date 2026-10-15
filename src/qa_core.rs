@@ -10,6 +10,7 @@ impl App {
             case,
             "clean-empty"
                 | "clean-populated"
+                | "clean-selected"
                 | "clean-details"
                 | "clean-error"
                 | "history-empty"
@@ -35,12 +36,13 @@ impl App {
         self.settings_readable = true;
 
         match case {
-            "clean-empty" | "clean-populated" | "clean-details" | "clean-error" => {
+            "clean-empty" | "clean-populated" | "clean-selected" | "clean-details"
+            | "clean-error" => {
                 self.page = Page::Clean;
                 self.group = "Applications".into();
                 let report = match case {
                     "clean-empty" => custom_clean::CustomCleanReport::visual_fixture_empty(),
-                    "clean-populated" => {
+                    "clean-populated" | "clean-selected" => {
                         custom_clean::CustomCleanReport::visual_fixture_populated()
                     }
                     "clean-details" => custom_clean::CustomCleanReport::visual_fixture_details(),
@@ -48,6 +50,15 @@ impl App {
                     _ => unreachable!(),
                 };
                 self.analysis = Some(report.to_analysis());
+                if case == "clean-selected" {
+                    self.selected = self
+                        .analysis
+                        .iter()
+                        .flat_map(|report| &report.categories)
+                        .flat_map(|category| &category.files)
+                        .map(|file| file.id)
+                        .collect();
+                }
                 self.custom_analysis = Some(report);
                 self.notice =
                     Some("Synthetic Custom Clean preview; no filesystem scan was run.".into());
@@ -75,7 +86,7 @@ impl App {
 }
 
 #[cfg(debug_assertions)]
-fn history_fixture() -> Vec<CleanupResult> {
+pub(super) fn history_fixture() -> Vec<CleanupResult> {
     use dcleaner::domain::FileOutcome;
     use std::path::PathBuf;
 

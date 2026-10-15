@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod activity_chart;
 mod app;
 mod app_icons;
 mod illustrations;

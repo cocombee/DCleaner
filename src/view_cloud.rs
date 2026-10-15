@@ -129,6 +129,29 @@ impl App {
             }),
             ..Default::default()
         };
+        if case == "cloud-selected" {
+            let scope = dcleaner::cloud_inventory::AccountScope::new(
+                Provider::GoogleDrive,
+                "fixture-subject",
+                Some("fixture-drive".into()),
+            )
+            .expect("valid synthetic scope");
+            let account = AccountRecord::visual_preview_fixture(scope.clone());
+            let snapshot = Snapshot::visual_preview_fixture(scope);
+            self.cloud_ui.introduced = true;
+            self.cloud_ui.account = Some(account.id());
+            self.cloud_ui.selected = snapshot.items().iter().map(RemoteItem::id).collect();
+            self.cloud_ui.snapshot = Some(Arc::new(snapshot));
+            self.cloud_ui
+                .workspace
+                .as_mut()
+                .unwrap()
+                .accounts
+                .push(account);
+            self.notice = Some(
+                "Synthetic cloud preview; no account was connected or provider contacted.".into(),
+            );
+        }
     }
     fn begin_cloud_job(
         &mut self,
@@ -667,8 +690,8 @@ impl App {
         let storage_available = self.cloud_storage_available();
         ui.horizontal_wrapped(|ui| {
             ui.label(format!(
-                "{} items · {:?}",
-                snapshot.items().len(),
+                "{} · {:?}",
+                theme::counted_label(snapshot.items().len(), "item", "items"),
                 snapshot.status()
             ));
         });
@@ -839,7 +862,7 @@ impl App {
             egui::ScrollArea::vertical().id_salt("cloud-table-y").max_height(410.).show_rows(ui,48.,rows.len(),|ui,range|{
                 for index in range{let item=rows[index];ui.push_id(item.id(),|ui|{
                     ui.horizontal(|ui|{
-                        ui.allocate_ui_with_layout(Vec2::new(28.,44.),Layout::left_to_right(Align::Center),|ui|{let mut selected=self.cloud_ui.selected.contains(&item.id());let eligible=matches!(item.kind(),RemoteItemKind::File|RemoteItemKind::Mail)&&self.cloud_ui.filter!=CloudFilter::Ignored;if ui.add_enabled(!busy&&eligible,egui::Checkbox::without_text(&mut selected)).changed(){if selected{self.cloud_ui.selected.insert(item.id());}else{self.cloud_ui.selected.remove(&item.id());}}});
+                        ui.allocate_ui_with_layout(Vec2::new(28.,44.),Layout::left_to_right(Align::Center),|ui|{let mut selected=self.cloud_ui.selected.contains(&item.id());let eligible=matches!(item.kind(),RemoteItemKind::File|RemoteItemKind::Mail)&&self.cloud_ui.filter!=CloudFilter::Ignored;if theme::checkbox_widget(ui,&mut selected,!busy&&eligible).changed(){if selected{self.cloud_ui.selected.insert(item.id());}else{self.cloud_ui.selected.remove(&item.id());}}});
                         theme::table_cell(ui,RichText::new(item.display_name()).family(theme::semibold()),name_width,44.).on_hover_text(item.display_name());
                         theme::table_cell(ui,cloud_size(item),108.,44.).on_hover_text("Size is provider-reported. Gmail and other estimates are marked ≈; — means unknown.");
                         let date=item.provider_timestamp().and_then(|d|chrono::DateTime::from_timestamp_millis(d.unix_millis())).map(|d|d.format("%d %b %Y").to_string()).unwrap_or_else(||"—".into());
@@ -972,50 +995,59 @@ impl App {
         let busy = self.busy();
         let storage_available = self.cloud_storage_available();
         let compact = ui.available_width() < 760.;
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if self.cloud_ui.filter == CloudFilter::History {
-                if theme::secondary(ui, "Refresh history", !busy) {
-                    self.cloud_ui.reload = true;
+        ui.with_layout(
+            Layout::right_to_left(Align::Center).with_main_wrap(true),
+            |ui| {
+                if self.cloud_ui.filter == CloudFilter::History {
+                    if theme::secondary(ui, "Refresh history", !busy) {
+                        self.cloud_ui.reload = true;
+                    }
+                    return;
                 }
-                return;
-            }
-            if self.cloud_ui.account.is_some() {
-                if theme::primary(
-                    ui,
-                    "Review selected",
-                    t,
-                    !busy && storage_available && !self.cloud_ui.selected.is_empty(),
-                )
-                .then_some(())
-                .is_some()
-                {
-                    self.cloud_ui.dialog = Some(CloudDialog::Trash {
-                        ids: self.cloud_ui.selected.iter().copied().collect(),
-                        partial: false,
-                        copies: false,
-                        race: false,
-                    });
-                }
-                if theme::secondary(
-                    ui,
-                    if self.cloud_ui.snapshot.is_some() {
-                        "Scan again"
+                if self.cloud_ui.account.is_some() {
+                    let selected = self.cloud_ui.selected.len();
+                    let label = if selected == 0 {
+                        "Review selected".into()
                     } else {
-                        "Scan files"
-                    },
-                    !busy && storage_available,
-                ) {
-                    self.begin_cloud_scan(ctx);
+                        format!("Review {}", theme::counted_label(selected, "item", "items"))
+                    };
+                    if theme::primary(
+                        ui,
+                        &label,
+                        t,
+                        !busy && storage_available && !self.cloud_ui.selected.is_empty(),
+                    )
+                    .then_some(())
+                    .is_some()
+                    {
+                        self.cloud_ui.dialog = Some(CloudDialog::Trash {
+                            ids: self.cloud_ui.selected.iter().copied().collect(),
+                            partial: false,
+                            copies: false,
+                            race: false,
+                        });
+                    }
+                    theme::muted(ui, &format!("{selected} selected"), t);
+                    if theme::secondary(
+                        ui,
+                        if self.cloud_ui.snapshot.is_some() {
+                            "Scan again"
+                        } else {
+                            "Scan files"
+                        },
+                        !busy && storage_available,
+                    ) {
+                        self.begin_cloud_scan(ctx);
+                    }
+                } else if !self.cloud_ui.introduced && compact {
+                    if theme::primary(ui, "Get started", t, !busy) {
+                        self.cloud_ui.introduced = true;
+                    }
+                } else {
+                    theme::muted(ui, "Choose a provider to connect", t);
                 }
-                theme::muted(ui, &format!("{} selected", self.cloud_ui.selected.len()), t);
-            } else if !self.cloud_ui.introduced && compact {
-                if theme::primary(ui, "Get started", t, !busy) {
-                    self.cloud_ui.introduced = true;
-                }
-            } else {
-                theme::muted(ui, "Choose a provider to connect", t);
-            }
-        });
+            },
+        );
     }
     pub(super) fn cloud_dialog(&mut self, ctx: &egui::Context) {
         let t = theme::tokens(self.prefs.dark);

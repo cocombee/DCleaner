@@ -176,7 +176,7 @@ impl App {
                 ui.report = Some(report);
                 ui.cookie_settings.keep_domains = vec!["example.test".into()];
             }
-            "privacy-populated" | "privacy-details" => {
+            "privacy-populated" | "privacy-selected" | "privacy-details" => {
                 let (inventory, report) = privacy::visual_preview_fixture();
                 ui.profiles = inventory.profiles;
                 ui.selected_profiles = ui
@@ -185,6 +185,14 @@ impl App {
                     .map(|profile| profile.id.clone())
                     .collect();
                 ui.report = Some(report);
+                if case == "privacy-selected" {
+                    ui.selected_ids = ui
+                        .report
+                        .iter()
+                        .flat_map(|report| &report.records)
+                        .map(|record| record.id)
+                        .collect();
+                }
                 if case == "privacy-details" {
                     ui.detail_id = ui
                         .report
@@ -268,43 +276,60 @@ impl App {
                     theme::muted(ui, self.progress.clone(), t);
                 }
                 PrivacyOperation::Idle => {
-                    theme::muted(
-                        ui,
-                        format!(
-                            "{} selected · {} profiles",
-                            self.privacy_ui.selected_ids.len(),
-                            self.privacy_ui.selected_profiles.len()
-                        ),
-                        t,
+                    ui.with_layout(
+                        Layout::right_to_left(Align::Center).with_main_wrap(true),
+                        |ui| {
+                            let can_review =
+                                self.privacy_ui.report.as_ref().is_some_and(|report| {
+                                    !report.cancelled
+                                        && !self.privacy_ui.selected_ids.is_empty()
+                                        && self.privacy_ui.selected_ids.iter().all(|id| {
+                                            report.records.iter().any(|record| record.id == *id)
+                                        })
+                                });
+                            let count = self.privacy_ui.selected_ids.len();
+                            let label = if count == 0 {
+                                "Review selected".into()
+                            } else {
+                                format!(
+                                    "Review {}",
+                                    theme::counted_label(count, "record", "records")
+                                )
+                            };
+                            if theme::primary(ui, &label, t, !privacy_busy && can_review) {
+                                self.privacy_ui.cleanup_review = true;
+                            }
+                            theme::muted(
+                                ui,
+                                format!(
+                                    "{} selected · {}",
+                                    self.privacy_ui.selected_ids.len(),
+                                    theme::counted_label(
+                                        self.privacy_ui.selected_profiles.len(),
+                                        "profile",
+                                        "profiles"
+                                    )
+                                ),
+                                t,
+                            );
+                            ui.add_space(10.);
+                            if theme::secondary(
+                                ui,
+                                "Scan browser data",
+                                !privacy_busy
+                                    && self.privacy_ui.loaded
+                                    && !self.privacy_ui.selected_profiles.is_empty()
+                                    && !self.privacy_ui.categories.is_empty()
+                                    && (!self
+                                        .privacy_ui
+                                        .categories
+                                        .contains(&PrivacyCategory::Cookies)
+                                        || self.privacy_ui.cookie_settings_readable),
+                            ) {
+                                self.begin_privacy_scan(ctx);
+                            }
+                        },
                     );
-                    ui.add_space(10.);
-                    if theme::secondary(
-                        ui,
-                        "Scan browser data",
-                        !privacy_busy
-                            && self.privacy_ui.loaded
-                            && !self.privacy_ui.selected_profiles.is_empty()
-                            && !self.privacy_ui.categories.is_empty()
-                            && (!self
-                                .privacy_ui
-                                .categories
-                                .contains(&PrivacyCategory::Cookies)
-                                || self.privacy_ui.cookie_settings_readable),
-                    ) {
-                        self.begin_privacy_scan(ctx);
-                    }
-                    let can_review = self.privacy_ui.report.as_ref().is_some_and(|report| {
-                        !report.cancelled
-                            && !self.privacy_ui.selected_ids.is_empty()
-                            && self
-                                .privacy_ui
-                                .selected_ids
-                                .iter()
-                                .all(|id| report.records.iter().any(|record| record.id == *id))
-                    });
-                    if theme::primary(ui, "Review selected", t, !privacy_busy && can_review) {
-                        self.privacy_ui.cleanup_review = true;
-                    }
                 }
             }
         });
@@ -904,7 +929,7 @@ impl App {
                                         self.privacy_ui.selected_ids.contains(&record.id);
                                     if theme::checkbox_widget(
                                         ui,
-                                        egui::Checkbox::without_text(&mut selected),
+                                        &mut selected,
                                         !busy && !report.cancelled,
                                     )
                                     .changed()
@@ -1208,7 +1233,7 @@ impl App {
                     ui.horizontal(|ui| {
                         if theme::checkbox_widget(
                             ui,
-                            egui::Checkbox::without_text(&mut selected),
+                            &mut selected,
                             !busy,
                         )
                         .changed()

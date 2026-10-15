@@ -1006,7 +1006,7 @@ impl App {
             let previous_y_spacing = ui.spacing().item_spacing.y;
             ui.spacing_mut().item_spacing.y = 0.;
             egui::ScrollArea::vertical().id_salt(("startup-table-body", inventory.section.label()))
-                .max_height(body_height).auto_shrink([false, false]).show_rows(ui, 44., entries.len(), |ui, range| {
+                .max_height(body_height).auto_shrink([false, true]).show_rows(ui, 44., entries.len(), |ui, range| {
                 egui::Grid::new(("startup-inventory-grid", inventory.section.label()))
                 .num_columns(columns)
                 .striped(false)

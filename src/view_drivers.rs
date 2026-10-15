@@ -411,10 +411,12 @@ impl App {
                 "Check detected devices and matching Windows Update offers before deciding whether to update a driver.",
                 &[
                     (
+                        theme::Icon::Driver,
                         "Easy to review",
                         "See the detected device, its current driver details, and any offer Windows actually returns.",
                     ),
                     (
+                        theme::Icon::Settings,
                         "Check the change first",
                         "Review the exact device and signed offer, plus backup and restart requirements, before confirming a supported update.",
                     ),
@@ -1261,7 +1263,7 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt("driver-device-table")
             .max_height(body_height)
-            .auto_shrink([false, false])
+            .auto_shrink([false, true])
             .show_rows(ui, 44., rows.len(), |body, visible_rows| {
                 for index in visible_rows {
                     match &rows[index] {
@@ -1332,6 +1334,8 @@ impl App {
                                                 |cell| {
                                                     cell.set_min_width(name_width);
                                                     cell.set_max_width(name_width);
+                                                    cell.visuals_mut().selection.bg_fill = t.tint;
+                                                    cell.visuals_mut().selection.stroke.color = t.foreground;
                                                     cell.spacing_mut().item_spacing.x = 8.;
                                                     let name = known(&device.friendly_name)
                                                         .unwrap_or("Device name unavailable");
@@ -1426,7 +1430,7 @@ impl App {
                                                     .is_some_and(|(intent, id)| self.driver_offer_selected(intent, id));
                                                 let selection = theme::checkbox_widget(
                                                     actions,
-                                                    egui::Checkbox::new(&mut offer_selected, ""),
+                                                    &mut offer_selected,
                                                     single_intent.is_some() && !self.busy(),
                                                 )
                                                 .on_hover_text(if candidates.len() > 1 {

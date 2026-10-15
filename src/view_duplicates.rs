@@ -108,6 +108,7 @@ impl App {
             "duplicates-intro"
                 | "duplicates-empty"
                 | "duplicates-populated"
+                | "duplicates-selected"
                 | "duplicates-details"
                 | "duplicates-error"
         ) {
@@ -119,7 +120,14 @@ impl App {
             self.error = None;
         } else {
             self.mark_feature_seen("duplicates");
-            let report = duplicate_qa_report(case);
+            let mut report = duplicate_qa_report(if case == "duplicates-selected" {
+                "duplicates-populated"
+            } else {
+                case
+            });
+            if case == "duplicates-selected" {
+                report.select_all();
+            }
             self.duplicate_ui.expand_qa_details = case == "duplicates-details";
             self.duplicate_ui.report = Some(report);
             self.duplicate_ui.cleanup_review = false;
@@ -155,10 +163,12 @@ impl App {
                 "Start a read-only scan of the selected locations. All detected drives are initially selected; review every match before moving files.",
                 &[
                     (
+                        theme::Icon::Duplicate,
                         "Declutter disk space",
                         "Find byte-for-byte matches in the selected locations; the scan does not move files.",
                     ),
                     (
+                        theme::Icon::Brush,
                         "Clean more thoroughly, safely",
                         "Review the matching groups and confirm each proposed move to the Recycle Bin.",
                     ),
@@ -754,7 +764,7 @@ impl App {
                                             ui.horizontal(|ui| {
                                             theme::checkbox_widget(
                                                 ui,
-                                                egui::Checkbox::without_text(&mut file.selected),
+                                                &mut file.selected,
                                                 !busy && !cancelled,
                                             );
                                             ui.vertical(|ui| {
@@ -860,24 +870,35 @@ impl App {
             && report.is_some_and(|report| !report.cancelled)
             && self.history_readable;
         ui.set_min_height(40.);
-        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-            theme::muted(
-                ui,
-                format!("{selected_count} selected · {}", size_text(selected_bytes)),
-                t,
-            );
-            ui.add_space(12.);
-            if theme::secondary(ui, "Scan", !busy) {
-                self.begin_duplicate_scan(ctx);
-            }
-            if theme::primary(ui, "Review files", t, enabled) {
-                self.duplicate_ui.cleanup_review = true;
-                self.duplicate_ui.acknowledge_all_copies = false;
-            }
-            if !self.history_readable {
-                theme::muted(ui, "History unavailable; review is disabled", t);
-            }
-        });
+        ui.with_layout(
+            Layout::right_to_left(Align::Center).with_main_wrap(true),
+            |ui| {
+                let label = if selected_count == 0 {
+                    "Review files".into()
+                } else {
+                    format!(
+                        "Review {}",
+                        theme::counted_label(selected_count, "file", "files")
+                    )
+                };
+                if theme::primary(ui, &label, t, enabled) {
+                    self.duplicate_ui.cleanup_review = true;
+                    self.duplicate_ui.acknowledge_all_copies = false;
+                }
+                theme::muted(
+                    ui,
+                    format!("{selected_count} selected · {}", size_text(selected_bytes)),
+                    t,
+                );
+                ui.add_space(12.);
+                if theme::secondary(ui, "Scan", !busy) {
+                    self.begin_duplicate_scan(ctx);
+                }
+                if !self.history_readable {
+                    theme::muted(ui, "History unavailable; review is disabled", t);
+                }
+            },
+        );
     }
 
     fn begin_duplicate_scan(&mut self, ctx: &egui::Context) {

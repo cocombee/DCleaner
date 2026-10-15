@@ -327,10 +327,10 @@ pub fn run() -> Result<(), String> {
     if !data_directory.is_absolute() {
         return Err("Offscreen QA data directory must be absolute.".into());
     }
-    let dimensions = if std::env::var("DCLEANER_QA_SIZE").as_deref() == Ok("minimum") {
-        [760usize, 600]
-    } else {
-        [1240, 820]
+    let dimensions = match std::env::var("DCLEANER_QA_SIZE").as_deref() {
+        Ok("minimum") => [760usize, 600],
+        Ok("reference") => [920, 612],
+        _ => [1240, 820],
     };
     let fixture_case = std::env::var("DCLEANER_QA_CASE")
         .map_err(|_| "Offscreen QA requires an explicit supported DCLEANER_QA_CASE; host inventories are never loaded.".to_string())?;
@@ -352,12 +352,15 @@ pub fn run() -> Result<(), String> {
                     | "Start now"
                     | "Sort Program"
                     | "Sort Publisher"
+                    | "All statistics"
+                    | "Rescan"
             )
         })
         || (!actions.is_empty()
             && !fixture_case.starts_with("cloud-")
             && !fixture_case.starts_with("disk-")
             && !fixture_case.starts_with("startup-")
+            && !fixture_case.starts_with("health-")
             && !fixture_case.ends_with("-intro"))
     {
         return Err(
@@ -375,6 +378,18 @@ pub fn run() -> Result<(), String> {
     let mut awaiting_action: Option<UiAction> = None;
     let mut action_log = Vec::new();
     let mut copy_request_observed = false;
+    let requested_scroll = std::env::var("DCLEANER_QA_SCROLL")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<u16>()
+                .ok()
+                .filter(|value| *value <= 2000)
+                .ok_or("Fixture scroll must be between 0 and 2000 points.")
+        })
+        .transpose()?
+        .unwrap_or(0);
+    let mut scrolled = requested_scroll == 0;
     loop {
         let mut input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -412,6 +427,24 @@ pub fn run() -> Result<(), String> {
             idle_frames += 1;
         }
         if idle_frames >= 20 {
+            if !scrolled {
+                pending_events.extend([
+                    egui::Event::PointerMoved(egui::pos2(
+                        dimensions[0] as f32 - 80.,
+                        dimensions[1] as f32 * 0.65,
+                    )),
+                    egui::Event::MouseWheel {
+                        phase: egui::TouchPhase::Move,
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: egui::vec2(0., -(requested_scroll as f32)),
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                scrolled = true;
+                idle_frames = 0;
+                textures.finish_frame();
+                continue;
+            }
             if let Some(action) = awaiting_action.take() {
                 let state = app.qa_action_state(&action.label)?;
                 if action.label == "Copy path" && !copy_request_observed {

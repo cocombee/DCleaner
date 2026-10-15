@@ -197,10 +197,12 @@ impl App {
                 "Scan installed packages against the configured WinGet source, then review each exact package before starting an update.",
                 &[
                     (
+                        theme::Icon::Update,
                         "Scan for updates",
                         "Read update offers from the configured WinGet source; other catalogues are not included.",
                     ),
                     (
+                        theme::Icon::Settings,
                         "Keep control of each change",
                         "Review package identity and version first. Some updates use the vendor’s interactive installer or require a restart.",
                     ),
@@ -848,7 +850,7 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt("software-table-body")
             .max_height(body_height)
-            .auto_shrink([false, false])
+            .auto_shrink([false, true])
             .show_rows(ui, 44.0, items.len(), |rows_ui, visible_rows| {
                 for index in visible_rows {
                     let item = &items[index];
@@ -879,6 +881,9 @@ impl App {
                                             cell.spacing_mut().item_spacing.x = 8.;
                                             self.app_icons.show(cell, icon.as_deref(), 22.0);
                                             cell.scope(|cell| {
+                                                cell.visuals_mut().selection.bg_fill = t.tint;
+                                                cell.visuals_mut().selection.stroke.color =
+                                                    t.foreground;
                                                 cell.spacing_mut().button_padding.x = 0.;
                                                 cell.add_sized(
                                                     [

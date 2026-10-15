@@ -110,8 +110,17 @@ impl App {
             "recyclebin-empty" => {
                 ui.inventory = Some(build_recycle_bin_preview_inventory(false, false));
             }
-            "recyclebin-populated" | "recyclebin-details" => {
+            "recyclebin-populated" | "recyclebin-selected" | "recyclebin-details" => {
                 ui.inventory = Some(build_recycle_bin_preview_inventory(false, true));
+                if case == "recyclebin-selected" {
+                    if let Some(item) = ui
+                        .inventory
+                        .as_ref()
+                        .and_then(|inventory| inventory.items.first())
+                    {
+                        ui.selected_ids.insert(item.id());
+                    }
+                }
                 if case == "recyclebin-details" {
                     ui.detail_id = ui
                         .inventory
@@ -229,34 +238,44 @@ impl App {
                     }
                 }
                 RecycleBinOperationState::Idle => {
-                    let selected = self.recycle_bin_ui.selected_ids.len();
-                    let selected_bytes = self.selected_known_bytes();
-                    theme::muted(
-                        ui,
-                        format!(
-                            "{selected} selected · {} known file bytes",
-                            format_bytes(selected_bytes)
-                        ),
-                        t,
+                    ui.with_layout(
+                        Layout::right_to_left(Align::Center).with_main_wrap(true),
+                        |ui| {
+                            let selected = self.recycle_bin_ui.selected_ids.len();
+                            let selected_bytes = self.selected_known_bytes();
+                            let can_review = !busy
+                                && selected > 0
+                                && self.recycle_bin_ui.journal_readable
+                                && self.recycle_bin_ui.inventory.as_ref().is_some_and(
+                                    |inventory| {
+                                        inventory.completion == InventoryCompletion::Complete
+                                            && self.recycle_bin_ui.selected_ids.iter().all(|id| {
+                                                inventory.items.iter().any(|item| item.id() == *id)
+                                            })
+                                    },
+                                );
+                            let label = if selected == 0 {
+                                "Review selected".into()
+                            } else {
+                                format!(
+                                    "Review {}",
+                                    theme::counted_label(selected, "item", "items")
+                                )
+                            };
+                            if theme::primary(ui, &label, t, can_review) {
+                                self.recycle_bin_ui.review_open = true;
+                                self.recycle_bin_ui.acknowledge_purge = false;
+                            }
+                            theme::muted(
+                                ui,
+                                format!(
+                                    "{selected} selected · {} known file bytes",
+                                    format_bytes(selected_bytes)
+                                ),
+                                t,
+                            );
+                        },
                     );
-                    ui.add_space(12.);
-                    let can_review = !busy
-                        && selected > 0
-                        && self.recycle_bin_ui.journal_readable
-                        && self
-                            .recycle_bin_ui
-                            .inventory
-                            .as_ref()
-                            .is_some_and(|inventory| {
-                                inventory.completion == InventoryCompletion::Complete
-                                    && self.recycle_bin_ui.selected_ids.iter().all(|id| {
-                                        inventory.items.iter().any(|item| item.id() == *id)
-                                    })
-                            });
-                    if theme::primary(ui, "Review selected", t, can_review) {
-                        self.recycle_bin_ui.review_open = true;
-                        self.recycle_bin_ui.acknowledge_purge = false;
-                    }
                 }
             }
         });
@@ -413,7 +432,15 @@ impl App {
                     .family(theme::semibold()),
             );
             theme::muted(ui, "items", t);
-            theme::muted(ui, format!("{files} files · {folders} folders"), t);
+            theme::muted(
+                ui,
+                format!(
+                    "{} · {}",
+                    theme::counted_label(files, "file", "files"),
+                    theme::counted_label(folders, "folder", "folders")
+                ),
+                t,
+            );
             theme::muted(
                 ui,
                 format!(
@@ -620,9 +647,15 @@ impl App {
                                 .iter()
                                 .all(|id| self.recycle_bin_ui.selected_ids.contains(id));
                         let mut all_visible_selected = all_visible_selected;
-                        let select_response = theme::checkbox_widget(
+                        let mixed = !all_visible_selected
+                            && visible_ids
+                                .iter()
+                                .any(|id| self.recycle_bin_ui.selected_ids.contains(id));
+                        let select_response = theme::checkbox_mixed(
                             ui,
-                            egui::Checkbox::without_text(&mut all_visible_selected),
+                            &mut all_visible_selected,
+                            mixed,
+                            (),
                             !busy && complete && !visible_ids.is_empty(),
                         );
                         if select_response.changed() {
@@ -646,7 +679,7 @@ impl App {
                     egui::ScrollArea::vertical()
                         .id_salt("recycle-bin-table-rows")
                         .max_height(420.)
-                        .auto_shrink([false, false])
+                        .auto_shrink([false, true])
                         .show(ui, |ui| {
                             for item in &visible {
                                 ui.set_min_width(available);
@@ -656,7 +689,7 @@ impl App {
                                         self.recycle_bin_ui.selected_ids.contains(&item.id());
                                     let response = theme::checkbox_widget(
                                         ui,
-                                        egui::Checkbox::without_text(&mut selected),
+                                        &mut selected,
                                         !busy && actionable,
                                     );
                                     if response.changed() {

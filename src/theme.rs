@@ -2,6 +2,8 @@ use eframe::egui::{self, Color32, FontFamily, FontId, RichText, Stroke, Vec2};
 pub const CONTENT: f32 = 28.;
 pub const LABEL_GAP: f32 = 8.;
 pub const CONTROL_HEIGHT: f32 = 36.;
+pub const CONTROL_PADDING_X: f32 = 16.;
+pub const CHECKBOX_SIZE: f32 = 18.;
 pub const CONTROL_RADIUS: u8 = 18;
 pub const SECTION_RADIUS: u8 = 16;
 pub const FIELD_HEIGHT: f32 = 32.;
@@ -12,6 +14,7 @@ pub const FONT_CAPTION: f32 = 12.;
 pub const FONT_BODY: f32 = 13.;
 pub const FONT_TITLE: f32 = 16.;
 pub const FONT_DISPLAY: f32 = 24.;
+pub const CAPTION_LINE_HEIGHT: f32 = 16.;
 
 #[cfg(test)]
 mod typography_tests {
@@ -317,20 +320,7 @@ pub fn search_width(ui: &egui::Ui, choices: &[&str]) -> f32 {
 }
 
 pub fn field_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
-    let response = ui
-        .scope(|ui| {
-            ui.spacing_mut().button_padding = Vec2::new(12., 4.);
-            ui.add_enabled(
-                enabled,
-                egui::Button::new(label)
-                    .corner_radius(16)
-                    .min_size(Vec2::new(0., FIELD_HEIGHT)),
-            )
-        })
-        .inner;
-    focus_ring(ui, &response, 18);
-    record_control(ui, "field-action", response.rect, 16);
-    response.clicked()
+    action_button(ui, label, enabled, None, FIELD_HEIGHT, 12., "field-action").clicked()
 }
 
 pub fn checkbox<'a>(
@@ -339,31 +329,85 @@ pub fn checkbox<'a>(
     label: impl egui::IntoAtoms<'a>,
     enabled: bool,
 ) -> egui::Response {
-    checkbox_widget(ui, egui::Checkbox::new(checked, label), enabled)
+    checkbox_mixed(ui, checked, false, label, enabled)
 }
-
-pub fn checkbox_widget(
+pub fn checkbox_widget(ui: &mut egui::Ui, checked: &mut bool, enabled: bool) -> egui::Response {
+    checkbox_mixed(ui, checked, false, (), enabled)
+}
+pub fn checkbox_mixed<'a>(
     ui: &mut egui::Ui,
-    checkbox: egui::Checkbox<'_>,
+    checked: &'a mut bool,
+    mixed: bool,
+    label: impl egui::IntoAtoms<'a>,
     enabled: bool,
 ) -> egui::Response {
-    let response = ui
-        .scope(|ui| {
-            let visuals = ui.visuals_mut();
-            for visual in [
-                &mut visuals.widgets.inactive,
-                &mut visuals.widgets.hovered,
-                &mut visuals.widgets.active,
-                &mut visuals.widgets.open,
-                &mut visuals.widgets.noninteractive,
-            ] {
-                visual.corner_radius = 3.into();
-            }
-            ui.add_enabled(enabled, checkbox)
+    let t = tokens(ui.visuals().dark_mode);
+    let selected = *checked || mixed;
+    let atoms = label.into_atoms();
+    let width = atoms
+        .text()
+        .map_or(24., |text| {
+            ui.painter()
+                .layout_no_wrap(
+                    text.to_string(),
+                    FontId::new(FONT_BODY, FontFamily::Proportional),
+                    t.foreground,
+                )
+                .size()
+                .x
+                + CHECKBOX_SIZE
+                + LABEL_GAP
         })
+        .min(ui.max_rect().width())
+        .max(24.);
+    let response = ui
+        .allocate_ui_with_layout(
+            Vec2::new(width, 24.),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().icon_width = CHECKBOX_SIZE;
+                ui.spacing_mut().icon_width_inner = 9.;
+                ui.spacing_mut().interact_size.y = 24.;
+                ui.spacing_mut().icon_spacing = LABEL_GAP;
+                let visuals = ui.visuals_mut();
+                visuals.override_text_color = Some(t.foreground);
+                for visual in [
+                    &mut visuals.widgets.inactive,
+                    &mut visuals.widgets.hovered,
+                    &mut visuals.widgets.active,
+                    &mut visuals.widgets.open,
+                    &mut visuals.widgets.noninteractive,
+                ] {
+                    visual.corner_radius = 4.into();
+                    visual.bg_fill = if selected { t.primary } else { t.canvas };
+                    visual.weak_bg_fill = visual.bg_fill;
+                    visual.bg_stroke = Stroke::new(
+                        1.2,
+                        if selected {
+                            t.primary
+                        } else {
+                            t.muted.gamma_multiply(0.7)
+                        },
+                    );
+                    visual.fg_stroke = Stroke::new(
+                        2.,
+                        if selected {
+                            Color32::WHITE
+                        } else {
+                            t.foreground
+                        },
+                    );
+                }
+                visuals.widgets.hovered.bg_stroke = Stroke::new(1.5, t.primary);
+                ui.add_enabled(
+                    enabled,
+                    egui::Checkbox::new(checked, atoms).indeterminate(mixed),
+                )
+            },
+        )
         .inner;
-    focus_ring(ui, &response, 5);
-    record_control(ui, "checkbox", response.rect, 3);
+    focus_ring(ui, &response, 6);
+    record_control(ui, "checkbox", response.rect, 4);
     response
 }
 
@@ -517,49 +561,112 @@ pub fn dialog_frame(t: Tokens) -> egui::Frame {
         .inner_margin(24.)
 }
 pub fn primary(ui: &mut egui::Ui, label: &str, t: Tokens, enabled: bool) -> bool {
-    let response = ui.add_enabled(
+    action_button(
+        ui,
+        label,
         enabled,
-        egui::Button::new(RichText::new(label).color(t.primary_text))
-            .fill(t.primary)
-            .stroke(Stroke::NONE)
-            .corner_radius(CONTROL_RADIUS)
-            .min_size(Vec2::new(120., CONTROL_HEIGHT)),
-    );
-    focus_ring(ui, &response, CONTROL_RADIUS + 2);
-    record_labeled_control(ui, "primary", response.rect, CONTROL_RADIUS, label, enabled);
-    response.clicked()
+        Some(t),
+        CONTROL_HEIGHT,
+        CONTROL_PADDING_X,
+        "primary",
+    )
+    .clicked()
 }
 pub fn secondary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
-    let font = ui.style().text_styles[&egui::TextStyle::Button].clone();
-    let width = ui
-        .painter()
-        .layout_no_wrap(label.to_owned(), font, ui.visuals().text_color())
-        .size()
-        .x
-        + 32.;
-    ui.allocate_ui_with_layout(
-        Vec2::new(width.max(100.), CONTROL_HEIGHT),
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            let response = ui.add_enabled(
-                enabled,
-                egui::Button::new(label)
-                    .corner_radius(CONTROL_RADIUS)
-                    .min_size(Vec2::new(100., CONTROL_HEIGHT)),
-            );
-            focus_ring(ui, &response, CONTROL_RADIUS + 2);
-            record_labeled_control(
-                ui,
-                "secondary",
-                response.rect,
-                CONTROL_RADIUS,
-                label,
-                enabled,
-            );
-            response.clicked()
-        },
+    action_button(
+        ui,
+        label,
+        enabled,
+        None,
+        CONTROL_HEIGHT,
+        CONTROL_PADDING_X,
+        "secondary",
     )
-    .inner
+    .clicked()
+}
+pub fn header_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
+    action_button(ui, label, enabled, None, 28., 12., "header-action").clicked()
+}
+fn action_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    enabled: bool,
+    primary: Option<Tokens>,
+    height: f32,
+    padding: f32,
+    role: &str,
+) -> egui::Response {
+    let t = tokens(ui.visuals().dark_mode);
+    let colour = primary.map_or(t.foreground, |t| t.primary_text);
+    let icon = match label {
+        "Configure" | "Cookie settings" => Some((Icon::Settings, false)),
+        "Rescan" | "Scan again" => Some((Icon::Refresh, true)),
+        "Refresh"
+        | "Refresh profiles"
+        | "Refresh status"
+        | "Refresh history"
+        | "Refresh available drives" => Some((Icon::Refresh, false)),
+        "Export report" | "Export JSON" | "Save to text file" => Some((Icon::Export, false)),
+        "Choose folder" | "Add folder" | "Open in folder" | "Open file location" => {
+            Some((Icon::Folder, false))
+        }
+        _ => None,
+    };
+    let radius = if height == CONTROL_HEIGHT {
+        CONTROL_RADIUS
+    } else {
+        (height / 2.) as u8
+    };
+    let font = FontId::new(FONT_BODY, semibold());
+    let text_width = ui
+        .painter()
+        .layout_no_wrap(label.into(), font, colour)
+        .size()
+        .x;
+    let width = text_width + 2. * padding + if icon.is_some() { 24. } else { 0. };
+    let icon_id = egui::Id::new("action-button-icon");
+    let text = RichText::new(label)
+        .family(semibold())
+        .size(FONT_BODY)
+        .color(colour);
+    let mut button = match icon {
+        Some((_, true)) => egui::Button::new((text, egui::Atom::custom(icon_id, Vec2::splat(16.)))),
+        Some((_, false)) => {
+            egui::Button::new((egui::Atom::custom(icon_id, Vec2::splat(16.)), text))
+        }
+        None => egui::Button::new(text),
+    }
+    .corner_radius(radius)
+    .min_size(Vec2::new(width, height));
+    if let Some(t) = primary {
+        button = button.fill(t.primary).stroke(Stroke::NONE);
+    }
+    // Allocate the whole control before entering its child UI. A scope starts
+    // at the remaining row width, so a long label can grow beyond a wrapped
+    // footer instead of moving to the next line.
+    let painted = ui
+        .allocate_ui_with_layout(
+            Vec2::new(width, height),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().button_padding = Vec2::new(padding, 4.);
+                ui.spacing_mut().interact_size.y = height;
+                ui.add_enabled_ui(enabled, |ui| button.atom_ui(ui)).inner
+            },
+        )
+        .inner;
+    if let (Some((icon, _)), Some(rect)) = (icon, painted.rect(icon_id)) {
+        paint_icon(
+            ui.painter(),
+            rect,
+            icon,
+            if enabled { colour } else { t.muted },
+        );
+    }
+    let response = painted.response;
+    focus_ring(ui, &response, radius + 2);
+    record_labeled_control(ui, role, response.rect, radius, label, enabled);
+    response
 }
 pub fn row_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> egui::Response {
     compact_action(ui, label, enabled, TABLE_ACTION_HEIGHT)
@@ -570,15 +677,14 @@ pub fn finding_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> egui::Re
 fn compact_action(ui: &mut egui::Ui, label: &str, enabled: bool, height: f32) -> egui::Response {
     let response = ui
         .scope(|ui| {
-            ui.spacing_mut().button_padding = Vec2::new(10., 2.);
+            ui.spacing_mut().button_padding = Vec2::new(12., 2.);
             let font = FontId::new(FONT_CAPTION, semibold());
-            let width = (ui
+            let width = ui
                 .painter()
                 .layout_no_wrap(label.to_owned(), font, ui.visuals().text_color())
                 .size()
                 .x
-                + 20.)
-                .max(72.);
+                + 24.;
             ui.add_enabled(
                 enabled,
                 egui::Button::new(RichText::new(label).family(semibold()).size(FONT_CAPTION))
@@ -810,11 +916,15 @@ pub fn window_chrome(ui: &mut egui::Ui, t: Tokens) {
         }
     }
 }
+pub fn counted_label(count: usize, singular: &str, plural: &str) -> String {
+    format!("{count} {}", if count == 1 { singular } else { plural })
+}
 pub fn muted(ui: &mut egui::Ui, label: impl Into<String>, t: Tokens) {
     ui.label(
         RichText::new(label.into())
             .color(t.muted)
-            .size(FONT_CAPTION),
+            .size(FONT_CAPTION)
+            .line_height(Some(CAPTION_LINE_HEIGHT)),
     );
 }
 fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
@@ -830,6 +940,9 @@ fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
 
 #[derive(Clone, Copy)]
 pub enum Icon {
+    Refresh,
+    Folder,
+    Export,
     Home,
     Brush,
     Disk,
@@ -960,6 +1073,29 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Refresh => {
+            line(&[(16., 7.), (14., 4.), (10., 3.), (6., 4.), (3., 8.)]);
+            line(&[(16., 3.), (16., 7.), (12., 7.)]);
+            line(&[(4., 13.), (6., 16.), (10., 17.), (14., 16.), (17., 12.)]);
+            line(&[(4., 17.), (4., 13.), (8., 13.)]);
+        }
+        Icon::Folder => {
+            line(&[
+                (2., 6.),
+                (2., 16.),
+                (18., 16.),
+                (18., 6.),
+                (10., 6.),
+                (8., 3.),
+                (2., 3.),
+                (2., 6.),
+            ]);
+        }
+        Icon::Export => {
+            line(&[(4., 9.), (4., 17.), (16., 17.), (16., 9.)]);
+            line(&[(10., 12.), (10., 2.)]);
+            line(&[(6., 6.), (10., 2.), (14., 6.)]);
+        }
         Icon::Cloud => {
             line(&[
                 (5., 15.),

@@ -117,7 +117,7 @@ impl App {
                     let table_scroll = egui::ScrollArea::vertical()
                     .id_salt("disk-results-table")
                         .max_height(body_height)
-                    .auto_shrink([false, false])
+                    .auto_shrink([false, true])
                     .show_rows(ui, 44., report.files.len(), |ui, range| {
                         for index in range {
                             let file = &report.files[index];

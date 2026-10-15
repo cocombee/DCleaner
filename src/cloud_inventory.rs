@@ -660,6 +660,35 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    #[cfg(debug_assertions)]
+    pub fn visual_preview_fixture(scope: AccountScope) -> Self {
+        let scan_id = Uuid::from_u128(0x4443_434c_4f55_4400_0000_0000_0000_0003);
+        Self {
+            scan_id,
+            scope,
+            status: SnapshotStatus::Complete,
+            issues: Vec::new(),
+            items: vec![RemoteItem {
+                id: ScanItemId {
+                    scan_id,
+                    item_id: Uuid::from_u128(0x4443_434c_4f55_4400_0000_0000_0000_0004),
+                },
+                provider_item_id: "__inert_visual_fixture_file__".into(),
+                display_name: "Example archive.zip".into(),
+                mime_type: Some("application/zip".into()),
+                kind: RemoteItemKind::File,
+                size: Some(SizeObservation {
+                    bytes: 24 * 1024 * 1024,
+                    accuracy: SizeAccuracy::ProviderReportedExact,
+                }),
+                content_hash: None,
+                provider_revision: Some("synthetic-revision".into()),
+                provider_timestamp: None,
+                trash_status: TrashStatus::NotTrashed,
+                retained_bytes: 512,
+            }],
+        }
+    }
     pub const fn scan_id(&self) -> Uuid {
         self.scan_id
     }

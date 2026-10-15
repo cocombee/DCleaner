@@ -408,6 +408,7 @@ impl App {
         if !matches!(
             case,
             "cloud-intro"
+                | "cloud-selected"
                 | "cloud-providers"
                 | "disk-results"
                 | "disk-partial"
@@ -440,11 +441,13 @@ impl App {
                 | "drivers-intro"
                 | "duplicates-empty"
                 | "duplicates-populated"
+                | "duplicates-selected"
                 | "duplicates-details"
                 | "duplicates-error"
                 | "duplicates-intro"
                 | "clean-empty"
                 | "clean-populated"
+                | "clean-selected"
                 | "clean-details"
                 | "clean-error"
                 | "history-empty"
@@ -459,6 +462,8 @@ impl App {
                 | "clean-settings-rules"
                 | "clean-settings-deletion"
                 | "health-welcome"
+                | "health-activity"
+                | "health-activity-unavailable"
                 | "health-intro"
                 | "health-privacy"
                 | "health-space"
@@ -467,10 +472,12 @@ impl App {
                 | "health-error"
                 | "privacy-empty"
                 | "privacy-populated"
+                | "privacy-selected"
                 | "privacy-details"
                 | "privacy-error"
                 | "recyclebin-empty"
                 | "recyclebin-populated"
+                | "recyclebin-selected"
                 | "recyclebin-details"
                 | "recyclebin-error"
         ) {
@@ -775,14 +782,15 @@ impl App {
         kind: &str,
         title: &str,
         subtitle: &str,
-        bullets: &[(&str, &str)],
+        bullets: &[(theme::Icon, &str, &str)],
     ) -> bool {
         let wide = self.feature_intro_wide(ui.ctx());
-        let art_width = if wide { 330. } else { 230. };
+        let art_width = if wide { 330. } else { 136. };
         let mut start = false;
         if kind == "health" {
             ui.vertical_centered(|ui| {
-                self.illustrations.feature(ui, kind, art_width);
+                self.illustrations
+                    .feature(ui, kind, if wide { art_width } else { 190. });
                 ui.add_space(20.);
                 ui.label(
                     RichText::new(title)
@@ -795,6 +803,7 @@ impl App {
                     egui::Label::new(
                         RichText::new(subtitle)
                             .size(theme::FONT_CAPTION)
+                            .line_height(Some(theme::CAPTION_LINE_HEIGHT))
                             .color(t.muted),
                     )
                     .wrap()
@@ -807,13 +816,8 @@ impl App {
             });
             return start;
         }
-        if !wide {
-            ui.vertical_centered(|ui| self.illustrations.feature(ui, kind, art_width));
-            ui.add_space(16.);
-        }
         ui.horizontal_top(|ui| {
-            let text_width =
-                (ui.available_width() - if wide { art_width + 28. } else { 0. }).max(180.);
+            let text_width = (ui.available_width() - art_width - 28.).max(180.);
             ui.allocate_ui_with_layout(
                 Vec2::new(text_width, 0.),
                 Layout::top_down(Align::Min),
@@ -821,48 +825,15 @@ impl App {
                     ui.label(
                         RichText::new(title)
                             .family(theme::semibold())
-                            .size(theme::FONT_DISPLAY)
+                            .size(theme::FONT_TITLE)
                             .color(t.foreground),
                     );
-                    ui.add_space(10.);
+                    ui.add_space(4.);
                     theme::muted(ui, subtitle, t);
-                    ui.add_space(24.);
-                    for (index, (heading, description)) in bullets.iter().enumerate() {
-                        ui.horizontal_top(|ui| {
-                            let (rect, _) =
-                                ui.allocate_exact_size(Vec2::splat(26.), egui::Sense::hover());
-                            theme::paint_icon(
-                                ui.painter(),
-                                rect,
-                                if index == 0 {
-                                    theme::Icon::Disk
-                                } else {
-                                    theme::Icon::Optimizer
-                                },
-                                t.primary,
-                            );
-                            ui.add_space(8.);
-                            ui.vertical(|ui| {
-                                ui.label(
-                                    RichText::new(*heading)
-                                        .family(theme::semibold())
-                                        .size(theme::FONT_TITLE)
-                                        .color(t.foreground),
-                                );
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(*description)
-                                            .size(theme::FONT_CAPTION)
-                                            .color(t.muted),
-                                    )
-                                    .wrap()
-                                    .halign(Align::Min),
-                                );
-                            });
-                        });
-                        ui.add_space(20.);
-                    }
                     if wide {
+                        ui.add_space(20.);
+                        Self::feature_intro_points(ui, t, bullets);
+                        ui.add_space(8.);
                         start = theme::primary(
                             ui,
                             if kind == "duplicates" {
@@ -876,12 +847,36 @@ impl App {
                     }
                 },
             );
-            if wide {
-                ui.add_space(20.);
-                self.illustrations.feature(ui, kind, art_width);
-            }
+            ui.add_space(20.);
+            self.illustrations.feature(ui, kind, art_width);
         });
+        if !wide {
+            ui.add_space(16.);
+            Self::feature_intro_points(ui, t, bullets);
+        }
         start
+    }
+    fn feature_intro_points(ui: &mut egui::Ui, t: Tokens, bullets: &[(theme::Icon, &str, &str)]) {
+        for (index, (icon, heading, description)) in bullets.iter().enumerate() {
+            if index > 0 {
+                ui.add_space(12.);
+            }
+            ui.horizontal_top(|ui| {
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(26.), egui::Sense::hover());
+                theme::paint_icon(ui.painter(), rect, *icon, t.primary);
+                ui.add_space(8.);
+                ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                    ui.spacing_mut().item_spacing.y = 4.;
+                    ui.label(
+                        RichText::new(*heading)
+                            .family(theme::semibold())
+                            .size(theme::FONT_TITLE)
+                            .color(t.foreground),
+                    );
+                    theme::muted(ui, *description, t);
+                });
+            });
+        }
     }
     fn persist(&mut self) {
         if self.qa_fixture_mode() {
@@ -990,52 +985,14 @@ impl App {
             ui.add_space(6.);
         }
         ui.add_space(24.);
-        ui.label(
-            RichText::new("Here’s what you’ve cleaned so far")
-                .family(theme::semibold())
-                .size(theme::FONT_CAPTION),
-        );
-        ui.add_space(12.);
-        let saved: u64 = self.history.iter().map(|record| record.bytes).sum();
-        let files: usize = self.history.iter().map(|record| record.files).sum();
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.), egui::Sense::hover());
-                    ui.painter().circle_filled(dot.center(), 4., t.attention);
-                    ui.label(
-                        RichText::new(size(saved))
-                            .family(theme::semibold())
-                            .size(theme::FONT_TITLE),
-                    );
-                    theme::muted(ui, "of space", t);
-                });
-                ui.horizontal(|ui| {
-                    let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.), egui::Sense::hover());
-                    ui.painter().circle_filled(dot.center(), 4., t.primary);
-                    ui.label(
-                        RichText::new(files.to_string())
-                            .family(theme::semibold())
-                            .size(theme::FONT_TITLE),
-                    );
-                    theme::muted(ui, "items moved to Trash", t);
-                });
-                ui.add_space(12.);
-                if theme::row_action(ui, "All activity", true).clicked() {
-                    self.page = Page::History;
-                }
-            });
-            ui.add_space(28.);
-            if self.history.is_empty() {
-                theme::muted(ui, "Your cleanup activity will appear here.", t);
-            } else {
-                ui.vertical(|ui| {
-                    for record in self.history.iter().take(3) {
-                        history_row(ui, record, t);
-                    }
-                });
-            }
-        });
+        let today = if self.qa_fixture_mode() {
+            chrono::NaiveDate::from_ymd_opt(2026, 10, 15).expect("valid fixture date")
+        } else {
+            chrono::Local::now().date_naive()
+        };
+        if crate::activity_chart::show(ui, t, &self.history, self.history_readable, today) {
+            self.page = Page::History;
+        }
     }
     fn clean_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         ui.horizontal(|ui| {
@@ -1204,12 +1161,8 @@ impl App {
                             Layout::left_to_right(Align::Center),
                             |ui| {
                                 ui.set_min_height(row_height);
-                                let check = theme::checkbox_widget(
-                                    ui,
-                                    egui::Checkbox::without_text(&mut checked),
-                                    !busy,
-                                )
-                                .on_hover_text(&category.name);
+                                let check = theme::checkbox_widget(ui, &mut checked, !busy)
+                                    .on_hover_text(&category.name);
                                 check.widget_info(|| {
                                     egui::WidgetInfo::selected(
                                         egui::WidgetType::Checkbox,
@@ -1273,19 +1226,19 @@ impl App {
             });
         theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);
             if let Some(analysis)=self.analysis.clone(){
-                ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(theme::FONT_DISPLAY).family(theme::semibold()));theme::muted(ui,format!("{} files · {:.1}s elapsed{}",analysis.count(),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
+                ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(theme::FONT_DISPLAY).family(theme::semibold()));theme::muted(ui,format!("{} · {:.1}s elapsed{}",theme::counted_label(analysis.count(),"file","files"),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
                 let search_width=ui.available_width();
                 theme::input(ui,&mut self.search,search_width,"Search file paths or categories…",true);ui.add_space(10.);
                 let query=self.search.to_lowercase();let busy=self.busy();
                 for category in &analysis.categories{
                     if !query.is_empty()&&!category.name.to_lowercase().contains(&query)&&!category.files.iter().any(|f|f.path.to_string_lossy().to_lowercase().contains(&query)){continue;}
                     let status=if category.truncated{"Partial scan"}else if !category.available{"Not found"}else if category.files.is_empty(){"No eligible files"}else{""};
-                    ui.horizontal(|ui|{let mut all=!category.files.is_empty()&&category.files.iter().all(|f|self.selected.contains(&f.id));if theme::checkbox_widget(ui,egui::Checkbox::without_text(&mut all),!busy&&!analysis.cancelled&&!category.files.is_empty()).changed(){for f in &category.files{if all{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}}
+                    ui.horizontal(|ui|{let mut all=!category.files.is_empty()&&category.files.iter().all(|f|self.selected.contains(&f.id));if theme::checkbox_widget(ui,&mut all,!busy&&!analysis.cancelled&&!category.files.is_empty()).changed(){for f in &category.files{if all{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}}
                         ui.label(&category.name);ui.with_layout(Layout::right_to_left(Align::Center),|ui|{ui.label(size(category.bytes()));theme::muted(ui,format!("{} files   {status}",category.files.len()),t);});});
                     if category.skipped>0{theme::muted(ui,format!("{} inaccessible or linked locations skipped",category.skipped),t);}
                     egui::CollapsingHeader::new(format!("View files — {}",category.name)).id_salt(&category.id).show(ui,|ui|{
                         egui::ScrollArea::vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
-                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,egui::Checkbox::without_text(&mut selected),!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(theme::FONT_CAPTION)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(theme::FONT_CAPTION));});}
+                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,&mut selected,!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(theme::FONT_CAPTION)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(theme::FONT_CAPTION));});}
                             if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
                         });});ui.separator();
                 }
@@ -1293,33 +1246,61 @@ impl App {
         });
     }
     fn clean_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        ui.horizontal_wrapped(|ui| {
-            let busy = self.busy();
-            if theme::secondary(ui, "Export report", !busy && self.analysis.is_some()) {
-                self.export();
-            }
-            if theme::secondary(
-                ui,
-                "Scan now",
-                !busy
-                    && (!self.prefs.selected_categories.is_empty() || self.custom_clean_enabled()),
-            ) {
-                self.begin_scan(ctx);
-            }
-            let enabled = !busy
-                && !self.selected.is_empty()
-                && self.history_readable
-                && !self.custom_selection_blocked()
-                && self.analysis.as_ref().is_some_and(|a| !a.cancelled)
-                && self
-                    .custom_analysis
-                    .as_ref()
-                    .is_none_or(|report| !report.partial() || self.custom_partial_acknowledged);
-            if theme::primary(ui, "Clean selected", t, enabled) {
-                self.confirm = true;
-            }
-            theme::muted(ui, format!("{} files selected", self.selected.len()), t);
-        });
+        ui.with_layout(
+            Layout::right_to_left(Align::Center).with_main_wrap(true),
+            |ui| {
+                let busy = self.busy();
+                let enabled = !busy
+                    && !self.selected.is_empty()
+                    && self.history_readable
+                    && !self.custom_selection_blocked()
+                    && self.analysis.as_ref().is_some_and(|a| !a.cancelled)
+                    && self
+                        .custom_analysis
+                        .as_ref()
+                        .is_none_or(|report| !report.partial() || self.custom_partial_acknowledged);
+                let label = if self.selected.is_empty() {
+                    "Clean selected".into()
+                } else {
+                    format!(
+                        "Clean {}",
+                        theme::counted_label(self.selected.len(), "file", "files")
+                    )
+                };
+                if theme::primary(ui, &label, t, enabled) {
+                    self.confirm = true;
+                }
+                let bytes: u64 = self
+                    .analysis
+                    .iter()
+                    .flat_map(|report| &report.categories)
+                    .flat_map(|category| &category.files)
+                    .filter(|file| self.selected.contains(&file.id))
+                    .map(|file| file.size)
+                    .sum();
+                theme::muted(
+                    ui,
+                    format!(
+                        "{} · {} selected",
+                        theme::counted_label(self.selected.len(), "file", "files"),
+                        size(bytes)
+                    ),
+                    t,
+                );
+                if theme::secondary(
+                    ui,
+                    "Scan now",
+                    !busy
+                        && (!self.prefs.selected_categories.is_empty()
+                            || self.custom_clean_enabled()),
+                ) {
+                    self.begin_scan(ctx);
+                }
+                if theme::secondary(ui, "Export report", !busy && self.analysis.is_some()) {
+                    self.export();
+                }
+            },
+        );
     }
     fn custom_selection_blocked(&self) -> bool {
         let Some(report) = &self.custom_analysis else {
@@ -1388,6 +1369,10 @@ impl App {
             (Page::Startup, "Got it") => self.qa_startup_info_open(),
             (Page::Startup, "Sort Program") => self.qa_startup_sort_state()["descending"] == false,
             (Page::Startup, "Sort Publisher") => true,
+            (Page::Overview, "All statistics") => {
+                self.feature_seen("health") && !self.health_started()
+            }
+            (Page::Overview, "Rescan") => self.feature_seen("health") && !self.health_started(),
             (page, "Scan now" | "Start now") => self
                 .qa_intro_kind(page)
                 .is_some_and(|kind| !self.feature_seen(kind)),
@@ -1406,7 +1391,7 @@ impl App {
         if !self.qa_fixture_mode() {
             return Err("UI action verification requires isolated fixture mode.".into());
         }
-        let state = serde_json::json!({"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_info_open":self.qa_startup_info_open(),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
+        let state = serde_json::json!({"page":self.page.name(),"health_started":self.health_started(),"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_info_open":self.qa_startup_info_open(),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
         let valid = match (self.page, label) {
             (Page::Cloud, "Get started") => state["cloud"]["introduced"] == true,
             (Page::Cloud, "Cleanup history") => state["cloud"]["history"] == true,
@@ -1415,6 +1400,8 @@ impl App {
             (Page::Disk, "Copy path") => self.qa_disk_detail_open(),
             (Page::Startup, "About Startup Manager") => self.qa_startup_info_open(),
             (Page::Startup, "Got it") => !self.qa_startup_info_open(),
+            (Page::History, "All statistics") => true,
+            (Page::Overview, "Rescan") => self.health_started(),
             (Page::Startup, "Sort Program") => {
                 state["startup_sort"]["column"] == "Program"
                     && state["startup_sort"]["descending"] == true
@@ -1464,7 +1451,9 @@ impl App {
         if ctx.input(|i| i.viewport().close_requested()) {
             self.cancel.store(true, Ordering::Relaxed);
         }
-        let narrow = root.available_width() < 1000.;
+        // The supplied desktop reference keeps both navigation columns at
+        // roughly 920 px. Collapse only below that composition's usable width.
+        let narrow = root.available_width() < 900.;
         egui::Panel::left("icon-rail")
             .resizable(false)
             .exact_size(64.)
@@ -1574,41 +1563,50 @@ impl App {
             .frame(egui::Frame::new().fill(t.canvas))
             .show(root, |ui| {
                 theme::canvas_background(ui, self.prefs.dark);
-                egui::Panel::bottom("page-actions")
-                    .resizable(false)
-                    .default_size(74.)
-                    .min_size(74.)
-                    .max_size(200.)
-                    .frame(
-                        egui::Frame::new()
-                            .fill(t.sidebar)
-                            .stroke(egui::Stroke::new(1., t.border))
-                            .inner_margin(egui::Margin::symmetric(28, 18)),
-                    )
-                    .show(ui, |ui| {
-                        ui.spacing_mut().interact_size.y = theme::CONTROL_HEIGHT;
-                        match self.page {
-                            Page::Clean if self.clean_browser => self.privacy_footer(ui, t, &ctx),
-                            Page::Clean if self.clean_bin => self.recycle_bin_footer(ui, t, &ctx),
-                            Page::Clean => self.clean_footer(ui, t, &ctx),
-                            Page::Duplicates => self.duplicates_footer(ui, t, &ctx),
-                            Page::Cloud => self.cloud_footer(ui, t, &ctx),
-                            Page::Programs => self.programs_footer(ui, t, &ctx),
-                            Page::Optimizer => self.optimizer_footer(ui, t, &ctx),
-                            Page::Startup => self.startup_footer(ui, t, &ctx),
-                            Page::Software => self.software_footer(ui, t, &ctx),
-                            Page::Drivers => self.drivers_footer(ui, t, &ctx),
-                            Page::Overview => self.health_footer(ui, t, &ctx),
-                            Page::Disk => {
-                                if theme::primary(ui, "Choose folder", t, !busy) {
-                                    self.begin_disk(&ctx);
+                let status_overview = self.page == Page::Overview
+                    && !self.health_started()
+                    && self.feature_seen("health");
+                if !status_overview {
+                    egui::Panel::bottom("page-actions")
+                        .resizable(false)
+                        .default_size(74.)
+                        .min_size(74.)
+                        .max_size(200.)
+                        .frame(
+                            egui::Frame::new()
+                                .fill(t.sidebar)
+                                .stroke(egui::Stroke::new(1., t.border))
+                                .inner_margin(egui::Margin::symmetric(28, 18)),
+                        )
+                        .show(ui, |ui| {
+                            ui.spacing_mut().interact_size.y = theme::CONTROL_HEIGHT;
+                            match self.page {
+                                Page::Clean if self.clean_browser => {
+                                    self.privacy_footer(ui, t, &ctx)
+                                }
+                                Page::Clean if self.clean_bin => {
+                                    self.recycle_bin_footer(ui, t, &ctx)
+                                }
+                                Page::Clean => self.clean_footer(ui, t, &ctx),
+                                Page::Duplicates => self.duplicates_footer(ui, t, &ctx),
+                                Page::Cloud => self.cloud_footer(ui, t, &ctx),
+                                Page::Programs => self.programs_footer(ui, t, &ctx),
+                                Page::Optimizer => self.optimizer_footer(ui, t, &ctx),
+                                Page::Startup => self.startup_footer(ui, t, &ctx),
+                                Page::Software => self.software_footer(ui, t, &ctx),
+                                Page::Drivers => self.drivers_footer(ui, t, &ctx),
+                                Page::Overview => self.health_footer(ui, t, &ctx),
+                                Page::Disk => {
+                                    if theme::primary(ui, "Choose folder", t, !busy) {
+                                        self.begin_disk(&ctx);
+                                    }
+                                }
+                                _ => {
+                                    theme::muted(ui, "On this device", t);
                                 }
                             }
-                            _ => {
-                                theme::muted(ui, "On this device", t);
-                            }
-                        }
-                    });
+                        });
+                }
                 egui::Frame::new()
                     .inner_margin(egui::Margin {
                         left: 28,
@@ -1630,6 +1628,13 @@ impl App {
                             );
                             if self.page == Page::Startup {
                                 self.startup_info_button(ui);
+                            }
+                            if status_overview {
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if theme::header_action(ui, "Rescan", !busy) {
+                                        self.rescan_health(&ctx);
+                                    }
+                                });
                             }
                         });
                         theme::muted(ui, self.page.description(), t);

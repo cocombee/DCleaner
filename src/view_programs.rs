@@ -152,14 +152,17 @@ impl App {
                 "Review installed desktop apps and use their registered uninstall handoff when you decide to remove one.",
                 &[
                     (
+                        theme::Icon::Disk,
                         "Free up storage",
                         "See installed programs, versions, publishers and estimated sizes before choosing what to remove.",
                     ),
                     (
+                        theme::Icon::History,
                         "Temporary uninstall",
                         "Reversible temporary removal is not available in this version; only the app’s registered uninstaller can be handed off.",
                     ),
                     (
+                        theme::Icon::Programs,
                         "Review security risks",
                         "Confirm the exact program and native uninstall request before handing control to its uninstaller.",
                     ),
@@ -641,7 +644,7 @@ impl App {
             egui::ScrollArea::vertical()
                 .id_salt("installed-programs-table-body")
                 .max_height(body_height)
-                .auto_shrink([false, false])
+                .auto_shrink([false, true])
                 .show_rows(ui, 44.0, visible.len(), |rows_ui, visible_rows| {
             for index in visible_rows {
                 let program = visible[index];
@@ -670,6 +673,8 @@ impl App {
                                         cell.spacing_mut().item_spacing.x = 8.;
                                         self.app_icons.show(cell, icon.as_deref(), 22.0);
                                         cell.scope(|cell| {
+                                            cell.visuals_mut().selection.bg_fill = t.tint;
+                                            cell.visuals_mut().selection.stroke.color = t.foreground;
                                             cell.spacing_mut().button_padding.x = 0.;
                                             cell.add_sized(
                                                 [(name_width - 30.).clamp(60., name_width), 40.],

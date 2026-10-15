@@ -1,0 +1,1330 @@
+{
+  "schema": 1,
+  "date": "2026-10-15",
+  "status": "specific reference corrections verified; full 1:1 acceptance remains open",
+  "authority": [
+    "user-supplied navy screenshots in docs/design/references",
+    "user-supplied CCleaner functional/layout captures",
+    "supplied DC logo and #3999D9",
+    "four font-size limit"
+  ],
+  "video_supporting_guidance": {
+    "url": "https://www.youtube.com/watch?v=GGg61sdEjeI",
+    "title": "This UI/UX Redesign Will Teach You More Than 100 Tutorials Combined",
+    "author": "uxpeak",
+    "audio": {
+      "method": "complete English narration transcribed locally with existing faster-whisper base.en",
+      "duration_seconds": 811.5626875,
+      "segments": 272,
+      "sha256": "1ca2b5b75f63a87f744af8d3de06b8549385dab439458c217b731bb55ac26c69",
+      "transcript_sha256": "902012489de50a1969ae9ec94aa095fb99fce013927e248c606f76ac6d470e2a"
+    },
+    "visuals": {
+      "method": "all 19 public storyboard sheets inspected; 164 sampled frames at 5-second intervals",
+      "continuous_motion_verified": false
+    },
+    "captions": {
+      "attempts": 2,
+      "returned_bytes": 0
+    },
+    "principles": [
+      {
+        "seconds": 214,
+        "topic": "consistent alignment"
+      },
+      {
+        "seconds": 291,
+        "topic": "typography hierarchy"
+      },
+      {
+        "seconds": 379,
+        "topic": "readable supporting text"
+      },
+      {
+        "seconds": 501,
+        "topic": "consistent icon style"
+      },
+      {
+        "seconds": 562,
+        "topic": "related spacing"
+      },
+      {
+        "seconds": 656,
+        "topic": "clear principal action"
+      },
+      {
+        "seconds": 685,
+        "topic": "selection context at action"
+      },
+      {
+        "seconds": 736,
+        "topic": "persistent action area"
+      }
+    ]
+  },
+  "designer_skill_modified": false,
+  "boundaries": {
+    "synthetic_data": true,
+    "actual_egui_meshes": true,
+    "cpu_rasterizer": true,
+    "native_framebuffer": false,
+    "physical_input": false,
+    "host_inventory": false,
+    "native_effects": false,
+    "reinstalled": false,
+    "full_pixel_equality": false,
+    "every_original_action_verified": false
+  },
+  "control_geometry": {
+    "measured_heights": {
+      "primary": [
+        36.0
+      ],
+      "secondary": [
+        36.0
+      ],
+      "field-action": [
+        32.0
+      ],
+      "table-action": [
+        22.0
+      ],
+      "row-more": [
+        22.0
+      ],
+      "header-action": [
+        28.0
+      ],
+      "finding-action": [
+        28.0
+      ]
+    },
+    "regular_action_padding_each_side_px": 16,
+    "header_and_field_action_padding_each_side_px": 12,
+    "compact_action_padding_each_side_px": 12,
+    "checkbox_mark_px": 18,
+    "checkbox_corner_px": 4,
+    "regular_action_horizontal_overflows": [],
+    "bounds_check_scope": "primary, secondary and header action rectangles against window width; intentional scroll clipping is separate"
+  },
+  "verification": {
+    "stills_in_this_matrix": 49,
+    "overview_reviewed": 47,
+    "native_size_reviewed": 4,
+    "action_stories": 8,
+    "tests_passed": 392,
+    "tests_failed": 0,
+    "opt_in_ignored": 7,
+    "formatting": "passed",
+    "release_build": "passed"
+  },
+  "binaries": {
+    "debug_renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+    "release_candidate_sha256": "7fccaad6b72d4ca89a0d52b883d6b1c6c99ac8b41eea57341e5d9cfab91e3709",
+    "installed_sha256_unchanged": "cdbdf0f41a19f0456a06e337616b262b48b2fac9a1f109aae063dd69a1052ca1",
+    "earlier_matrix_renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+    "earlier_matrix_difference": "final source adds the 28 px header action owner and replaces the status Rescan call; status frames and both header stories were recaptured with the final renderer"
+  },
+  "source_sha256": {
+    "src/app.rs": "f23fe2aaf0f3538acfe8db55d6c7b57af8fcebb0451d2cac6565367ad339c380",
+    "src/cloud_inventory.rs": "52f5d6fc3519a37efc26e0f03832a75785abc351f607c22c21addb474a7686f3",
+    "src/cloud_store.rs": "7e4e9662a009a66282bfed7235d8befd3426d96b4516273575eb63367c65700a",
+    "src/main.rs": "a756ec44a4526e87b6a748324c83c30e36fc91556a9e464e941617efdf459ad7",
+    "src/offscreen_qa.rs": "cdc9e152f46dd389fdcc4fd1233f4b165180eed08aac6ea8663b474e78133565",
+    "src/qa_core.rs": "9107437cbc3034b6e8f51b86e66a3ef920a134cafc77361b6962e32dedf86141",
+    "src/theme.rs": "8b0dcc340ae63537844360bc9ddc694e426b3c424889d6e44fb1f13c5f50c988",
+    "src/view_cloud.rs": "0f7baccc15c1cbb73c254a1155ab557a00b9e028ed242f2f087e57a4cea57cb6",
+    "src/view_disk.rs": "2b58d58b9f2e78b35fa06d77dd2fe92d371cd5153814d8576efd56b51610a51f",
+    "src/view_drivers.rs": "6d000baada044b62beccd2963c17272a33fe59f5bd429cc1873b1a36c84ee10a",
+    "src/view_duplicates.rs": "e99d2b7731d735098bb1e9695a9e2c6c127b1cb64120f92736f1c497a5feb881",
+    "src/view_health.rs": "629c3da364b1e046b66376fbf4ebd456406e3ea0b2a24fa997a49eb25609d247",
+    "src/view_optimizer.rs": "a17b61b42b7a57faf834a251cf507ac246d85fd9a0d3f28d48a4c1e4b0fcbd49",
+    "src/view_privacy.rs": "899637b85e1b9eb18f3bd44092ddc0e0b7a9e2aa783c7bb465cc17c9a07f6054",
+    "src/view_programs.rs": "59d57d141fbc88b40a5a34dc7865a1e286b314b4b6aea459ad15e235f574b34a",
+    "src/view_recycle_bin.rs": "e2f7d0432a0b4e0b61e486d7750682a4c82e79bc2a661b282aee1b57ae7af63f",
+    "src/view_software.rs": "3374268f1d7dd704b0b1d5362ad7b600aa29fde82016f16f5751bd85a3c825b6",
+    "src/view_startup.rs": "4b70e0fd4742b46505b84c7eefe436fdd84ce9bc575923f2455be543f35f4d11",
+    "src/activity_chart.rs": "73c820e5cd77f2b57dc41706210d7d06b4fd0e78a57905f1553fed0e43fc8796"
+  },
+  "captures": [
+    {
+      "fixture": "programs-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "a44ea960bfac14f4f31aeedfa4a472395676eba72f1900b32d1f79dafdebbb49",
+      "image": "private-render/video-programs-intro-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "software-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "2c2cf916d24b51f8c3ca2adda09951e5fc63818f81541506a43a35558e0194e2",
+      "image": "private-render/video-software-intro-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "drivers-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "523aeda3242d601d37e8a54ed8cee7581a1c018e7ae8055d69d8862f0da70520",
+      "image": "private-render/video-drivers-intro-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "optimizer-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "184cc2eb67a85ccdc4a73d2f06f689e4951d5550946a27acc682f63e7631c0ac",
+      "image": "screens/video-optimizer-intro-minimum-dark.png",
+      "saved_publicly": true,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "duplicates-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "71ffdeaa43dc8b6192026d6aba171ec7c60a2727a883916f86a6cda203e5a726",
+      "image": "private-render/video-duplicates-intro-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "e8124ea8a7851b9bd5247e655963d748c10d7f1c9d7d4dac0563acdc2f4dd9b0",
+      "image": "private-render/video-health-intro-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "clean-selected",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "a01766814423d7aa06e1368ba199b6f91605c66621fd95ec0ea1965c7fbb7544",
+      "image": "screens/video-clean-selected-minimum-dark.png",
+      "saved_publicly": true,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "privacy-selected",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "e6f050673c716662a45a0085333fc0c03ca4a6d856e422dbd570c478e75e6da0",
+      "image": "private-render/video-privacy-selected-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "recyclebin-selected",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "a08f865cf6615fca50f6a70fe2e8472f1218f62247fa059cf3a3304bd6d1baa2",
+      "image": "private-render/video-recyclebin-selected-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "duplicates-selected",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "a6060a3b5cd01df9ce504bff0231f0ea585bc710e10b7617bcadecf71b436a4c",
+      "image": "private-render/video-duplicates-selected-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "startup-help",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "01688ce46df939885b1bd97fa467356e7870dc270a047ff9f174a1c1d181352a",
+      "image": "private-render/video-startup-help-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "cloud-intro",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "9b4c4a6678cf5dde9b1a2d20dc8d0ee49cb5a6bcf6a4ceb925a5fee23851ec1e",
+      "image": "private-render/video-cloud-intro-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "cloud-selected",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "19706e5b694a1791522abcb34176e3158db0c404bc00caa53eb68ae1a4cfa17a",
+      "image": "private-render/video-cloud-selected-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-activity",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "c46aa14dc1032c49a26349771e28ea79c7af314bacc07709293deb3a38e05b0d",
+      "image": "private-render/video-health-activity-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-activity-unavailable",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "ddb55f1b163e77920401508279ee37ea3ad6eae60c9726944164bea656df9267",
+      "image": "private-render/video-health-activity-unavailable-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "startup-populated",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "6b9adb31c371d9c85171a6cfa22b53f5952bdf81229ec35360af4b651590e0b0",
+      "image": "screens/video-startup-populated-minimum-dark.png",
+      "saved_publicly": true,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "programs-populated",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "47a335bcee77e2365442f519bfdedd4ae1dc70a1db859b8e5840f30e994a2428",
+      "image": "private-render/video-programs-populated-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "software-populated",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "3bc0aa22db11e9e3c4baaaf840d09b83c94fdf39690c2deb3d720b674aeaa847",
+      "image": "screens/video-software-populated-minimum-dark.png",
+      "saved_publicly": true,
+      "review": "native-size image and overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "drivers-populated",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "f353540464206d659b278c393b88addddf41404f6d788a6ba7bb3a9187f56d8b",
+      "image": "private-render/video-drivers-populated-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "optimizer-populated",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "78d58bf4b8ed883388bc32b18b097fe5b5d4133c9be6dec1103731d93615e953",
+      "image": "private-render/video-optimizer-populated-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "clean-settings-cookies",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "91afee4260fce9aca17928a750e125357d5fac6f3a3fe89b66854afa37559d63",
+      "image": "private-render/video-clean-settings-cookies-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "clean-settings-inclusions",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "5fbc395fd2d2b7b7a4f5c65c9eca8053b84c0448d973c3cbcf14b52517343dcd",
+      "image": "private-render/video-clean-settings-inclusions-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "clean-settings-deletion",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "f79d6932c74e8d52bff61025ad72a1db2084e0ce2d50757c8bc23c874cc7eeef",
+      "image": "private-render/video-clean-settings-deletion-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "clean-settings-popular-sites",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "fa0b650cd6c48c31f5a13ad02dfa3a2d759f6158008ad0b294e20995f7e7b1b1",
+      "image": "screens/video-clean-settings-popular-sites-minimum-dark.png",
+      "saved_publicly": true,
+      "review": "native-size image and overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "disk-results",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "8ec28ba5b78e19d0ea2b4a91f7f417a5326ca76d81f08566551a56cf57d9f95d",
+      "image": "private-render/video-disk-results-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "disk-details",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "1fa49fd2699142998325438f197efb92790314c0b1c153cf9c58cf13fcb27e4f",
+      "image": "private-render/video-disk-details-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "help-diagnostics",
+      "size": [
+        760,
+        600
+      ],
+      "theme": "dark",
+      "sha256": "657b8dbe42f5e76b38ccfa4147a4b8586258447a8d5e9b143929857569ff6d42",
+      "image": "private-render/video-help-diagnostics-minimum-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "programs-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "2b35701a12a219d69e119bfeb8e05f46907bff04c57a1d25b295738a20a1ec09",
+      "image": "private-render/video-programs-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "software-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "c1df83176425ecc44d21412fb689d283671b4b9ca6007415219dd91a8574336a",
+      "image": "private-render/video-software-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "drivers-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "f79a71f83737ff5d5cb6224f85cbd8aefc2b568100bf3650921bf0b7de202aab",
+      "image": "private-render/video-drivers-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "optimizer-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "c8687b9c1e27d836f16936f1cdddea4a27f17ed0a9f990dd01f25f2a07f0b4e1",
+      "image": "private-render/video-optimizer-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "duplicates-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "fb2008563bdcd5823eb01f558b3596d0eb7fabe9e4b36c0442a6251aadf22edd",
+      "image": "private-render/video-duplicates-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "b35a57d6e3d10aca5147fb7bb16247e70bd34ecbf35ac959b00379be308b7f50",
+      "image": "private-render/video-health-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "clean-selected",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "2eb217cded7c322e1d21b2879f85b721b7d8c7c9365ed8e9f98834beb6154ce9",
+      "image": "private-render/video-clean-selected-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "privacy-selected",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "a39b594c5d34c9b7ebc90e0f22a36855f355e8713049ed2a8e571e5726281bf8",
+      "image": "private-render/video-privacy-selected-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "recyclebin-selected",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "5cdb7a980f0c39ff4728c7f7ea557969fe5262881651e96e9925c7213b13961e",
+      "image": "private-render/video-recyclebin-selected-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "duplicates-selected",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "097db42216c2c0ac9a2886fade75e5b2478ae019dd625ef63a9ccae66fed009b",
+      "image": "private-render/video-duplicates-selected-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "startup-help",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "fc6dbf92dc6fb50b3021eb97a400fd3c6884ec089c7fecc174646d17926e3c4e",
+      "image": "private-render/video-startup-help-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "cloud-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "46730c054846a4d9dbadab8cb1fa9127f8f5da952646eee16780634c1b27eb53",
+      "image": "private-render/video-cloud-intro-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "cloud-selected",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "d18937bb4ed472fc43896dc187b1de0d789bfacd3164ec78929f92a020ec41e5",
+      "image": "screens/video-cloud-selected-wide-dark.png",
+      "saved_publicly": true,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-activity",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "eeddf59b01a44b891883d26960a78a888c8216f096064dfe42224a7165194872",
+      "image": "screens/video-health-activity-wide-dark.png",
+      "saved_publicly": true,
+      "review": "native-size image and overview",
+      "renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-activity-unavailable",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "b04b20695cd1efa7c057df9efbac4dbec46dc740670a408a48cbd5272d7acd15",
+      "image": "screens/video-health-activity-unavailable-wide-dark.png",
+      "saved_publicly": true,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "startup-populated",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "2c627b92742a17eefd7351d6a9b8f03d6a1399b9b63c928d1322bf93453ca1c5",
+      "image": "private-render/video-startup-populated-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "programs-populated",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "e48b6924dff93430cc7984254fea629b9bc895580ed253f91696d9054af83618",
+      "image": "private-render/video-programs-populated-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "software-populated",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "bcbebb2b26f37d1a55d3cc32c46e06d97c680b797d2229d99c1301251c4ec7d0",
+      "image": "private-render/video-software-populated-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "drivers-populated",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "91a4ba93bd2787a4da9752bc16c81be8b36f48bd62839b84b4c942a939cfe07c",
+      "image": "private-render/video-drivers-populated-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "optimizer-populated",
+      "size": [
+        1240,
+        820
+      ],
+      "theme": "dark",
+      "sha256": "0699bbe1b3a69a96b5589e56e8e85a592dc7516412628b3ba4a798e1191c6029",
+      "image": "private-render/video-optimizer-populated-wide-dark.png",
+      "saved_publicly": false,
+      "review": "contact-sheet overview",
+      "renderer_sha256": "e50d63f7c231da799146be349b77da6d632398e41b9616fbb5767dd4dd836b98",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-activity",
+      "size": [
+        920,
+        612
+      ],
+      "theme": "dark",
+      "sha256": "4ee33186708f7570cec4cdaf2d23fc99aae734ce501f9e0548ca851d0fd88caf",
+      "image": "screens/video-health-activity-reference-dark.png",
+      "saved_publicly": true,
+      "review": "native-size image and overview",
+      "renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    },
+    {
+      "fixture": "health-activity-unavailable",
+      "size": [
+        920,
+        612
+      ],
+      "theme": "dark",
+      "sha256": "1c85538b53b1195869feaf0195f75a29dfdb6323cfd753abfe87e58389e1db66",
+      "image": "private-render/video-health-activity-unavailable-reference-dark.png",
+      "saved_publicly": false,
+      "review": "reference-size composition overview",
+      "renderer_sha256": "b0316b18bdda8707151a0e7a710de8f9e103e1359159045357b00c8441367682",
+      "font_tokens": {
+        "body": 13.0,
+        "caption": 12.0,
+        "display": 24.0,
+        "title": 16.0
+      }
+    }
+  ],
+  "actions": [
+    {
+      "fixture_story": "video-action-programs-intro-minimum-dark",
+      "sha256": "242aaeaa44b949346acf9eb31c48f9e69b384c9136dafd23a444f522d1b268eb",
+      "steps": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": false,
+            "page": "Uninstaller",
+            "seen_features": [
+              "programs"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-action-software-intro-minimum-dark",
+      "sha256": "f6c7042acc22d5028f64fbcadb3647769727d36a5f06f3c87f9857bd1781049e",
+      "steps": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": false,
+            "page": "Software Updater",
+            "seen_features": [
+              "software"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-action-drivers-intro-minimum-dark",
+      "sha256": "90d0de16e6b4e1719dda8e58a1fbad82f46069eaa2d2d140d5d885909575e85c",
+      "steps": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": false,
+            "page": "Driver Updater",
+            "seen_features": [
+              "drivers"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-action-optimizer-intro-minimum-dark",
+      "sha256": "d93580e90e60bd8fa0ba5491790589915accb4315056aab9fa0c49ab3f78b192",
+      "steps": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": false,
+            "page": "Performance Optimizer",
+            "seen_features": [
+              "optimizer"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-action-duplicates-intro-minimum-dark",
+      "sha256": "955f2452cbe00132dca842c1946568fba0457772103527f036a11beb1614a4d8",
+      "steps": [
+        {
+          "label": "Start now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": false,
+            "page": "Duplicate Finder",
+            "seen_features": [
+              "duplicates"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-action-health-intro-minimum-dark",
+      "sha256": "a524d129278c6e420f8c3e17f0d7fb88749fa311e425a45025d5d48fac4b7f11",
+      "steps": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": true,
+            "page": "Health Check",
+            "seen_features": [
+              "health"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-activity-action-wide-dark",
+      "sha256": "10b3ecdd30cad632d35b500e697352efbdc93df025699c6d32d9fa542c6900b3",
+      "steps": [
+        {
+          "label": "All statistics",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": false,
+            "page": "Cleanup History",
+            "seen_features": [
+              "health"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    },
+    {
+      "fixture_story": "video-rescan-action-wide-dark",
+      "sha256": "67ab26b7a9ecc78338359aa407d320caaa5b9bc98270b2c2e9c0ab84600bea5f",
+      "steps": [
+        {
+          "label": "Rescan",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "health_started": true,
+            "page": "Health Check",
+            "seen_features": [
+              "health"
+            ],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "physical_input": false,
+      "native_effects": false
+    }
+  ],
+  "open_acceptance": [
+    "all original conditional dialogs and actions",
+    "remaining visual/layout differences across states and themes",
+    "full functional parity and native effect verification",
+    "installed/GPU and macOS runtime acceptance"
+  ]
+}
