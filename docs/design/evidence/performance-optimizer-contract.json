@@ -2731,5 +2731,117 @@
       "https://www.sqlite.org/pragma.html#pragma_synchronous",
       "https://www.sqlite.org/atomiccommit.html"
     ]
+  },
+  "dcleaner_registry_tx": {
+    "evidence_kind": "Internal native registry transaction fixtures; not production registry or optimizer acceptance",
+    "source": "src/optimizer_registry_tx.rs",
+    "source_sha256_lf": "87c9b17541559ea2e1b7164cd4fe3218980f494bd41e7819b371e9d0f9326840",
+    "scope": "Windows crate-private primitive; no production constructor or caller",
+    "observed_host": {
+      "os_version": "10.0.26200.0",
+      "target": "x86_64-pc-windows-msvc",
+      "rust": "1.98.1"
+    },
+    "algorithm": {
+      "existing_key": "Stage desired values privately in TxR, then compare expected raw type/bytes using an ordinary nontransacted handle to the same local path and explicit view. Mismatch poisons/rolls back; native commit failure is uncertain.",
+      "new_leaf": "Existing one-component parent, native CREATED_NEW disposition, absent expected values. Existing leaves are not adopted.",
+      "unsupported": "No-op/guard-only entries, root/value ownership, shared UseFilter activation policy, key removal, privilege fallback, ordinary-write fallback and production IFEO effects are not implemented."
+    },
+    "bounds": {
+      "relative_components": 2,
+      "component_utf16_units": 255,
+      "keys": 16,
+      "values_per_key": 3,
+      "raw_value_bytes": 65536,
+      "aggregate_input_bytes": 1048576,
+      "transaction_timeout_max_ms": 30000,
+      "hard_syscall_deadline": false
+    },
+    "native_cases": [
+      "committed_batch_preserves_raw_types_bytes_and_unselected_values",
+      "drop_and_unwind_roll_back_staged_values",
+      "mismatch_and_late_native_error_poison_the_entire_batch",
+      "new_leaf_requires_existing_parent_and_never_adopts_existing_key",
+      "invalid_and_over_budget_plans_never_commit_earlier_staging",
+      "cancellation_and_expired_deadline_block_commit_and_roll_back",
+      "native_read_then_foreign_write_cannot_silently_overwrite_foreign_value",
+      "native_write_conflicts_preserve_the_successful_writer_and_unrelated_data",
+      "competing_transactions_cannot_both_stage_conflicting_key_writes",
+      "foreign_write_between_private_staging_and_public_validation_is_preserved",
+      "both_views_preserve_intervening_deletes_creations_and_modify_revert",
+      "later_key_conflicts_roll_back_earlier_staging_and_replaced_keys_are_preserved",
+      "new_leaf_rollback_and_concurrent_creation_never_adopt_foreign_state",
+      "no_op_guards_oversized_native_values_and_aggregate_work_are_rejected"
+    ],
+    "native_cases_passed": 14,
+    "private_fixture_log_sha256": "3e0c5562b39be79065f5825db55e98dac335c4c5da67dc07ccca4289709daaa1",
+    "full_local_suite": {
+      "passed": 247,
+      "failed": 0,
+      "ignored": 7,
+      "suites": 15,
+      "private_log_sha256": "00764c14e2d65eaafac7f3cc768aa96b4861e8d749c16152b7b110a4a3fe1c17",
+      "note": "Full suite preceded a safety-documentation-only comment clarification; all 14 native registry fixtures and release were rerun after that clarification."
+    },
+    "rejected_native_experiments": [
+      {
+        "claim_rejected": "Read-then-compare-then-write inside TxR is not established CAS.",
+        "observation": "A competing ordinary write after comparison succeeded and KTM acknowledged commit despite the stale expectation.",
+        "private_log_sha256": "9ce6aa30dd5d830eb264cc536067f6c32f723e1911305da688b56e9e11d46bba"
+      },
+      {
+        "claim_rejected": "Creating/deleting a fresh child does not protect parent values.",
+        "observation": "An intervening same-target ordinary write succeeded; staging and commit were also acknowledged.",
+        "private_log_sha256": "9ed6bc8435ccc6ba12d2f7492e37d173b554133499c0ea31dfa825cb5fd4fd9f"
+      }
+    ],
+    "native_observations": [
+      "Public reads after private staging see committed pre-state.",
+      "Ordinary same/sibling-value writes after staging returned success on this host; native CommitTransaction subsequently failed with HRESULT -2147018192 (Win32 6800).",
+      "Same-value write before public validation produced Changed; sibling write was caught at commit.",
+      "Pending newly created leaf rejected ordinary concurrent creation with Win32 2; the original transaction could commit.",
+      "Both 32/64 view flags were exercised; shared HKCU keys are not counted as independent stores."
+    ],
+    "local_release": {
+      "uninstalled": true,
+      "sha256": "d99e093f4884d9587a1562512f7645ebfcb740feb39d91c7a2f9b313b10712b0",
+      "rust": "1.98.1",
+      "private_log_sha256": "7dc3dc0826e1968520109bda9dab4339d946f7487ead7b619f5f9a956c11a3ca",
+      "sources_sha256_lf": {
+        "src/optimizer_registry_tx.rs": "87c9b17541559ea2e1b7164cd4fe3218980f494bd41e7819b371e9d0f9326840",
+        "src/lib.rs": "e903a142eecb20556901d12e574103e48e0ada041f4d2b11baaebeed76a64d14",
+        "Cargo.toml": "166d58062a1749b071571e6b31b6720b6005bfc2d322e10cf6d4bfaf8bd443e2",
+        "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+      }
+    },
+    "preceding_source_native_ci": {
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38682022179",
+      "tested_commit": "1001d775c2925c8dedf310103eb4588b42387c8c",
+      "windows_passed": 233,
+      "macos_passed": 204,
+      "note": "Predates this Windows-only transaction adapter."
+    },
+    "acceptance": {
+      "production_scope_factory": false,
+      "durable_intent_integration": false,
+      "lease_authorization": false,
+      "helper_readiness": false,
+      "post_state_receipt_owner": false,
+      "production_registry_changed": false,
+      "installed": false,
+      "gui_launched": false,
+      "visual_verified": false,
+      "sleep_wake_verified": false
+    },
+    "limitations": [
+      "Native experiments support only tested interleavings/hosts, not a documented universal CAS guarantee.",
+      "KTM and the SQLite journal are not enlisted in one atomic transaction.",
+      "Commit acknowledgement is not post-state or power-loss durability proof; failure/ambiguity requires reconciliation without effect retry.",
+      "Fresh helper readiness, shared-filter/ownership policy and durable lease recovery remain required before production interception."
+    ],
+    "references": [
+      "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeytransactedw",
+      "https://learn.microsoft.com/en-us/windows/win32/api/ktmw32/nf-ktmw32-committransaction"
+    ]
   }
 }
