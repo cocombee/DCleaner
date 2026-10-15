@@ -388,7 +388,20 @@
     "ci": {
       "run_url": "https://github.com/cocombee/DCleaner/actions/runs/38705228933",
       "source_commit": "b39c1e8a3bf365ba14d89f6c9bda06675aba502a",
-      "status": "in_progress; no result claimed"
+      "status": "completed",
+      "conclusion": "success",
+      "windows": {
+        "passed": 372,
+        "failed": 0,
+        "ignored": 7,
+        "release": "passed"
+      },
+      "macos": {
+        "passed": 329,
+        "failed": 0,
+        "ignored": 0,
+        "release": "passed"
+      }
     },
     "ui": {
       "navigation": "one Cloud Drive Cleaner section",
@@ -468,7 +481,7 @@
     ]
   },
   "brand_update": {
-    "status": "Source-only logo and palette update; not installed",
+    "status": "Installed and pushed after explicit user confirmation",
     "color": {
       "hex": "#3999D9",
       "rgb": [
@@ -539,10 +552,22 @@
       "opaque_png_rgb": "57,153,217 only",
       "native_app_launch": false,
       "mouse_control": false,
-      "new_installation": false,
+      "new_installation": true,
       "pixel_acceptance": false
     },
     "test_log_sha256": "aa41e9190af3406aae5580cc3d81ee2c47564bed3b7b021ffbf78e04ce9460bb",
-    "compile_log_sha256": "88a0153c832be113744b3a2127b5d0a261c11778d6fe21c38b4750ce59652aff"
+    "compile_log_sha256": "88a0153c832be113744b3a2127b5d0a261c11778d6fe21c38b4750ce59652aff",
+    "source_commit": "9e8e4662cdfc998974fe1307b19769009a528480",
+    "installation": {
+      "sha256": "cdbdf0f41a19f0456a06e337616b262b48b2fac9a1f109aae063dd69a1052ca1",
+      "release_build": "passed",
+      "release_log_sha256": "c876df96a10a47305d514175a60d8a7425c5c4f5327d62f6e8093df5c6e64636",
+      "installed_executables": 1,
+      "start_menu_shortcuts": 1,
+      "app_launched": false,
+      "mouse_control": false,
+      "static_icon_resource_inspected": true,
+      "static_icon_resource_sha256": "501624f0a259c30889b62d29d9860a6cb0e4434f2425c79b31f9e26c699460c0"
+    }
   }
 }
