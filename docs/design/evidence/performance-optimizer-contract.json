@@ -2524,6 +2524,23 @@
     "sources": [
       "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile",
       "https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex"
-    ]
+    ],
+    "local_release": {
+      "tested_source_commit": "ecc15ea224457c975292e45ff928e411eaad41e9",
+      "host": "x86_64-pc-windows-msvc",
+      "rust": "1.98.1",
+      "release_build": "passed",
+      "exe_sha256": "4bdfdd065f0041ee271613f0d29d94012802f3bf459a50b64f5cb9d1ac1e0c12",
+      "private_log_sha256": "425aa6bfbce6fdb29c4c00e2d485c5b664f524febe2226cb681256d4ed820a2f",
+      "installed": false,
+      "launched": false
+    },
+    "pending_native_ci": {
+      "run_id": 38678803290,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38678803290",
+      "tested_commit": "ecc15ea224457c975292e45ff928e411eaad41e9",
+      "last_observed_status": "in_progress",
+      "acceptance": "No successful remote result claimed until completed logs are verified."
+    }
   }
 }
