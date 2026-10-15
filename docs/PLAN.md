@@ -24,6 +24,9 @@ Implemented typography checkpoint: all explicit UI font sizes now reference thes
 
 ## Current implementation work — 16 October 2026
 
+Latest menu amendment: implement the user’s single-sidebar screenshot with the nine feature destinations in source order and Settings at the bottom; remove the separate outer icon rail and bottom Help entry. Keep Help reachable from Settings/About and retain Disk Analyzer/History through Custom Clean’s tools menu. Match home, settings, category and option icon roles, and verify the actual row/menu/tab clicks with isolated renders. This supersedes the old wide two-column shell. The current source contains these corrections; evidence and exact validation are recorded in the existing design report, without another Markdown file.
+
+
 Latest execution direction: Designer leads grouping and reference fidelity; anti-slop audits the implemented result afterward. Keep the accepted navy screenshots, original functional layout evidence, supplied DC geometry, #3999D9 and four font tokens. The no-mouse/no-reinstall restriction remains in force. Audit output and authored screenshots use the existing design evidence JSON/asset directory, without another Markdown report.
 
 This grouping pass has 313 recorded CPU frames, 34 verified interaction stories (89 actions), 22 published authored screenshots, a 444-test full-suite pass and a 62-test final UI follow-up. Minimum/reference/wide layouts and supplementary light states were inspected. Formatting and Windows release compilation pass. Source and evidence are pushed in [6ad3ad2](https://github.com/cocombee/DCleaner/commit/6ad3ad2900e6715bc2a7292d4151f3b7da638cfe); [native CI](https://github.com/cocombee/DCleaner/actions/runs/38791400018) tracks that exact source. No mouse input, foreground activation, native cleanup or reinstall occurred.
@@ -357,3 +360,5 @@ Native visual acceptance and full CCleaner parity remain open in the ledger abov
 
 
 All application UI and core logic are Rust. Analysis tooling is separate and does not ship as a webview/JavaScript app. DCleaner is an independent implementation; CCleaner reference binaries and proprietary source are not included.
+
+Single-sidebar validation: **447 tests passed, 7 opt-in checks excluded**; formatting and Windows release compilation passed. The [design evidence](design/evidence/action-hierarchy.json) records 74 page/state/responsive stills, 22 bounded interaction stories (77 in-memory actions), 32 published authored screenshots and explicit source/executable hashes. The last correction constrains option rows to 224 px and has separate final-source popup captures. This is isolated fixture evidence; complete 1:1 native and macOS acceptance remains open. No mouse/keyboard injection, foreground activation or reinstall occurred.
