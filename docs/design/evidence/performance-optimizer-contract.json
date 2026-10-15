@@ -3076,5 +3076,215 @@
       "Previously decoded caller routes remain separate evidence.",
       "No new helper/serializer body, payload grammar, native effect or state meaning is established."
     ]
+  },
+  "dcleaner_observations": {
+    "evidence_kind": "Source-bound native fixture and journal/API evidence; no deployed optimizer, Sleep/Wake or visual acceptance",
+    "source_sha256_lf": {
+      "src/optimizer_intents.rs": "791f43d67750a28482c87f930911aa90cffc962565e534ee63b2a1c28000cb33",
+      "src/optimizer_registry_tx.rs": "49d3a4670979268b7b49cf84f477ad565a92dc385c856660703f95a46954e332",
+      "src/optimizer_requests.rs": "9c7aad7e295eda83aee4aa957fa4a268a41c8a85c29da25c3fafad2e991ffc89",
+      "src/lib.rs": "37ac09af1f4a09d3e4bcc742fa8cc1b9d670b7aafa73eed18c781bd0a859f76e",
+      "Cargo.toml": "166d58062a1749b071571e6b31b6720b6005bfc2d322e10cf6d4bfaf8bd443e2",
+      "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+    },
+    "journal": {
+      "schema_version": 2,
+      "intent_document_version": 1,
+      "legacy_migration": "Exact schema-1 validation and transactional copy preserving every document, phase, instance and nonce; no replay",
+      "observation": "Canonical bounded raw selected fields, counts, last-write metadata, read status and native commit disposition",
+      "phases": [
+        "Prepared",
+        "CommitStarted",
+        "Uncertain",
+        "Abandoned",
+        "ObservedBefore",
+        "ObservedDesired"
+      ],
+      "unknown_commit": "Always remains Uncertain even when selected fields match",
+      "settled_scope": "Historical agreement of selected fields only; never ownership, causality, lease state or globally atomic/future-stable snapshot",
+      "first_receipt_immutable": true,
+      "restart_reconciliation": "Not implemented; reopening never reconstructs native authority"
+    },
+    "native": {
+      "scope_binding": "CommitAttempt borrows the exact Scope of its consumed transaction; private outcome fields cannot be replaced by safe sibling callers",
+      "readback": "Two bounded read passes with per-key before/after metadata checks; no registry writes",
+      "bounds": {
+        "keys": 16,
+        "selected_values_per_key": 3,
+        "raw_bytes_per_value": 65536,
+        "aggregate_raw_bytes_per_pass": 1048576
+      },
+      "integration_cases_per_view": 18,
+      "registry_view_flags": 2,
+      "view_flags_are_not_independent_registry_stores": true,
+      "case_scope": [
+        "matching existing/new leaf",
+        "mismatched desired/before bytes,path,kind,view",
+        "cancelled pre-commit",
+        "foreign post-commit value",
+        "cancelled/expired/oversized read",
+        "new-leaf foreign child/value",
+        "uncertain commit despite desired state",
+        "missing existing key/parent",
+        "mutation between full read passes"
+      ]
+    },
+    "fixtures": {
+      "optimizer_intents": [
+        "observations_survive_reopen_and_never_reissue_native_authority",
+        "uncertain_partial_and_mixed_observations_do_not_settle",
+        "observation_proofs_bind_nonce_and_cannot_overwrite_any_first_receipt",
+        "invalid_observations_and_failed_sql_commit_preserve_unsettled_row",
+        "exact_v1_migration_preserves_every_phase_document_and_attempt_without_replay",
+        "rejected_legacy_migrations_preserve_database_bytes_and_schema",
+        "exact_native_intent_survives_reopen_without_reissuing_a_ticket_or_replay",
+        "changed_plan_and_foreign_owner_ids_never_replace_original_or_disclose_it",
+        "stale_generation_and_abandonment_cannot_authorize_native_commit",
+        "commit_started_and_uncertain_rows_survive_reopen_without_retry_authority",
+        "statement_and_commit_failures_never_escape_as_prepared_or_commit_permits",
+        "concurrent_exact_preparation_emits_only_one_post_commit_ticket",
+        "unknown_future_corrupt_and_noncanonical_documents_are_preserved",
+        "attached_temp_wal_and_busy_or_readonly_connections_do_not_admit_work",
+        "malformed_and_over_budget_intents_are_rejected_before_persistence",
+        "review_and_capacity_are_bounded_without_pruning_unresolved_intents",
+        "live_column_changes_are_rejected_by_queries_review_and_commit_cas"
+      ],
+      "optimizer_registry_tx": [
+        "committed_batch_preserves_raw_types_bytes_and_unselected_values",
+        "drop_and_unwind_roll_back_staged_values",
+        "mismatch_and_late_native_error_poison_the_entire_batch",
+        "new_leaf_requires_existing_parent_and_never_adopts_existing_key",
+        "invalid_and_over_budget_plans_never_commit_earlier_staging",
+        "cancellation_and_expired_deadline_block_commit_and_roll_back",
+        "native_read_then_foreign_write_cannot_silently_overwrite_foreign_value",
+        "native_write_conflicts_preserve_the_successful_writer_and_unrelated_data",
+        "competing_transactions_cannot_both_stage_conflicting_key_writes",
+        "foreign_write_between_private_staging_and_public_validation_is_preserved",
+        "both_views_preserve_intervening_deletes_creations_and_modify_revert",
+        "later_key_conflicts_roll_back_earlier_staging_and_replaced_keys_are_preserved",
+        "new_leaf_rollback_and_concurrent_creation_never_adopt_foreign_state",
+        "recorded_intent_binds_commit_and_bounded_post_state_without_native_retry",
+        "no_op_guards_oversized_native_values_and_aggregate_work_are_rejected"
+      ],
+      "optimizer_requests": [
+        "lost_queue_hint_survives_reopen_without_readmission_or_automatic_claim",
+        "caller_scope_prevents_state_disclosure_and_conflicting_ids_do_not_requeue",
+        "concurrent_duplicate_admission_yields_exactly_one_new_ticket",
+        "competing_claims_commit_only_one_running_owner",
+        "failed_admission_statement_never_yields_a_ticket_or_partial_row",
+        "claim_and_finish_commit_failures_never_escape_as_durable_success",
+        "recovery_invalidates_old_claims_and_leaves_queued_work_unscheduled",
+        "terminal_receipts_survive_reopen_and_cannot_be_overwritten",
+        "unknown_future_and_corrupt_closed_databases_are_not_replaced",
+        "capacity_preserves_dedupe_and_review_batches_are_bounded",
+        "busy_and_readonly_admission_failures_never_leave_authorized_work"
+      ],
+      "optimizer_protocol": [
+        "fragmented_reads_preserve_frame_boundaries_and_invocation_identity",
+        "truncation_is_distinct_from_clean_disconnect_at_every_boundary",
+        "rejected_headers_do_not_consume_or_allocate_declared_payload",
+        "schema_rejects_unknown_duplicate_and_path_bearing_fields",
+        "nil_identifiers_cannot_be_encoded_or_accepted",
+        "responses_must_match_direction_and_request_correlation",
+        "partial_writes_and_transport_failures_are_not_reported_as_delivery"
+      ],
+      "optimizer_pipe_io": [
+        "fragmented_protocol_roundtrip_and_preconnected_accept",
+        "pending_accept_times_out_and_ends_exchange",
+        "pending_accept_completes_after_client_arrives",
+        "completed_cancel_race_drains_before_buffer_reuse",
+        "immediate_completion_after_cancel_or_deadline_is_not_success",
+        "peer_zero_byte_write_is_not_a_clean_frame_disconnect",
+        "pending_read_cancellation_drains_and_does_not_retry",
+        "deadline_is_shared_across_multiple_reads",
+        "blocked_write_times_out_without_claiming_delivery",
+        "disconnect_is_eof_and_terminal",
+        "precancelled_and_expired_exchanges_do_not_start_connect"
+      ],
+      "optimizer_pipe_security": [
+        "native_principal_is_owned_canonical_and_session_scoped",
+        "exact_descriptor_rejects_extra_generic_null_and_unprotected_permissions",
+        "native_pipe_uses_minimal_client_open_and_rejects_production_owner_spoof",
+        "existing_pipe_name_and_extra_server_instances_are_rejected",
+        "parsed_request_is_bound_to_native_caller_then_thread_reverts",
+        "existing_impersonation_is_preserved_and_never_replaced",
+        "unauthorized_request_never_escapes_and_ends_the_connection",
+        "malformed_frame_never_becomes_an_authenticated_request",
+        "authenticated_wire_ids_and_command_are_bound_to_durable_admission",
+        "production_bind_requires_unimpersonated_system_identity",
+        "connect_cancel_deadline_and_busy_endpoint_are_bounded"
+      ]
+    },
+    "local_tests": {
+      "passed": 265,
+      "failed": 0,
+      "ignored": 7,
+      "suites": 15,
+      "private_log_sha256": "f99f52ab18ba9a198c27b3ed985278e64f5ee195839cb78f98d6973135b9b102",
+      "rust": "1.98.1",
+      "formatting": "passed"
+    },
+    "local_release": {
+      "built": true,
+      "executed": false,
+      "installed": false,
+      "sha256": "1e80fbd945de6e62bbbfe3c08e8869663cf51f5092ec474b52078efca53900ef",
+      "private_log_sha256": "f8ced874d955fe5b49ff65783ce80bab11a994c8d2f2b06921f70b11358d3534"
+    },
+    "prior_native_ci": {
+      "tested_commit": "9e8f2dc0414cb774aaa507f0063c09c7feb2b95c",
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38686355353",
+      "windows_passed": 259,
+      "macos_passed": 215,
+      "current_observation_source_covered": false
+    },
+    "limitations": [
+      "No production protected storage/scope factory or resource/lease owner.",
+      "No actual IFEO value semantics, helper/service readiness, launch fallback or lifecycle acceptance.",
+      "Native calls are synchronous and not hard time bounded; post-state reports are historical selected-field observations.",
+      "Unknown/interrupted commits need future stopped-owner reconciliation; there is no automatic retry or observation overwrite.",
+      "Terminal operation receipts allow another journal operation on the lease ID, but do not release or certify native resource ownership.",
+      "New-leaf desired agreement rejects extra values or children; existing-key reports cover selected values only.",
+      "No GUI, desktop capture, installation, real cleanup, Sleep/Wake or final visual acceptance."
+    ]
+  },
+  "db_persistence_retry": {
+    "evidence_kind": "Two scope-partial static dossiers; guarded indirect targets and payload grammar unresolved",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "private_review_sha256": "221173f6e224fca3ea95f7d7a164a88fec8d2b921f585bd3a6bca55831b7d42e",
+    "admission": "Same admitted target/seed/launcher succeeded outside the outer AppContainer; no REA policy or approval review rejection, no security configuration weakened",
+    "records": [
+      {
+        "private_record_sha256": "0b6574a093bd267fc91df39392bc232d3a3a8e4311d6b5850de0f2444df2d855",
+        "evidence_id": "ev_b647bad461f304ede34a4d0a32afa509f9c31726c86176332fa7f40e802d7cf4"
+      },
+      {
+        "private_record_sha256": "3c3c68218c7cd4f3bf331ec89e009a8b24f9152cafb0b1a9f5712ab9ffa8f8f9",
+        "evidence_id": "ev_912f038e99797fb40e7d3ebd93351c82e33be5f28db9bc1cdb1f8a6018c6fb77"
+      }
+    ],
+    "functions": [
+      {
+        "entry": "0x140867910",
+        "body_bytes": 1,
+        "pcode_instruction_addresses": 21,
+        "guarded_dispatch": "0x1408679c2"
+      },
+      {
+        "entry": "0x140867cc0",
+        "body_bytes": 1,
+        "pcode_instruction_addresses": 16,
+        "guarded_dispatch": "0x140867d43"
+      }
+    ],
+    "limits": [
+      "One-byte procedure-body metadata means neither dossier proves a complete bounded function.",
+      "Concrete guarded-dispatch destinations remain unresolved; cookie-check-looking calls are not serializer evidence.",
+      "Payload grammar, persistence outcome and Sleep/Wake numeric states remain unknown."
+    ],
+    "existing_canonical_coverage_unchanged": true,
+    "target_executed": false,
+    "package_changed": false,
+    "closed_without_snapshot_export": true
   }
 }

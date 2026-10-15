@@ -9,7 +9,8 @@
 #![allow(dead_code)] // Production service/lease owner is not connected yet.
 
 use crate::optimizer_intents::{
-    AttemptReceipt, Change, CommitPermit, KeyChange, KeyKind, Name, RawValue,
+    AttemptReceipt, Change, CommitPermit, Disposition, KeyChange, KeyKind, KeyObservation,
+    KeyState, Name, Observation, ObservedAttempt, RawValue, ReadStatus, SelectedValue,
 };
 use crate::optimizer_registration::RegistryView;
 use std::{
@@ -19,14 +20,17 @@ use std::{
 };
 use windows::{
     Win32::{
-        Foundation::{ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_SUCCESS, HANDLE, WIN32_ERROR},
+        Foundation::{
+            ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_PATH_NOT_FOUND, ERROR_SUCCESS, FILETIME,
+            HANDLE, WIN32_ERROR,
+        },
         Storage::FileSystem::{CommitTransaction, CreateTransaction, RollbackTransaction},
         System::Registry::{
             HKEY, KEY_CREATE_SUB_KEY, KEY_QUERY_VALUE, KEY_SET_VALUE, KEY_WOW64_32KEY,
             KEY_WOW64_64KEY, REG_CREATE_KEY_DISPOSITION, REG_CREATED_NEW_KEY,
             REG_OPTION_NON_VOLATILE, REG_SAM_FLAGS, REG_VALUE_TYPE, RegCloseKey,
             RegCreateKeyTransactedW, RegDeleteValueW, RegOpenKeyExW, RegOpenKeyTransactedW,
-            RegQueryValueExW, RegSetValueExW,
+            RegQueryInfoKeyW, RegQueryValueExW, RegSetValueExW,
         },
     },
     core::PCWSTR,
@@ -100,9 +104,189 @@ impl Name {
 /// reporting a workflow result; this does not assert storage power-loss behavior.
 #[derive(Debug)]
 pub(crate) struct CommitAcknowledged;
-pub(crate) struct CommitAttempt {
-    pub(crate) receipt: AttemptReceipt,
-    pub(crate) outcome: Result<CommitAcknowledged, Failure>,
+pub(crate) struct CommitAttempt<'a> {
+    receipt: AttemptReceipt,
+    outcome: Result<CommitAcknowledged, Failure>,
+    scope: &'a Scope,
+}
+impl CommitAttempt<'_> {
+    /// Two bounded read passes on this exact borrowed scope; no registry writes.
+    /// Agreement is a historical observation, not a lock/atomic snapshot or an
+    /// assurance that external writers cannot change state immediately afterward.
+    pub(crate) fn observe(self, deadline: Instant, cancel: &AtomicBool) -> ObservedAttempt {
+        self.observe_with(deadline, cancel, || {})
+    }
+    fn observe_with(
+        self,
+        deadline: Instant,
+        cancel: &AtomicBool,
+        between_passes: impl FnOnce(),
+    ) -> ObservedAttempt {
+        let disposition = match &self.outcome {
+            Ok(_) => Disposition::Acknowledged,
+            Err(Failure::CommitUncertain(_)) => Disposition::Uncertain,
+            Err(_) => Disposition::NotEntered,
+        };
+        let intent = self.receipt.intent();
+        let (status, keys) = if intent.view() != self.scope.view_id {
+            (ReadStatus::ScopeMismatch, Vec::new())
+        } else {
+            let (status, first) = observe_pass(self.scope, intent.keys(), deadline, cancel);
+            if status != ReadStatus::Complete {
+                (status, first)
+            } else {
+                between_passes();
+                let (status, second) = observe_pass(self.scope, intent.keys(), deadline, cancel);
+                if status != ReadStatus::Complete {
+                    (status, second)
+                } else if first != second {
+                    (ReadStatus::Changed, second)
+                } else {
+                    (ReadStatus::Complete, second)
+                }
+            }
+        };
+        let observation = Observation {
+            view: intent.view(),
+            disposition,
+            status,
+            keys,
+        };
+        // SAFETY: receipt and disposition come from this consumed synchronous
+        // attempt, scope is borrowed from its actual transaction, not a caller
+        // path/handle. Unknown native outcomes remain explicitly uncertain.
+        unsafe { ObservedAttempt::from_native(self.receipt, observation) }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Stamp {
+    last_write: u64,
+    values: u32,
+    subkeys: u32,
+}
+fn stamp(key: &Key) -> Result<Stamp, Failure> {
+    let mut last = FILETIME::default();
+    let mut values = 0;
+    let mut subkeys = 0;
+    // KEY_QUERY_VALUE suffices for metadata counts and last-write time. Direct
+    // LSTATUS is checked; there is no recursive enumeration or remote handle.
+    status(unsafe {
+        RegQueryInfoKeyW(
+            key.0,
+            None,
+            None,
+            None,
+            Some(&mut subkeys),
+            None,
+            None,
+            Some(&mut values),
+            None,
+            None,
+            None,
+            Some(&mut last),
+        )
+    })?;
+    Ok(Stamp {
+        last_write: ((last.dwHighDateTime as u64) << 32) | last.dwLowDateTime as u64,
+        values,
+        subkeys,
+    })
+}
+fn observation_key(scope: &Scope, path: &str) -> Result<Option<Key>, Failure> {
+    let path = wide(path);
+    let mut key = HKEY::default();
+    let code = unsafe {
+        RegOpenKeyExW(
+            scope.key.0,
+            PCWSTR(path.as_ptr()),
+            None,
+            KEY_QUERY_VALUE | scope.view,
+            &mut key,
+        )
+    };
+    if [ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND].contains(&code) {
+        return Ok(None);
+    }
+    status(code)?;
+    Ok(Some(Key(key)))
+}
+fn observe_pass(
+    scope: &Scope,
+    plan: &[KeyChange],
+    deadline: Instant,
+    cancel: &AtomicBool,
+) -> (ReadStatus, Vec<KeyObservation>) {
+    let mut records = Vec::new();
+    let mut bytes = 0;
+    for change in plan {
+        let result = (|| {
+            checkpoint(cancel, deadline)?;
+            let Some(key) = observation_key(scope, &change.path)? else {
+                if change.kind == KeyKind::NewLeaf {
+                    let (parent, _) = change.path.rsplit_once('\\').ok_or(Failure::InvalidPlan)?;
+                    if observation_key(scope, parent)?.is_none() {
+                        return Err(Failure::Changed);
+                    }
+                }
+                checkpoint(cancel, deadline)?;
+                return Ok(KeyState::Missing);
+            };
+            let before = stamp(&key)?;
+            let mut values = Vec::new();
+            for value in &change.values {
+                checkpoint(cancel, deadline)?;
+                let actual = read_value(&key, value.name)?;
+                if let Some(raw) = &actual {
+                    bytes += raw.bytes.len();
+                    if bytes > MAX_STAGED_BYTES {
+                        return Err(Failure::Limited);
+                    }
+                }
+                values.push(SelectedValue {
+                    name: value.name,
+                    value: actual,
+                });
+            }
+            let after = stamp(&key)?;
+            if before != after
+                || after.values < (values.iter().filter(|v| v.value.is_some()).count() as u32)
+            {
+                return Err(Failure::Changed);
+            }
+            checkpoint(cancel, deadline)?;
+            Ok(KeyState::Present {
+                last_write: after.last_write,
+                value_count: after.values,
+                subkey_count: after.subkeys,
+                values,
+            })
+        })();
+        match result {
+            Ok(key) => records.push(KeyObservation {
+                path: change.path.clone(),
+                key,
+            }),
+            Err(error) => {
+                return (
+                    match error {
+                        Failure::Cancelled => ReadStatus::Cancelled,
+                        Failure::Deadline => ReadStatus::Deadline,
+                        Failure::Limited => ReadStatus::Limited,
+                        Failure::Changed => ReadStatus::Changed,
+                        Failure::Native(code) => ReadStatus::NativeFailed { code },
+                        _ => ReadStatus::Changed,
+                    },
+                    records,
+                );
+            }
+        }
+    }
+    match checkpoint(cancel, deadline) {
+        Ok(()) => (ReadStatus::Complete, records),
+        Err(Failure::Cancelled) => (ReadStatus::Cancelled, records),
+        _ => (ReadStatus::Deadline, records),
+    }
 }
 
 pub(crate) struct Transaction<'a> {
@@ -388,7 +572,8 @@ impl<'a> Transaction<'a> {
     /// No production scope factory or caller exists yet.
     /// Under cfg(test), uniquely owned disposable fixture subtrees/images may
     /// model that root/identity; no production IFEO writes are performed.
-    pub(crate) unsafe fn commit_recorded_intent(self, permit: CommitPermit) -> CommitAttempt {
+    pub(crate) unsafe fn commit_recorded_intent(self, permit: CommitPermit) -> CommitAttempt<'a> {
+        let scope = self.scope;
         let matches = permit.matches_plan(self.scope.view_id, &self.staged);
         let receipt = permit.into_attempt();
         let outcome = if matches {
@@ -396,7 +581,11 @@ impl<'a> Transaction<'a> {
         } else {
             Err(Failure::InvalidPlan)
         };
-        CommitAttempt { receipt, outcome }
+        CommitAttempt {
+            receipt,
+            outcome,
+            scope,
+        }
     }
 
     /// Disposable native fixture bypass; absent from production builds.
@@ -1174,14 +1363,17 @@ mod tests {
     }
 
     #[test]
-    fn recorded_intent_must_match_every_staged_field_before_native_commit() {
+    fn recorded_intent_binds_commit_and_bounded_post_state_without_native_retry() {
         use crate::{
             optimizer_identity::{FileIdentity, ImageSnapshot, PeFormat, PeHeader},
             optimizer_intents::{Intent, Journal, Phase, Preparation},
             optimizer_requests::Caller,
         };
-        for case in 0..7 {
-            let fixture = Fixture::new();
+        for (view, case) in [RegistryView::Registry32, RegistryView::Registry64]
+            .into_iter()
+            .flat_map(|view| (0..18).map(move |case| (view, case)))
+        {
+            let fixture = Fixture::in_view(view);
             drop(fixture.create("a.exe"));
             drop(fixture.create("b.exe"));
             if case == 4 {
@@ -1193,20 +1385,20 @@ mod tests {
             let caller = Caller::fixture("S-1-5-21-1-2-3-1001", 1);
             let operation = uuid::Uuid::new_v4();
             let revision = uuid::Uuid::new_v4();
-            let intended_path = if [4, 6].contains(&case) {
+            let intended_path = if [4, 6, 12, 13, 16].contains(&case) {
                 "a.exe\\owned"
             } else {
                 "a.exe"
             };
-            let intended_kind = if [4, 6].contains(&case) {
+            let intended_kind = if [4, 6, 12, 13, 16].contains(&case) {
                 KeyKind::NewLeaf
             } else {
                 KeyKind::Existing
             };
-            let intended_view = if case == 5 {
-                RegistryView::Registry32
-            } else {
-                RegistryView::Registry64
+            let intended_view = match (case, view) {
+                (5, RegistryView::Registry32) => RegistryView::Registry64,
+                (5, RegistryView::Registry64) => RegistryView::Registry32,
+                _ => view,
             };
             let image = ImageSnapshot {
                 requested_path: r"C:\Fixture\a.exe".into(),
@@ -1259,7 +1451,7 @@ mod tests {
                 None,
                 Some(dword(if case == 1 { 2 } else { 1 })),
             )];
-            if case == 6 {
+            if [6, 12, 13, 16].contains(&case) {
                 tx.stage_new_leaf("a.exe", "owned", &changes).unwrap();
             } else {
                 tx.stage_existing(staged_path, &changes).unwrap();
@@ -1281,33 +1473,128 @@ mod tests {
                 journal.query(&caller, operation).unwrap().unwrap().phase,
                 Phase::CommitStarted
             );
-            if case != 6 {
+            if ![6, 12, 13, 16].contains(&case) {
                 assert_eq!(
                     read_value(&fixture.open(staged_path).unwrap(), Name::UseFilter).unwrap(),
                     None
                 );
             }
-            let attempt = unsafe { tx.commit_recorded_intent(permit) };
-            if [0, 6].contains(&case) {
-                attempt.outcome.unwrap();
+            if case == 7 {
+                cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            let mut attempt = unsafe { tx.commit_recorded_intent(permit) };
+            cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+            if [0, 6].contains(&case) || case >= 8 {
+                attempt.outcome.as_ref().unwrap();
                 assert_eq!(
                     read_value(&fixture.open(staged_path).unwrap(), Name::UseFilter).unwrap(),
                     Some(dword(1))
                 );
             } else {
-                assert!(matches!(attempt.outcome, Err(Failure::InvalidPlan)));
+                assert!(matches!(
+                    attempt.outcome,
+                    Err(Failure::InvalidPlan | Failure::Cancelled)
+                ));
                 assert_eq!(
                     read_value(&fixture.open(staged_path).unwrap(), Name::UseFilter).unwrap(),
                     None
                 );
             }
-            // A spent attempt only supports reconciliation. It cannot authorize
-            // another commit or assert a verified lease/receipt in this schema.
-            journal.mark_uncertain(attempt.receipt).unwrap();
+            let read_cancel = AtomicBool::new(case == 9);
+            let read_deadline = if case == 10 {
+                Instant::now() - Duration::from_secs(1)
+            } else {
+                Instant::now() + Duration::from_secs(5)
+            };
+            match case {
+                8 => {
+                    assert_eq!(
+                        write(
+                            &fixture.open(staged_path).unwrap(),
+                            Name::UseFilter,
+                            &dword(7)
+                        ),
+                        ERROR_SUCCESS
+                    );
+                }
+                11 => {
+                    assert_eq!(
+                        write(
+                            &fixture.open(staged_path).unwrap(),
+                            Name::UseFilter,
+                            &raw(REG_BINARY.0, &vec![7; 65537])
+                        ),
+                        ERROR_SUCCESS
+                    );
+                }
+                12 => {
+                    drop(fixture.create("a.exe\\owned\\foreign"));
+                }
+                13 => {
+                    assert_eq!(
+                        write(
+                            &fixture.open(staged_path).unwrap(),
+                            Name::Debugger,
+                            &dword(7)
+                        ),
+                        ERROR_SUCCESS
+                    );
+                }
+                // Inject only a fixture outcome. Production outcome fields are
+                // private; safe callers cannot turn uncertainty into success.
+                14 => {
+                    attempt.outcome = Err(Failure::CommitUncertain(6800));
+                }
+                15 | 16 => {
+                    let target = wide("a.exe");
+                    status(unsafe {
+                        RegDeleteTreeW(fixture.scope().key.0, PCWSTR(target.as_ptr()))
+                    })
+                    .unwrap();
+                }
+                _ => (),
+            }
+            let proof = if case == 17 {
+                attempt.observe_with(read_deadline, &read_cancel, || {
+                    assert_eq!(
+                        write(
+                            &fixture.open(staged_path).unwrap(),
+                            Name::UseFilter,
+                            &dword(9)
+                        ),
+                        ERROR_SUCCESS
+                    );
+                })
+            } else {
+                attempt.observe(read_deadline, &read_cancel)
+            };
+            let expected = match case {
+                0 | 6 => Phase::ObservedDesired,
+                1 | 3 | 7 => Phase::ObservedBefore,
+                _ => Phase::Uncertain,
+            };
             assert_eq!(
-                journal.query(&caller, operation).unwrap().unwrap().phase,
-                Phase::Uncertain
+                journal.record_observation(proof).unwrap(),
+                expected,
+                "case {case}"
             );
+            drop(journal);
+            let journal = Journal::open(rusqlite::Connection::open(&db).unwrap()).unwrap();
+            let row = journal.query(&caller, operation).unwrap().unwrap();
+            let observation = row.observation.unwrap();
+            let expected_status = match case {
+                5 => ReadStatus::ScopeMismatch,
+                9 => ReadStatus::Cancelled,
+                10 => ReadStatus::Deadline,
+                11 => ReadStatus::Limited,
+                16 | 17 => ReadStatus::Changed,
+                _ => ReadStatus::Complete,
+            };
+            assert_eq!(observation.status, expected_status, "case {case}");
+            if case == 14 {
+                assert_eq!(observation.disposition, Disposition::Uncertain);
+            }
+            assert_eq!(row.phase, expected, "case {case}");
         }
     }
 

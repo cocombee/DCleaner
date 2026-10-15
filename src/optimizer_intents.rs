@@ -14,11 +14,11 @@ use std::time::Duration;
 use uuid::Uuid;
 
 const APP_ID: i64 = 0x4443_5249;
-const VERSION: i64 = 1;
+const VERSION: i64 = 2;
 const MAX_JSON: usize = 4 * 1024 * 1024;
 const MAX_DB: i64 = 64 * 1024 * 1024;
 const MAX_RECORDS: i64 = 512;
-const TABLE: &str = r#"CREATE TABLE intents (
+const LEGACY_TABLE: &str = r#"CREATE TABLE intents (
  account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
  session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
  operation BLOB NOT NULL CHECK(length(operation)=16 AND operation!=zeroblob(16)),
@@ -30,6 +30,22 @@ const TABLE: &str = r#"CREATE TABLE intents (
  nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
  CHECK((phase IN(0,3) AND instance IS NULL AND nonce IS NULL) OR
        (phase IN(1,2) AND instance IS NOT NULL AND nonce IS NOT NULL)),
+ PRIMARY KEY(account,session,operation)
+) STRICT, WITHOUT ROWID"#;
+const TABLE: &str = r#"CREATE TABLE intents (
+ account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
+ session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
+ operation BLOB NOT NULL CHECK(length(operation)=16 AND operation!=zeroblob(16)),
+ lease BLOB NOT NULL CHECK(length(lease)=16 AND lease!=zeroblob(16)),
+ revision BLOB NOT NULL CHECK(length(revision)=16 AND revision!=zeroblob(16)),
+ document TEXT NOT NULL CHECK(length(CAST(document AS BLOB)) BETWEEN 1 AND 4194304),
+ phase INTEGER NOT NULL CHECK(phase BETWEEN 0 AND 5),
+ instance BLOB CHECK(instance IS NULL OR (length(instance)=16 AND instance!=zeroblob(16))),
+ nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
+ observation TEXT CHECK(observation IS NULL OR length(CAST(observation AS BLOB)) BETWEEN 1 AND 5242880),
+ CHECK((phase IN(0,3) AND instance IS NULL AND nonce IS NULL) OR
+       (phase IN(1,2,4,5) AND instance IS NOT NULL AND nonce IS NOT NULL)),
+ CHECK((phase IN(0,1,3) AND observation IS NULL) OR phase=2 OR (phase IN(4,5) AND observation IS NOT NULL)),
  PRIMARY KEY(account,session,operation)
 ) STRICT, WITHOUT ROWID"#;
 const INDEX: &str = "CREATE UNIQUE INDEX active_lease ON intents(lease) WHERE phase IN(0,1,2)";
@@ -86,6 +102,12 @@ pub(crate) struct Intent {
     keys: Vec<KeyChange>,
 }
 impl Intent {
+    pub(crate) fn view(&self) -> RegistryView {
+        self.view
+    }
+    pub(crate) fn keys(&self) -> &[KeyChange] {
+        &self.keys
+    }
     pub(crate) fn from_owner(
         caller: &Caller,
         operation: Uuid,
@@ -250,6 +272,8 @@ pub(crate) enum Phase {
     CommitStarted,
     Uncertain,
     Abandoned,
+    ObservedBefore,
+    ObservedDesired,
 }
 impl Phase {
     fn parse(n: i64) -> Result<Self, Error> {
@@ -258,6 +282,8 @@ impl Phase {
             1 => Ok(Self::CommitStarted),
             2 => Ok(Self::Uncertain),
             3 => Ok(Self::Abandoned),
+            4 => Ok(Self::ObservedBefore),
+            5 => Ok(Self::ObservedDesired),
             _ => Err(Error::Corrupt),
         }
     }
@@ -266,6 +292,7 @@ impl Phase {
 pub(crate) struct Record {
     pub(crate) intent: Intent,
     pub(crate) phase: Phase,
+    pub(crate) observation: Option<Observation>,
 }
 pub(crate) struct ReviewCursor {
     account: String,
@@ -317,6 +344,168 @@ pub(crate) struct AttemptReceipt {
     instance: Uuid,
     nonce: Uuid,
 }
+impl AttemptReceipt {
+    pub(crate) fn intent(&self) -> &Intent {
+        &self.intent
+    }
+}
+
+/// Historical bounded observations, not ownership, effect attribution or a
+/// globally atomic registry snapshot. Unknown commit outcomes cannot settle.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Disposition {
+    Acknowledged,
+    NotEntered,
+    Uncertain,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "state", deny_unknown_fields)]
+pub(crate) enum ReadStatus {
+    Complete,
+    Changed,
+    Cancelled,
+    Deadline,
+    Limited,
+    ScopeMismatch,
+    NativeFailed { code: u32 },
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SelectedValue {
+    pub(crate) name: Name,
+    pub(crate) value: Option<RawValue>,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "state", deny_unknown_fields)]
+pub(crate) enum KeyState {
+    Missing,
+    Present {
+        last_write: u64,
+        value_count: u32,
+        subkey_count: u32,
+        values: Vec<SelectedValue>,
+    },
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct KeyObservation {
+    pub(crate) path: String,
+    pub(crate) key: KeyState,
+}
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Observation {
+    pub(crate) view: RegistryView,
+    pub(crate) disposition: Disposition,
+    pub(crate) status: ReadStatus,
+    pub(crate) keys: Vec<KeyObservation>,
+}
+impl Observation {
+    fn phase(&self, intent: &Intent) -> Result<Phase, Error> {
+        if self.view != intent.view
+            || self.keys.len() > intent.keys.len()
+            || (self.status == ReadStatus::Complete && self.keys.len() != intent.keys.len())
+        {
+            return Err(Error::Corrupt);
+        }
+        if matches!(self.status, ReadStatus::NativeFailed { code: 0 }) {
+            return Err(Error::Corrupt);
+        }
+        let mut before = true;
+        let mut after = true;
+        let mut bytes = 0;
+        for (observed, plan) in self.keys.iter().zip(&intent.keys) {
+            if observed.path != plan.path {
+                return Err(Error::Corrupt);
+            }
+            match &observed.key {
+                KeyState::Missing => {
+                    before &= plan.kind == KeyKind::NewLeaf;
+                    after = false;
+                }
+                KeyState::Present {
+                    value_count,
+                    subkey_count,
+                    values,
+                    ..
+                } => {
+                    if values.len() != plan.values.len()
+                        || *value_count
+                            < (values.iter().filter(|v| v.value.is_some()).count() as u32)
+                    {
+                        return Err(Error::Corrupt);
+                    }
+                    before &= plan.kind == KeyKind::Existing;
+                    for (actual, want) in values.iter().zip(&plan.values) {
+                        if actual.name != want.name {
+                            return Err(Error::Corrupt);
+                        }
+                        if let Some(raw) = &actual.value {
+                            bytes += raw.bytes.len();
+                            if raw.bytes.len() > 65536 || bytes > 1048576 {
+                                return Err(Error::Corrupt);
+                            }
+                        }
+                        before &= actual.value == want.expected;
+                        after &= actual.value == want.desired;
+                    }
+                    if plan.kind == KeyKind::NewLeaf {
+                        after &= *subkey_count == 0
+                            && *value_count
+                                == plan.values.iter().filter(|v| v.desired.is_some()).count()
+                                    as u32;
+                    }
+                }
+            }
+        }
+        Ok(
+            if self.status != ReadStatus::Complete || self.disposition == Disposition::Uncertain {
+                Phase::Uncertain
+            } else if before {
+                Phase::ObservedBefore
+            } else if after {
+                Phase::ObservedDesired
+            } else {
+                Phase::Uncertain
+            },
+        )
+    }
+    fn encode(&self, intent: &Intent) -> Result<String, Error> {
+        self.phase(intent)?;
+        let json = serde_json::to_string(self).map_err(|_| Error::Corrupt)?;
+        if json.len() > 5 * 1024 * 1024 {
+            return Err(Error::Corrupt);
+        }
+        Ok(json)
+    }
+    fn decode(json: &str, intent: &Intent) -> Result<Self, Error> {
+        if json.len() > 5 * 1024 * 1024 {
+            return Err(Error::Corrupt);
+        }
+        let value: Self = serde_json::from_str(json).map_err(|_| Error::Corrupt)?;
+        if value.encode(intent)? != json {
+            return Err(Error::Corrupt);
+        }
+        Ok(value)
+    }
+}
+/// Opaque, non-deserializable native proof input. A JSON report is not one.
+pub(crate) struct ObservedAttempt {
+    receipt: AttemptReceipt,
+    observation: Observation,
+}
+impl ObservedAttempt {
+    /// # Safety
+    /// The native adapter must bind this report to the same scope/attempt and
+    /// derive disposition from its synchronous native result, not user input.
+    pub(crate) unsafe fn from_native(receipt: AttemptReceipt, observation: Observation) -> Self {
+        Self {
+            receipt,
+            observation,
+        }
+    }
+}
 
 pub(crate) struct Journal {
     connection: Connection,
@@ -346,10 +535,10 @@ impl Journal {
         if file.is_empty() || attached != 0 || temporary != 0 {
             return Err(Error::UnsupportedDatabase);
         }
-        let fresh = header(&connection)?;
+        let layout = header(&connection)?;
         integrity(&connection)?;
-        if !fresh {
-            validate_rows(&connection)?;
+        if layout != Layout::Fresh {
+            validate_rows(&connection, layout)?;
         }
         let mode: String = connection.query_row("PRAGMA journal_mode", [], |r| r.get(0))?;
         if !mode.eq_ignore_ascii_case("delete") {
@@ -370,15 +559,26 @@ impl Journal {
             return Err(Error::UnsupportedDurability);
         }
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        if header(&tx)? {
+        let layout = header(&tx)?;
+        if layout == Layout::Fresh {
             tx.execute_batch(TABLE)?;
             tx.execute_batch(INDEX)?;
             tx.pragma_update(None, "application_id", APP_ID)?;
             tx.pragma_update(None, "user_version", VERSION)?;
+        } else if layout == Layout::Legacy {
+            // A single transactional migration; no row is recovered or replayed.
+            validate_rows(&tx, layout)?;
+            tx.execute_batch("DROP INDEX active_lease;ALTER TABLE intents RENAME TO intents_v1;")?;
+            tx.execute_batch(TABLE)?;
+            tx.execute_batch("INSERT INTO intents(account,session,operation,lease,revision,document,phase,instance,nonce)
+                SELECT account,session,operation,lease,revision,document,phase,instance,nonce FROM intents_v1;
+                DROP TABLE intents_v1;")?;
+            tx.execute_batch(INDEX)?;
+            tx.pragma_update(None, "user_version", VERSION)?;
         }
-        schema(&tx)?;
+        schema(&tx, Layout::Current)?;
         integrity(&tx)?;
-        validate_rows(&tx)?;
+        validate_rows(&tx, Layout::Current)?;
         tx.commit()?;
         Ok(Self { connection })
     }
@@ -505,6 +705,29 @@ impl Journal {
         tx.commit()?;
         Ok(())
     }
+    /// Persists a historical native observation only after the exact phase,
+    /// operation, owner, generation and attempt nonce match. Uncertain commit
+    /// outcomes and incomplete/changed reads cannot become settled observations.
+    pub(crate) fn record_observation(&mut self, proof: ObservedAttempt) -> Result<Phase, Error> {
+        let i = &proof.receipt.intent;
+        let phase = proof.observation.phase(i)?;
+        let json = proof.observation.encode(i)?;
+        let code = match phase {
+            Phase::ObservedBefore => 4,
+            Phase::ObservedDesired => 5,
+            _ => 2,
+        };
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let count=tx.execute("UPDATE intents SET phase=?1,observation=?2 WHERE account=?3 AND session=?4 AND operation=?5 AND lease=?6 AND revision=?7 AND document=?8 AND instance=?9 AND nonce=?10 AND phase IN(1,2) AND observation IS NULL",
+            params![code,json,i.account,i.session,i.operation.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),proof.receipt.document,proof.receipt.instance.as_bytes().as_slice(),proof.receipt.nonce.as_bytes().as_slice()])?;
+        if count != 1 {
+            return Err(Error::Stale);
+        }
+        tx.commit()?;
+        Ok(phase)
+    }
     /// Explicit review only. No recovery, permit creation, state transition or
     /// native retry occurs on reopen or listing. Includes uncertain operations.
     pub(crate) fn review_after(
@@ -537,7 +760,7 @@ impl Journal {
         if limit == 0 || limit > 64 {
             return Err(Error::InvalidIntent);
         }
-        let mut statement=self.connection.prepare("SELECT account,session,operation,lease,revision,document,phase FROM intents WHERE phase!=3 AND (?1 OR (account,session,operation)>(?2,?3,?4)) AND (?6 OR (account=?7 AND session=?8)) ORDER BY account,session,operation LIMIT ?5")?;
+        let mut statement=self.connection.prepare("SELECT account,session,operation,lease,revision,document,phase,observation FROM intents WHERE phase IN(0,1,2) AND (?1 OR (account,session,operation)>(?2,?3,?4)) AND (?6 OR (account=?7 AND session=?8)) ORDER BY account,session,operation LIMIT ?5")?;
         let nil = Uuid::nil();
         let rows = statement.query_map(
             params![
@@ -586,14 +809,23 @@ fn lookup(
 ) -> Result<Option<Record>, Error> {
     let row: Option<StoredRow> = c
         .query_row(
-            "SELECT account,session,operation,lease,revision,document,phase FROM intents WHERE account=?1 AND session=?2 AND operation=?3",
+            "SELECT account,session,operation,lease,revision,document,phase,observation FROM intents WHERE account=?1 AND session=?2 AND operation=?3",
             params![account, session, operation.as_bytes().as_slice()],
             stored_row,
         )
         .optional()?;
     row.map(decode_row).transpose()
 }
-type StoredRow = (String, u32, Vec<u8>, Vec<u8>, Vec<u8>, String, i64);
+type StoredRow = (
+    String,
+    u32,
+    Vec<u8>,
+    Vec<u8>,
+    Vec<u8>,
+    String,
+    i64,
+    Option<String>,
+);
 fn stored_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRow> {
     Ok((
         r.get(0)?,
@@ -603,10 +835,11 @@ fn stored_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRow> {
         r.get(4)?,
         r.get(5)?,
         r.get(6)?,
+        r.get(7)?,
     ))
 }
 fn decode_row(row: StoredRow) -> Result<Record, Error> {
-    let (account, session, operation, lease, revision, document, phase) = row;
+    let (account, session, operation, lease, revision, document, phase, observation) = row;
     let intent = Intent::decode(&document)?;
     if account != intent.account
         || session != intent.session
@@ -616,12 +849,31 @@ fn decode_row(row: StoredRow) -> Result<Record, Error> {
     {
         return Err(Error::Corrupt);
     }
+    let phase = Phase::parse(phase)?;
+    let observation = observation
+        .as_deref()
+        .map(|json| Observation::decode(json, &intent))
+        .transpose()?;
+    match &observation {
+        Some(value) if value.phase(&intent)? != phase => return Err(Error::Corrupt),
+        None if matches!(phase, Phase::ObservedBefore | Phase::ObservedDesired) => {
+            return Err(Error::Corrupt);
+        }
+        _ => (),
+    }
     Ok(Record {
         intent,
-        phase: Phase::parse(phase)?,
+        phase,
+        observation,
     })
 }
-fn header(c: &Connection) -> Result<bool, Error> {
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Layout {
+    Fresh,
+    Legacy,
+    Current,
+}
+fn header(c: &Connection) -> Result<Layout, Error> {
     let app: i64 = c.pragma_query_value(None, "application_id", |r| r.get(0))?;
     let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
     let count: i64 = c.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get(0))?;
@@ -631,17 +883,30 @@ fn header(c: &Connection) -> Result<bool, Error> {
         return Err(Error::Corrupt);
     }
     if app == 0 && version == 0 && count == 0 {
-        return Ok(true);
+        return Ok(Layout::Fresh);
     }
-    if app != APP_ID || version != VERSION || count != 2 {
+    if app != APP_ID || ![1, VERSION].contains(&version) || count != 2 {
         return Err(Error::UnsupportedDatabase);
     }
-    schema(c)?;
-    Ok(false)
+    let layout = if version == 1 {
+        Layout::Legacy
+    } else {
+        Layout::Current
+    };
+    schema(c, layout)?;
+    Ok(layout)
 }
-fn schema(c: &Connection) -> Result<(), Error> {
+fn schema(c: &Connection, layout: Layout) -> Result<(), Error> {
     for (kind, name, want) in [
-        ("table", "intents", TABLE),
+        (
+            "table",
+            "intents",
+            if layout == Layout::Legacy {
+                LEGACY_TABLE
+            } else {
+                TABLE
+            },
+        ),
         ("index", "active_lease", INDEX),
     ] {
         let sql: Option<String> = c
@@ -665,13 +930,16 @@ fn integrity(c: &Connection) -> Result<(), Error> {
         Ok(())
     }
 }
-fn validate_rows(c: &Connection) -> Result<(), Error> {
+fn validate_rows(c: &Connection, layout: Layout) -> Result<(), Error> {
     let count: i64 = c.query_row("SELECT count(*) FROM intents", [], |r| r.get(0))?;
     if count > MAX_RECORDS {
         return Err(Error::Corrupt);
     }
-    let mut statement =
-        c.prepare("SELECT account,session,operation,lease,revision,document,phase FROM intents")?;
+    let mut statement = c.prepare(if layout == Layout::Legacy {
+        "SELECT account,session,operation,lease,revision,document,phase,NULL FROM intents"
+    } else {
+        "SELECT account,session,operation,lease,revision,document,phase,observation FROM intents"
+    })?;
     let mut rows = statement.query([])?;
     while let Some(row) = rows.next()? {
         decode_row(stored_row(row)?)?;
@@ -767,6 +1035,329 @@ mod tests {
     }
     fn phase(j: &Journal, i: &Intent) -> Phase {
         j.query(&owner(), i.operation).unwrap().unwrap().phase
+    }
+
+    // Synthetic reports exercise persistence/classification, never native proof.
+    fn report(i: &Intent, desired: bool) -> Observation {
+        Observation {
+            view: i.view,
+            disposition: Disposition::Acknowledged,
+            status: ReadStatus::Complete,
+            keys: i
+                .keys
+                .iter()
+                .map(|k| KeyObservation {
+                    path: k.path.clone(),
+                    key: if !desired && k.kind == KeyKind::NewLeaf {
+                        KeyState::Missing
+                    } else {
+                        let values: Vec<_> = k
+                            .values
+                            .iter()
+                            .map(|v| SelectedValue {
+                                name: v.name,
+                                value: if desired {
+                                    v.desired.clone()
+                                } else {
+                                    v.expected.clone()
+                                },
+                            })
+                            .collect();
+                        KeyState::Present {
+                            last_write: 42,
+                            value_count: values.iter().filter(|v| v.value.is_some()).count() as u32,
+                            subkey_count: 0,
+                            values,
+                        }
+                    },
+                })
+                .collect(),
+        }
+    }
+    fn attempt(j: &mut Journal, i: &Intent) -> AttemptReceipt {
+        let prepared = prepare(j, i.clone());
+        j.begin_commit(prepared, i.revision, Uuid::new_v4())
+            .unwrap()
+            .into_attempt()
+    }
+    fn duplicate_fixture_receipt(r: &AttemptReceipt) -> AttemptReceipt {
+        AttemptReceipt {
+            intent: r.intent.clone(),
+            document: r.document.clone(),
+            instance: r.instance,
+            nonce: r.nonce,
+        }
+    }
+    fn fixture_proof(r: AttemptReceipt, o: Observation) -> ObservedAttempt {
+        // SAFETY: fixture-only synthetic input; no production authority or effects.
+        unsafe { ObservedAttempt::from_native(r, o) }
+    }
+
+    #[test]
+    fn observations_survive_reopen_and_never_reissue_native_authority() {
+        for desired in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("observations.db");
+            let mut j = open(&path);
+            let i = intent();
+            let r = attempt(&mut j, &i);
+            let o = report(&i, desired);
+            let expected = if desired {
+                Phase::ObservedDesired
+            } else {
+                Phase::ObservedBefore
+            };
+            assert_eq!(
+                j.record_observation(fixture_proof(r, o.clone())).unwrap(),
+                expected
+            );
+            drop(j);
+            let mut j = open(&path);
+            let row = j.query(&owner(), i.operation).unwrap().unwrap();
+            assert_eq!(row.phase, expected);
+            assert_eq!(row.observation, Some(o));
+            assert!(j.review(64).unwrap().0.is_empty());
+            assert!(matches!(j.prepare(i.clone()), Ok(Preparation::Existing(_))));
+            // A terminal operation is not a native resource lease. The future
+            // owner must still prove ownership before admitting another intent.
+            let mut later = intent();
+            later.lease = i.lease;
+            drop(prepare(&mut j, later));
+        }
+    }
+
+    #[test]
+    fn uncertain_partial_and_mixed_observations_do_not_settle() {
+        let i = intent();
+        let mut reports = Vec::new();
+        for desired in [false, true] {
+            let mut o = report(&i, desired);
+            o.disposition = Disposition::Uncertain;
+            reports.push(o);
+        }
+        for status in [
+            ReadStatus::Changed,
+            ReadStatus::Cancelled,
+            ReadStatus::Deadline,
+            ReadStatus::Limited,
+            ReadStatus::ScopeMismatch,
+            ReadStatus::NativeFailed { code: 5 },
+        ] {
+            let mut o = report(&i, true);
+            o.status = status;
+            o.keys.truncate(1);
+            reports.push(o);
+        }
+        let mut mixed = report(&i, true);
+        mixed.keys[0] = report(&i, false).keys[0].clone();
+        reports.push(mixed);
+        let mut missing = report(&i, true);
+        missing.keys[0].key = KeyState::Missing;
+        reports.push(missing);
+        for o in reports {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("uncertain.db");
+            let mut j = open(&path);
+            let r = attempt(&mut j, &i);
+            assert_eq!(
+                j.record_observation(fixture_proof(r, o.clone())).unwrap(),
+                Phase::Uncertain
+            );
+            drop(j);
+            let mut j = open(&path);
+            assert_eq!(
+                j.query(&owner(), i.operation).unwrap().unwrap().observation,
+                Some(o)
+            );
+            let mut later = intent();
+            later.lease = i.lease;
+            assert!(matches!(j.prepare(later), Err(Error::BusyLease)));
+            assert_eq!(j.review(64).unwrap().0.len(), 1);
+        }
+        for (extra, child) in [(1, 0), (0, 1)] {
+            let mut o = report(&i, true);
+            if let KeyState::Present {
+                value_count,
+                subkey_count,
+                ..
+            } = &mut o.keys[1].key
+            {
+                *value_count += extra;
+                *subkey_count += child;
+            }
+            assert_eq!(o.phase(&i).unwrap(), Phase::Uncertain);
+        }
+    }
+
+    #[test]
+    fn observation_proofs_bind_nonce_and_cannot_overwrite_any_first_receipt() {
+        for unknown in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let mut j = open(&dir.path().join("cas.db"));
+            let i = intent();
+            let r = attempt(&mut j, &i);
+            let retry = duplicate_fixture_receipt(&r);
+            let mut stale = duplicate_fixture_receipt(&r);
+            stale.nonce = Uuid::new_v4();
+            assert!(matches!(
+                j.record_observation(fixture_proof(stale, report(&i, true))),
+                Err(Error::Stale)
+            ));
+            assert_eq!(phase(&j, &i), Phase::CommitStarted);
+            let mut o = report(&i, true);
+            if unknown {
+                o.disposition = Disposition::Uncertain;
+            }
+            j.record_observation(fixture_proof(r, o.clone())).unwrap();
+            assert!(matches!(
+                j.record_observation(fixture_proof(retry, report(&i, false))),
+                Err(Error::Stale)
+            ));
+            assert_eq!(
+                j.query(&owner(), i.operation).unwrap().unwrap().observation,
+                Some(o)
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_observations_and_failed_sql_commit_preserve_unsettled_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut j = open(&dir.path().join("fault.db"));
+        let i = intent();
+        let r = attempt(&mut j, &i);
+        let mut invalid = Vec::new();
+        let mut o = report(&i, true);
+        o.keys.pop();
+        invalid.push(o);
+        let mut o = report(&i, true);
+        o.view = RegistryView::Registry32;
+        invalid.push(o);
+        let mut o = report(&i, true);
+        o.keys[0].path.push('x');
+        invalid.push(o);
+        let mut o = report(&i, true);
+        o.status = ReadStatus::NativeFailed { code: 0 };
+        invalid.push(o);
+        let mut o = report(&i, true);
+        if let KeyState::Present { values, .. } = &mut o.keys[0].key {
+            values[0].name = Name::Debugger;
+        }
+        invalid.push(o);
+        for o in invalid {
+            assert!(matches!(
+                j.record_observation(fixture_proof(duplicate_fixture_receipt(&r), o)),
+                Err(Error::Corrupt)
+            ));
+            assert_eq!(phase(&j, &i), Phase::CommitStarted);
+        }
+        commit_fault(&j, "UPDATE OF phase");
+        assert!(matches!(
+            j.record_observation(fixture_proof(r, report(&i, true))),
+            Err(Error::Sql(_))
+        ));
+        assert_eq!(phase(&j, &i), Phase::CommitStarted);
+        assert!(
+            j.query(&owner(), i.operation)
+                .unwrap()
+                .unwrap()
+                .observation
+                .is_none()
+        );
+        clear_fault(&j);
+    }
+
+    fn legacy(path: &Path) -> Vec<(Intent, i64, Option<Vec<u8>>, Option<Vec<u8>>)> {
+        let c = Connection::open(path).unwrap();
+        c.execute_batch(LEGACY_TABLE).unwrap();
+        c.execute_batch(INDEX).unwrap();
+        c.pragma_update(None, "application_id", APP_ID).unwrap();
+        c.pragma_update(None, "user_version", 1).unwrap();
+        (0..4)
+            .map(|phase| {
+                let i = intent();
+                let instance = matches!(phase, 1 | 2).then(|| Uuid::new_v4().as_bytes().to_vec());
+                let nonce = matches!(phase, 1 | 2).then(|| Uuid::new_v4().as_bytes().to_vec());
+                c.execute(
+                    "INSERT INTO intents VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                    params![
+                        i.account,
+                        i.session,
+                        i.operation.as_bytes().as_slice(),
+                        i.lease.as_bytes().as_slice(),
+                        i.revision.as_bytes().as_slice(),
+                        i.encode().unwrap(),
+                        phase,
+                        instance,
+                        nonce
+                    ],
+                )
+                .unwrap();
+                (i, phase, instance, nonce)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn exact_v1_migration_preserves_every_phase_document_and_attempt_without_replay() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("legacy.db");
+        let original = legacy(&path);
+        let mut j = open(&path);
+        assert_eq!(
+            j.connection
+                .pragma_query_value::<i64, _>(None, "user_version", |r| r.get(0))
+                .unwrap(),
+            VERSION
+        );
+        for (i, p, instance, nonce) in original {
+            let row = j.query(&owner(), i.operation).unwrap().unwrap();
+            assert_eq!(row.phase, Phase::parse(p).unwrap());
+            assert!(row.observation.is_none());
+            assert_eq!(row.intent.encode().unwrap(), i.encode().unwrap());
+            let ids: (Option<Vec<u8>>, Option<Vec<u8>>) = j
+                .connection
+                .query_row(
+                    "SELECT instance,nonce FROM intents WHERE operation=?1",
+                    [i.operation.as_bytes().as_slice()],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(ids, (instance, nonce));
+            assert!(matches!(j.prepare(i), Ok(Preparation::Existing(_))));
+        }
+        drop(j);
+        drop(open(&path));
+    }
+
+    #[test]
+    fn rejected_legacy_migrations_preserve_database_bytes_and_schema() {
+        for case in 0..3 {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("legacy.db");
+            legacy(&path);
+            let c = Connection::open(&path).unwrap();
+            match case {
+                0 => {
+                    c.execute("UPDATE intents SET document=document||' '", [])
+                        .unwrap();
+                }
+                1 => {
+                    c.pragma_update(None, "user_version", 99).unwrap();
+                }
+                _ => (),
+            }
+            drop(c);
+            let before = std::fs::read(&path).unwrap();
+            let c = Connection::open(&path).unwrap();
+            if case == 2 {
+                c.pragma_update(None, "query_only", true).unwrap();
+            }
+            assert!(Journal::open(c).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            let c = Connection::open(&path).unwrap();
+            schema(&c, Layout::Legacy).unwrap();
+        }
     }
 
     #[test]
