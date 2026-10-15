@@ -1173,5 +1173,64 @@
       "Reparse rejection implemented but leaf-symlink fixture not exercised",
       "Not connected to a GUI optimizer action; Sleep/Wake/re-sleep and recovery remain open"
     ]
+  },
+  "service_provider_candidate_evidence": {
+    "method": "Standalone bounded headless Ghidra fallback using inspected REA 6.5 JVM launch coordinates; global analysis disabled, Windows ABI, 30-second per-function bound",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "target_executed": false,
+    "canonical_rea_evidence_ids": [],
+    "private_record_sha256": "ad4667807e3e0f7eb0dabed89756949f81c9ba7fd50b5dea15e4a0f4f7ec8bcc",
+    "private_review_sha256": "cca1495edf97337dc59bfb529b8bee58303b6ab3857b5542e4ce2fa5e95c21fa",
+    "private_bounds_sha256": "1fe9125cb750c67a3ceccf5787f60bf6fd73d25f96674e279d1a2d1178b06336",
+    "private_unwind_groups_sha256": "b63ae1225b9d39a0ed7b162ce33682da2bf58201733efe66b3bf691c34619cde",
+    "private_rtti_sha256": "3941092865e724268f1b7de062c1b0798d8804f9d39ea5c2eb8cce5d76c3315d",
+    "conditional_receiver": {
+      "type_descriptor": "0x141d4d750",
+      "vftable": "0x141890f18",
+      "slots": [
+        {
+          "offset": "0x38",
+          "target": "0x1408425f0"
+        },
+        {
+          "offset": "0x110",
+          "target": "0x14085c1d0"
+        }
+      ],
+      "limit": "The dispatcher dynamic receiver is not yet proved to be this CProgramManager instance; these are conditional targets."
+    },
+    "functions": [
+      {
+        "entry": "0x14085c1d0",
+        "end_exclusive": "0x14085c3b7",
+        "requested_bytes": 487,
+        "decoded_instructions": 119,
+        "pcode_unique_instruction_addresses": 58,
+        "pcode_outside_requested_range_count": 0,
+        "scope": "no p-code instruction addresses outside selected PE range; dependencies remain unresolved"
+      },
+      {
+        "entry": "0x1408425f0",
+        "end_exclusive": "0x14084264a",
+        "requested_bytes": 90,
+        "decoded_instructions": 24,
+        "pcode_unique_instruction_addresses": 241,
+        "pcode_outside_requested_range_count": 230,
+        "scope": "partial; decompiler followed code outside selected PE range"
+      }
+    ],
+    "observations": [
+      "The +0x110 candidate delegates to 0x14085c3c0, conditionally invokes an unresolved guarded callable, and returns a status; the helper body and effects remain unknown.",
+      "The bounded +0x38 prelude tests one byte, saves another, clears two byte fields, and tail-transfers to 0x140842ef0 with derived flags. Its followed tail body lies outside the selected range and is unreviewed."
+    ],
+    "next_bounded_targets": [
+      "0x14085c3c0",
+      "0x140842ef0"
+    ],
+    "limits": [
+      "No native component mutations, association/impact classifier, re-sleep or recovery behavior established.",
+      "A decompiler completion flag is not full function or service semantic coverage.",
+      "Resolve dispatcher receiver initialization separately before equating conditional candidates with actual request targets."
+    ]
   }
 }
