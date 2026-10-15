@@ -576,7 +576,8 @@ impl App {
                         &account_choices,
                         |ui| {
                             for (account, label) in accounts.iter().zip(&account_labels) {
-                                ui.selectable_value(
+                                theme::choice_value(
+                                    ui,
                                     &mut self.cloud_ui.account,
                                     Some(account.id()),
                                     label,

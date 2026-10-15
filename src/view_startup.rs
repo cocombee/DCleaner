@@ -1847,7 +1847,13 @@ impl App {
                     if ui
                         .selectable_label(
                             self.startup_ui.selected_history == Some(record.id),
-                            egui::RichText::new(label).size(theme::FONT_CAPTION),
+                            egui::RichText::new(label).size(theme::FONT_CAPTION).family(
+                                if self.startup_ui.selected_history == Some(record.id) {
+                                    theme::semibold()
+                                } else {
+                                    egui::FontFamily::Proportional
+                                }
+                            ),
                         )
                         .on_hover_text(if record.state == "uncertain" {
                             "Outcome not confirmed. Review the typed saved intent before attempting guarded recovery."
@@ -2153,19 +2159,19 @@ fn startup_gauge_icon(ui: &mut egui::Ui, t: Tokens) {
         })
         .collect::<Vec<_>>();
     ui.painter()
-        .add(egui::Shape::line(arc, egui::Stroke::new(2., t.primary)));
+        .add(egui::Shape::line(arc, egui::Stroke::new(1.5, t.primary)));
     ui.painter().line_segment(
         [
             egui::Pos2::new(center.x - radius, center.y),
             egui::Pos2::new(center.x + radius, center.y),
         ],
-        egui::Stroke::new(1.5, t.muted),
+        egui::Stroke::new(1.125, t.muted),
     );
     ui.painter().line_segment(
         [center, egui::Pos2::new(center.x + 5., center.y - 6.)],
-        egui::Stroke::new(2., t.primary),
+        egui::Stroke::new(1.5, t.primary),
     );
-    ui.painter().circle_filled(center, 2., t.primary);
+    ui.painter().circle_filled(center, 1.5, t.primary);
 }
 
 fn startup_help_card(

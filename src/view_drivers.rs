@@ -481,7 +481,9 @@ impl App {
                         .collapsed_groups
                         .contains(&DriverDeviceCategory::Display)
             }
-            "Fix a problem" => can_dismiss && dialog.is_none() && has_snapshot,
+            "Fix a problem" => {
+                can_dismiss && dialog.is_none() && (has_snapshot || self.drivers_intro_active())
+            }
             "Don't show this message again" => {
                 can_dismiss && matches!(dialog, Some(DriverDialog::RestoreFormerPrompt { .. }))
             }
@@ -818,6 +820,10 @@ impl App {
             ui.add_space(4.);
         }
         ui.add_space(7.);
+        if self.drivers_ui.problem_category_filter.is_none() && self.drivers_ui.snapshot.is_some() {
+            self.driver_results_heading(ui, t);
+            ui.add_space(7.);
+        }
         self.driver_search(ui, t);
         ui.add_space(6.);
 
@@ -835,9 +841,6 @@ impl App {
 
         if let Some(snapshot) = self.drivers_ui.snapshot.clone() {
             self.driver_problem_history_status(ui, t, &snapshot);
-            if self.drivers_ui.problem_category_filter.is_none() {
-                self.driver_quality_line(ui, t, &snapshot);
-            }
             ui.add_space(7.);
             let history_result_has_rows = !matches!(
                 self.drivers_ui.problem_history_result.as_ref(),
@@ -896,7 +899,9 @@ impl App {
         if self.drivers_intro_active() {
             let compact = !self.feature_intro_wide(ctx);
             let mut start = false;
+            let mut fix_problem = false;
             ui.horizontal_wrapped(|ui| {
+                fix_problem = theme::secondary(ui, "Fix a problem", !self.busy());
                 theme::muted(
                     ui,
                     if compact {
@@ -912,6 +917,9 @@ impl App {
                     }
                 });
             });
+            if fix_problem {
+                self.open_driver_problem_flow();
+            }
             if start {
                 self.start_driver_scan(ctx);
             }
@@ -959,17 +967,21 @@ impl App {
             self.begin_driver_load(ctx);
         }
         if fix_problem {
-            self.drivers_ui.dialog = Some(if self.feature_seen(DRIVER_RESTORE_PROMPT_FEATURE) {
-                DriverDialog::ProblemCategories(BTreeSet::new())
-            } else {
-                DriverDialog::RestoreFormerPrompt {
-                    suppress_message: false,
-                }
-            });
+            self.open_driver_problem_flow();
         }
         if review_selected {
             self.drivers_ui.dialog = Some(DriverDialog::BatchReview(selected_updates));
         }
+    }
+
+    fn open_driver_problem_flow(&mut self) {
+        self.drivers_ui.dialog = Some(if self.feature_seen(DRIVER_RESTORE_PROMPT_FEATURE) {
+            DriverDialog::ProblemCategories(BTreeSet::new())
+        } else {
+            DriverDialog::RestoreFormerPrompt {
+                suppress_message: false,
+            }
+        });
     }
 
     pub(super) fn drivers_dialog(&mut self, ctx: &egui::Context) {
@@ -1610,6 +1622,53 @@ impl App {
         ui.separator();
     }
 
+    fn driver_results_heading(&self, ui: &mut egui::Ui, t: Tokens) {
+        let counts = self.driver_tab_counts();
+        let (heading, subtitle) = match self.drivers_ui.tab {
+            DriverTab::Outdated => match counts.0 {
+                Some(0) => (
+                    "No matching update offers in this result".to_owned(),
+                    "No confirmed offer is available to select. A missing offer does not mean a driver is current.".to_owned(),
+                ),
+                Some(count) => (
+                    format!("{count} {} with a matching update offer", if count == 1 { "device" } else { "devices" }),
+                    "Review the exact Windows Update offer and any backup or restart requirements before selecting an update.".to_owned(),
+                ),
+                None => (
+                    "Driver result count unavailable".to_owned(),
+                    "Saved driver choices could not be read, so device status counts are unavailable.".to_owned(),
+                ),
+            },
+            DriverTab::NoOfferUnknown => match counts.1 {
+                Some(count) => (
+                    format!("{count} {} without a confirmed update offer", if count == 1 { "device" } else { "devices" }),
+                    "This includes no-offer and unknown states. Neither state confirms that a driver is current.".to_owned(),
+                ),
+                None => (
+                    "Driver result count unavailable".to_owned(),
+                    "Saved driver choices could not be read, so device status counts are unavailable.".to_owned(),
+                ),
+            },
+            DriverTab::Deferred => match counts.2 {
+                Some(count) => (
+                    format!("{count} {} with skipped or ignored offers", if count == 1 { "device" } else { "devices" }),
+                    "These are saved local choices for specific devices or exact update offers.".to_owned(),
+                ),
+                None => (
+                    "Driver result count unavailable".to_owned(),
+                    "Saved driver choices could not be read, so device status counts are unavailable.".to_owned(),
+                ),
+            },
+        };
+
+        ui.label(
+            RichText::new(heading)
+                .size(theme::FONT_TITLE)
+                .family(theme::semibold()),
+        );
+        theme::muted(ui, subtitle, t);
+    }
+
     fn driver_search(&mut self, ui: &mut egui::Ui, t: Tokens) {
         theme::control_row(ui, |ui| {
             ui.label(RichText::new("Search").color(t.muted));
@@ -1710,33 +1769,6 @@ impl App {
                 status_card(ui, t, heading, message);
             }
         }
-    }
-
-    fn driver_quality_line(&self, ui: &mut egui::Ui, t: Tokens, snapshot: &DriverSnapshot) {
-        let inventory_quality = match snapshot.inventory.source.quality {
-            InventoryQuality::Complete => "complete",
-            InventoryQuality::Partial => "partial",
-            InventoryQuality::Truncated => "truncated",
-            InventoryQuality::Unavailable => "unavailable",
-        };
-        let catalogue_quality = catalogue_label(&snapshot.catalogue.state);
-        let unknown = self.driver_tab_counts().1.unwrap_or_default();
-        ui.horizontal_wrapped(|ui| {
-            theme::muted(
-                ui,
-                format!(
-                    "SetupAPI · {inventory_quality} · {} devices",
-                    snapshot.inventory.source.item_count
-                ),
-                t,
-            );
-            ui.separator();
-            theme::muted(ui, format!("Windows Update Agent · {catalogue_quality}"), t);
-            if unknown > 0 {
-                ui.separator();
-                theme::muted(ui, format!("{unknown} no-offer or unknown rows"), t);
-            }
-        });
     }
 
     fn driver_table(
@@ -2043,7 +2075,7 @@ impl App {
                                     ))
                                     .fill(egui::Color32::TRANSPARENT)
                                     .stroke(egui::Stroke::NONE)
-                                    .corner_radius(4)
+                                    .corner_radius(20)
                                     .min_size(egui::vec2(button_width, 40.))
                                     .atom_ui(group);
                                     if let Some(rect) = painted.rect(chevron_id) {
@@ -2053,7 +2085,7 @@ impl App {
                                         } else {
                                             vec![c + egui::vec2(-4., -2.), c + egui::vec2(0., 2.), c + egui::vec2(4., -2.)]
                                         };
-                                        group.painter().add(egui::Shape::line(points, egui::Stroke::new(1.4, t.muted)));
+                                        group.painter().add(egui::Shape::line(points, egui::Stroke::new(1.05, t.muted)));
                                     }
                                     painted.response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &disclosure_label));
                                     #[cfg(debug_assertions)]
@@ -2382,69 +2414,78 @@ impl App {
         ui.separator();
 
         let version_history = driver_device_version_history(&self.drivers_ui.history, device);
-        let version_history_available = self.drivers_ui.history_error.is_none()
-            && device.id.as_ref().is_some_and(|id| !id.0.trim().is_empty())
-            && known(&device.instance_id).is_some_and(|id| !id.trim().is_empty());
-        let version_history_title = if version_history_available {
-            if version_history.len() == MAX_RECENT_DRIVER_OPERATIONS {
-                format!("Version history · latest {MAX_RECENT_DRIVER_OPERATIONS}")
-            } else {
-                format!("Version history · {} saved", version_history.len())
-            }
-        } else {
-            "Version history unavailable".to_owned()
-        };
-        egui::CollapsingHeader::new(version_history_title)
-            .default_open(true)
+        let version_history_identity_available =
+            device.id.as_ref().is_some_and(|id| !id.0.trim().is_empty())
+                && known(&device.instance_id).is_some_and(|id| !id.trim().is_empty());
+        let candidates = candidates_for(Some(snapshot), device);
+        let mut action = None;
+
+        egui::CollapsingHeader::new("Driver versions")
+            .default_open(false)
             .id_salt("driver-device-version-history")
-            .show(ui, |history_ui| {
+            .show(ui, |versions_ui| {
+                versions_ui.label(
+                    RichText::new("Saved version history")
+                        .size(theme::FONT_BODY)
+                        .family(theme::semibold()),
+                );
                 if self.drivers_ui.history_error.is_some() {
-                    theme::muted(history_ui, "Saved version history is unavailable.", t);
-                } else if !device
-                    .id
-                    .as_ref()
-                    .is_some_and(|id| !id.0.trim().is_empty())
-                    || !known(&device.instance_id).is_some_and(|id| !id.trim().is_empty())
-                {
+                    theme::muted(versions_ui, "Saved version history is unavailable.", t);
+                } else if !version_history_identity_available {
                     theme::muted(
-                        history_ui,
+                        versions_ui,
                         "A stable device identity was unavailable, so matching history cannot be shown.",
                         t,
                     );
                 } else if version_history.is_empty() {
-                    theme::muted(history_ui, "No saved driver changes for this device.", t);
+                    theme::muted(versions_ui, "No saved driver changes for this device.", t);
                 } else {
                     for entry in &version_history {
-                        history_ui.horizontal_wrapped(|row| {
-                            row.label(
-                                RichText::new(&entry.status).family(theme::semibold()),
-                            );
+                        versions_ui.horizontal_wrapped(|row| {
+                            row.label(RichText::new(&entry.status).family(theme::semibold()));
                             theme::muted(row, &entry.date, t);
                             if let Some(transition) = entry.transition.as_deref() {
                                 theme::muted(row, transition.replace('→', "to"), t);
                             }
                         });
-                        history_ui.separator();
                     }
                 }
-            });
 
-        let candidates = candidates_for(Some(snapshot), device);
-        let mut action = None;
-        if !candidates.is_empty() {
-            egui::CollapsingHeader::new(format!("Windows Update offers · {}", candidates.len()))
-                .default_open(false)
-                .id_salt("driver-device-update-offers")
-                .show(ui, |offers_ui| {
-                    for candidate in candidates {
-                        candidate_details(offers_ui, t, &candidate);
+                versions_ui.add_space(5.);
+                versions_ui.separator();
+                versions_ui.label(
+                    RichText::new("Windows Update offers")
+                        .size(theme::FONT_BODY)
+                        .family(theme::semibold()),
+                );
+                if candidates.is_empty() {
+                    match &device.offer {
+                        DeviceOffer::NoOfferFromSource { source } => theme::muted(
+                            versions_ui,
+                            format!("No matching offer was returned by {}.", source.label()),
+                            t,
+                        ),
+                        DeviceOffer::Unknown { failure } => theme::muted(
+                            versions_ui,
+                            format!("Offer state is unknown: {}", failure.summary()),
+                            t,
+                        ),
+                        DeviceOffer::CandidateAvailable { .. } => theme::muted(
+                            versions_ui,
+                            "The exact offer details are not available in this inventory.",
+                            t,
+                        ),
+                    };
+                } else {
+                    for candidate in &candidates {
+                        candidate_details(versions_ui, t, candidate);
                         if self.driver_candidate_actionable(device, candidate)
                             && self.drivers_ui.settings_error.is_none()
                             && let Ok(intent) = drivers::prepare_update_intent(device, candidate)
                         {
                             let mut selected_offer = self.driver_offer_selected(&intent, device_id);
                             let response = theme::checkbox(
-                                offers_ui,
+                                versions_ui,
                                 &mut selected_offer,
                                 "Select this exact offer for Update selected",
                                 !self.busy(),
@@ -2458,7 +2499,7 @@ impl App {
                             }
                         }
                         if theme::row_action(
-                            offers_ui,
+                            versions_ui,
                             "Review offer",
                             !self.busy()
                                 && self.drivers_ui.settings_error.is_none()
@@ -2475,73 +2516,8 @@ impl App {
                                 }
                             }
                         }
-                        offers_ui.separator();
+                        versions_ui.separator();
                     }
-                });
-        } else {
-            egui::CollapsingHeader::new("Windows Update offer")
-                .default_open(false)
-                .id_salt("driver-device-offer-status")
-                .show(ui, |offer_ui| match &device.offer {
-                    DeviceOffer::NoOfferFromSource { source } => {
-                        theme::muted(
-                            offer_ui,
-                            format!("No matching offer was returned by {}.", source.label()),
-                            t,
-                        );
-                    }
-                    DeviceOffer::Unknown { failure } => {
-                        theme::muted(
-                            offer_ui,
-                            format!("Offer state is unknown: {}", failure.summary()),
-                            t,
-                        );
-                    }
-                    DeviceOffer::CandidateAvailable { .. } => {
-                        theme::muted(
-                            offer_ui,
-                            "The exact offer details are not available in this inventory.",
-                            t,
-                        );
-                    }
-                });
-        }
-
-        let settings = self.drivers_ui.settings.as_ref();
-        let skip_candidates = candidates_for(Some(snapshot), device);
-        egui::CollapsingHeader::new("Skipped offers")
-            .default_open(false)
-            .id_salt("driver-device-saved-choices")
-            .show(ui, |choices_ui| {
-                for candidate in skip_candidates {
-                    let skipped = settings.is_some_and(|settings| {
-                        settings.is_skipped(device_id, &candidate.identity)
-                    });
-                    let mut skip_value = skipped;
-                    let label = format!(
-                        "Skip this exact offer · {}",
-                        known(&candidate.title).unwrap_or("Offer details unavailable")
-                    );
-                    let response = theme::checkbox(
-                        choices_ui,
-                        &mut skip_value,
-                        label,
-                        !self.busy() && self.drivers_ui.settings_error.is_none(),
-                    );
-                    if response.changed() {
-                        action = Some(DetailAction::Skip(
-                            device_id.clone(),
-                            candidate.identity.clone(),
-                            skip_value,
-                        ));
-                    }
-                }
-                if self.drivers_ui.settings_error.is_some() {
-                    theme::muted(
-                        choices_ui,
-                        "Saved choices are locked until the settings file is readable.",
-                        t,
-                    );
                 }
             });
 
@@ -2549,6 +2525,44 @@ impl App {
             .default_open(false)
             .id_salt("driver-device-advanced")
             .show(ui, |advanced| {
+                let settings = self.drivers_ui.settings.as_ref();
+                let skip_candidates = candidates_for(Some(snapshot), device);
+                egui::CollapsingHeader::new("Skipped offers")
+                    .default_open(false)
+                    .id_salt("driver-device-saved-choices")
+                    .show(advanced, |choices_ui| {
+                        for candidate in skip_candidates {
+                            let skipped = settings.is_some_and(|settings| {
+                                settings.is_skipped(device_id, &candidate.identity)
+                            });
+                            let mut skip_value = skipped;
+                            let label = format!(
+                                "Skip this exact offer · {}",
+                                known(&candidate.title).unwrap_or("Offer details unavailable")
+                            );
+                            let response = theme::checkbox(
+                                choices_ui,
+                                &mut skip_value,
+                                label,
+                                !self.busy() && self.drivers_ui.settings_error.is_none(),
+                            );
+                            if response.changed() {
+                                action = Some(DetailAction::Skip(
+                                    device_id.clone(),
+                                    candidate.identity.clone(),
+                                    skip_value,
+                                ));
+                            }
+                        }
+                        if self.drivers_ui.settings_error.is_some() {
+                            theme::muted(
+                                choices_ui,
+                                "Saved choices are locked until the settings file is readable.",
+                                t,
+                            );
+                        }
+                    });
+                advanced.add_space(5.);
                 detail(advanced, "Device category", device.category().label(), t);
                 detail(advanced, "Driver date", &field_display(&device.installed_date), t);
                 detail(advanced, "Published INF", &field_display(&device.inf_path), t);

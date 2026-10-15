@@ -41,6 +41,7 @@ pub(super) struct HealthUi {
     cookie_settings_stale: bool,
     expanded_categories: Vec<HealthCategory>,
     partial_acknowledged: bool,
+    scan_details_open: bool,
     permanent_acknowledged: bool,
     search: String,
     detail_id: Option<HealthFindingId>,
@@ -65,6 +66,7 @@ impl Default for HealthUi {
             cookie_settings_stale: false,
             expanded_categories: Vec::new(),
             partial_acknowledged: false,
+            scan_details_open: false,
             permanent_acknowledged: false,
             search: String::new(),
             detail_id: None,
@@ -211,6 +213,8 @@ impl App {
             "browser_review_open": self.health_ui.browser_review_open,
             "selected_browser_processes": self.health_ui.selected_processes.len(),
             "started": self.health_ui.started,
+            "scan_details_open": self.health_ui.scan_details_open,
+            "partial_acknowledged": self.health_ui.partial_acknowledged,
         })
     }
 
@@ -218,6 +222,9 @@ impl App {
     pub(super) fn qa_health_action(&self, label: &str, after: bool) -> Option<bool> {
         let state = self.qa_health_state();
         Some(match label {
+            "Scan details" => state["scan_details_open"] == after,
+            "Hide scan details" => state["scan_details_open"] == !after,
+            "I reviewed the partial-scan warning" => state["partial_acknowledged"] == after,
             "Cookie settings" => self.qa_clean_settings_state()["open"] == after,
             "Close settings" => self.qa_clean_settings_state()["open"] == !after,
             "Clean" | "Resolve" => state["review_open"] == after,
@@ -1110,7 +1117,7 @@ impl App {
                 painter.circle_stroke(
                     center,
                     10.,
-                    egui::Stroke::new(1.2, if active { t.primary } else { t.muted }),
+                    egui::Stroke::new(0.9, if active { t.primary } else { t.muted }),
                 );
                 if finished {
                     painter.add(egui::Shape::line(
@@ -1119,12 +1126,12 @@ impl App {
                             center + egui::vec2(-1., 3.),
                             center + egui::vec2(4., -3.),
                         ],
-                        egui::Stroke::new(1.6, t.primary),
+                        egui::Stroke::new(1.2, t.primary),
                     ));
                 } else if skipped {
                     painter.line_segment(
                         [center - egui::vec2(4., 0.), center + egui::vec2(4., 0.)],
-                        egui::Stroke::new(1.2, t.muted),
+                        egui::Stroke::new(0.9, t.muted),
                     );
                 } else if matches!(
                     status,
@@ -1437,26 +1444,53 @@ impl App {
             .collect::<Vec<_>>();
         let mut select_ids = Vec::new();
         let mut clear_ids = Vec::new();
-        for note in &report.notes {
-            theme::muted(ui, note, t);
-        }
         if report.quality == HealthScanQuality::Partial {
-            ui.colored_label(
-                t.attention,
-                "Some sources were incomplete. Review the gaps before cleaning.",
-            );
-            if theme::checkbox(
-                ui,
-                &mut self.health_ui.partial_acknowledged,
-                "I reviewed the partial-scan warning",
-                selection_enabled,
-            )
-            .changed()
-                && !self.health_ui.partial_acknowledged
-            {
-                let _ = self.health_ui.coordinator.deselect_all();
+            egui::Frame::new()
+                .fill(t.card)
+                .stroke(egui::Stroke::new(1., t.border))
+                .corner_radius(theme::SECTION_RADIUS)
+                .inner_margin(10.)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal_top(|ui| {
+                        let (icon, _) =
+                            ui.allocate_exact_size(egui::Vec2::splat(20.), egui::Sense::hover());
+                        theme::paint_icon(ui.painter(), icon, theme::Icon::Info, t.attention);
+                        ui.vertical(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.spacing_mut().item_spacing.y = 4.;
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(RichText::new("Incomplete scan").family(theme::semibold()).color(t.attention));
+                                theme::muted(ui, "Review the gaps before cleaning.", t);
+                                if theme::row_action(ui, if self.health_ui.scan_details_open { "Hide scan details" } else { "Scan details" }, true).clicked() {
+                                    self.health_ui.scan_details_open = !self.health_ui.scan_details_open;
+                                }
+                            });
+                            if self.health_ui.scan_details_open {
+                                theme::muted(ui, "Some sources could not be scanned. Results include only the sources that returned data.", t);
+                                for note in &report.notes {
+                                    theme::muted(ui, note, t);
+                                }
+                            }
+                            if theme::checkbox(
+                                ui,
+                                &mut self.health_ui.partial_acknowledged,
+                                "I reviewed the partial-scan warning",
+                                selection_enabled,
+                            )
+                            .changed()
+                                && !self.health_ui.partial_acknowledged
+                            {
+                                let _ = self.health_ui.coordinator.deselect_all();
+                            }
+                        });
+                    });
+                });
+            ui.add_space(16.);
+        } else {
+            for note in &report.notes {
+                theme::muted(ui, note, t);
             }
-            ui.add_space(8.);
         }
         if report.quality == HealthScanQuality::Cancelled {
             ui.colored_label(

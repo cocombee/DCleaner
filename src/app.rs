@@ -246,15 +246,14 @@ impl App {
             .unwrap()
             .insert(0, "Inter".into());
         fonts.font_data.insert(
-            "Inter Semibold".into(),
+            "Inter 550".into(),
             Arc::new(egui::FontData::from_static(include_bytes!(
-                "../assets/fonts/Inter-SemiBold.ttf"
+                "../assets/fonts/Inter-550.ttf"
             ))),
         );
-        fonts.families.insert(
-            theme::semibold(),
-            vec!["Inter Semibold".into(), "Inter".into()],
-        );
+        fonts
+            .families
+            .insert(theme::semibold(), vec!["Inter 550".into(), "Inter".into()]);
         context.set_fonts(fonts);
         let logo_texture = dcleaner::brand::icon().ok().map(|icon| {
             context.load_texture(

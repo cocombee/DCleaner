@@ -550,22 +550,26 @@ impl App {
                     filter_label(self.recycle_bin_ui.filter),
                     &["All items", "Files", "Folders", "Unknown size"],
                     |ui| {
-                        ui.selectable_value(
+                        theme::choice_value(
+                            ui,
                             &mut self.recycle_bin_ui.filter,
                             ItemFilter::All,
                             "All items",
                         );
-                        ui.selectable_value(
+                        theme::choice_value(
+                            ui,
                             &mut self.recycle_bin_ui.filter,
                             ItemFilter::Files,
                             "Files",
                         );
-                        ui.selectable_value(
+                        theme::choice_value(
+                            ui,
                             &mut self.recycle_bin_ui.filter,
                             ItemFilter::Folders,
                             "Folders",
                         );
-                        ui.selectable_value(
+                        theme::choice_value(
+                            ui,
                             &mut self.recycle_bin_ui.filter,
                             ItemFilter::Unknown,
                             "Unknown size",

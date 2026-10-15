@@ -910,16 +910,10 @@ impl App {
                 selected_kind,
                 &kind_choices,
                 |ui| {
-                    if ui
-                        .selectable_label(selected_kind == "File", "File")
-                        .clicked()
-                    {
+                    if theme::choice(ui, selected_kind == "File", "File").clicked() {
                         kind_changed = Some(InclusionKind::File);
                     }
-                    if ui
-                        .selectable_label(selected_kind == "Folder", "Folder")
-                        .clicked()
-                    {
+                    if theme::choice(ui, selected_kind == "Folder", "Folder").clicked() {
                         kind_changed = Some(InclusionKind::Folder);
                     }
                 },
@@ -1239,7 +1233,7 @@ impl App {
                         ExclusionType::Cookie,
                     ] {
                         let label = exclusion_type_label(kind);
-                        if ui.selectable_label(selected_type == label, label).clicked() {
+                        if theme::choice(ui, selected_type == label, label).clicked() {
                             selected_new_type = Some(kind);
                         }
                     }
@@ -1624,16 +1618,10 @@ impl App {
                     selected_deletion,
                     &deletion_choices,
                     |ui| {
-                        if ui
-                            .selectable_label(selected_deletion == "Normal", "Normal")
-                            .clicked()
-                        {
+                        if theme::choice(ui, selected_deletion == "Normal", "Normal").clicked() {
                             new_deletion = Some(FileDeletionMode::Normal);
                         }
-                        if ui
-                            .selectable_label(selected_deletion == "Secure", "Secure")
-                            .clicked()
-                        {
+                        if theme::choice(ui, selected_deletion == "Secure", "Secure").clicked() {
                             new_deletion = Some(FileDeletionMode::Secure);
                         }
                     },
@@ -1674,10 +1662,7 @@ impl App {
                             OverwriteType::ThirtyFivePass,
                         ] {
                             let label = overwrite_label(value);
-                            if ui
-                                .selectable_label(selected_overwrite == label, label)
-                                .clicked()
-                            {
+                            if theme::choice(ui, selected_overwrite == label, label).clicked() {
                                 new_overwrite = Some(value);
                             }
                         }
