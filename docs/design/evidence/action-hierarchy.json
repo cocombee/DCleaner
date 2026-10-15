@@ -2,6 +2,8 @@
   "schema": 1,
   "date": "2026-10-16",
   "scope": "Designer grouping and action hierarchy correction; anti-slop visual audit",
+  "source_commit": "6ad3ad2900e6715bc2a7292d4151f3b7da638cfe",
+  "ci_run": "https://github.com/cocombee/DCleaner/actions/runs/38791400018",
   "direction": {
     "authority": "User navy design screenshots; CCleaner captures define functional layout and actions",
     "accent": "#3999D9",
@@ -4435,7 +4437,10 @@
     },
     {
       "report": "custom-clean-catalogue-artifact-audit.json",
-      "sha256": "b28da1a5e0a24cf41a2ee70b411ddfd005971379c694df41f84e0aae8792d05b",
+      "sha256": "f9483912aca76a17e571784970c6c5dbe84fba80b07c6dca4e564bba7163c283",
+      "snapshot": "custom-clean-catalogue-artifact-audit-design-source.json",
+      "previous_report_sha256": "b28da1a5e0a24cf41a2ee70b411ddfd005971379c694df41f84e0aae8792d05b",
+      "provenance_note": "The private report was updated after the design source commit with an unsuccessful native static follow-up. The current report and snapshot have the digest above. The earlier report bytes were overwritten before preservation; its recorded digest is retained for transparency, not as a reproducible snapshot. No new native handler or catalogue evidence was obtained.",
       "raw_published": false
     }
   ],
