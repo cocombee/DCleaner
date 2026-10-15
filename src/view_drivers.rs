@@ -1015,7 +1015,7 @@ impl App {
                         ui.set_width(width);
                         close |= driver_device_heading(ui, &device, true);
                         ui.add_space(5.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(max_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| {
@@ -1165,7 +1165,7 @@ impl App {
                             t,
                         );
                         ui.add_space(8.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(max_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| {
@@ -1225,7 +1225,7 @@ impl App {
                         ui.set_width(width);
                         close |= driver_dialog_heading(ui, "Review driver update", can_dismiss);
                         ui.add_space(7.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(body_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| self.driver_update_review(body, t, &intent));
@@ -1273,7 +1273,7 @@ impl App {
                             can_dismiss,
                         );
                         ui.add_space(7.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(body_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| {
@@ -1313,7 +1313,7 @@ impl App {
                         ui.set_width(width);
                         close |= driver_dialog_heading(ui, "Review driver restore", can_dismiss);
                         ui.add_space(7.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(body_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| {
@@ -2001,19 +2001,22 @@ impl App {
         }
         let table_width = width;
         let body_height = (ctx.content_rect().bottom() - ui.cursor().top() - 90.).max(140.);
-        egui::ScrollArea::vertical()
+        let previous_y_spacing = ui.spacing().item_spacing.y;
+        ui.spacing_mut().item_spacing.y = 0.;
+        theme::scroll_vertical()
             .id_salt("driver-device-table")
             .max_height(body_height)
             .auto_shrink([false, true])
-            .show_rows(ui, 44., rows.len(), |body, visible_rows| {
+            .show_rows(ui, theme::TABLE_ROW_HEIGHT, rows.len(), |body, visible_rows| {
                 for index in visible_rows {
+                    let row_top = body.cursor().top();
                     match &rows[index] {
                         Row::Group(category, count, offers) => {
                             body.allocate_ui_with_layout(
-                                [table_width, 44.].into(),
+                                [table_width, theme::TABLE_ROW_HEIGHT].into(),
                                 Layout::left_to_right(Align::Center),
                                 |group| {
-                                    group.set_min_height(44.);
+                                    group.set_min_height(theme::TABLE_ROW_HEIGHT);
                                     group.spacing_mut().item_spacing.x = 8.;
                                     let all_selected = !offers.is_empty()
                                         && offers.iter().all(|(intent, device_id)| {
@@ -2091,10 +2094,10 @@ impl App {
                             let id = device.id.as_ref().map(|id| id.0.as_str()).unwrap_or("unknown");
                             body.push_id(id, |row| {
                                 row.allocate_ui_with_layout(
-                                    [table_width, 44.].into(),
+                                    [table_width, theme::TABLE_ROW_HEIGHT].into(),
                                     Layout::left_to_right(Align::Center),
                                     |row| {
-                                        row.set_min_height(44.);
+                                        row.set_min_height(theme::TABLE_ROW_HEIGHT);
                                         row.spacing_mut().item_spacing.x = 8.;
                                         let candidates = candidates_for(Some(snapshot), device);
                                         let single_intent = self.single_driver_offer_intent(device);
@@ -2104,7 +2107,7 @@ impl App {
                                             .zip(device_id.as_ref())
                                             .is_some_and(|(intent, id)| self.driver_offer_selected(intent, id));
                                         if offer_selected {
-                                            row.painter().rect_filled(egui::Rect::from_min_size(row.cursor().min, [table_width,44.].into()), 0., t.tint);
+                                            row.painter().rect_filled(egui::Rect::from_min_size(row.cursor().min, [table_width,theme::TABLE_ROW_HEIGHT].into()), 0., t.tint);
                                         }
                                         let selection = row
                                             .allocate_ui_with_layout(
@@ -2253,8 +2256,14 @@ impl App {
                             });
                         }
                     }
+                    body.painter().hline(
+                        body.min_rect().left()..=body.min_rect().left() + table_width,
+                        row_top + theme::TABLE_ROW_HEIGHT,
+                        egui::Stroke::new(1., t.border),
+                    );
                 }
             });
+        ui.spacing_mut().item_spacing.y = previous_y_spacing;
     }
 
     fn driver_sources_panel(&self, ui: &mut egui::Ui, t: Tokens, snapshot: &DriverSnapshot) {

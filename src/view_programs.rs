@@ -77,6 +77,7 @@ impl App {
                 | "programs-empty"
                 | "programs-populated"
                 | "programs-details"
+                | "programs-search"
                 | "programs-error"
         ) {
             return Err(format!("Unsupported Programs fixture: {case}"));
@@ -92,7 +93,10 @@ impl App {
             return Ok(());
         }
 
-        let populated = matches!(case, "programs-populated" | "programs-details");
+        let populated = matches!(
+            case,
+            "programs-populated" | "programs-details" | "programs-search"
+        );
         let programs = if populated {
             vec![
                 programs_qa_program("Example Editor", "fixture-editor", "4.2.0"),
@@ -124,6 +128,12 @@ impl App {
                 None
             },
             journal_loaded: true,
+            search_open: case == "programs-search",
+            search: if case == "programs-search" {
+                "missing fixture application".into()
+            } else {
+                String::new()
+            },
             ..ProgramsUi::default()
         };
         self.error = None;
@@ -150,7 +160,11 @@ impl App {
         let selected = self.selected_program();
         match action {
             "Installed" | "Disabled · unavailable" => Ok(()),
-            "Search software" if !self.program_ui.search_open && has_program => Ok(()),
+            "Search software"
+                if !self.program_ui.search_open && self.program_ui.inventory.is_some() =>
+            {
+                Ok(())
+            }
             "Close search" if self.program_ui.search_open => Ok(()),
             "Sort Program" | "Sort Installed" | "Sort Size" if has_program => Ok(()),
             "Details" if has_program && self.program_ui.dialog.is_none() => Ok(()),
@@ -206,11 +220,16 @@ impl App {
             "search_open": self.program_ui.search_open,
             "search_empty": self.program_ui.search.is_empty(),
             "programs": self.program_ui.inventory.as_ref().map(|inventory| inventory.programs.len()),
+            "visible_programs": self.program_ui.inventory.as_ref().map(|inventory| inventory.programs.iter().filter(|program| matches_search(program, &self.program_ui.search)).count()),
         });
         let valid = match action {
             "Installed" | "Disabled · unavailable" => state["tab"] == action,
             "Search software" => state["search_open"] == true,
-            "Close search" => state["search_open"] == false && state["search_empty"] == true,
+            "Close search" => {
+                state["search_open"] == false
+                    && state["search_empty"] == true
+                    && state["visible_programs"] == state["programs"]
+            }
             "Sort Program" => state["sort"] == "Program",
             "Sort Installed" => state["sort"] == "Installed",
             "Sort Size" => state["sort"] == "Size",
@@ -445,7 +464,7 @@ impl App {
                     close |= theme::close_button(ui, "Close dialog", can_dismiss);
                 });
                 ui.add_space(8.);
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(body_height)
                     .auto_shrink([false, true])
                     .show(ui, |body| match &dialog {
@@ -830,25 +849,25 @@ impl App {
             ui.separator();
             let body_height =
                 (ctx.content_rect().bottom() - ui.cursor().top() - 74. - 28. - 50.).max(120.);
-            egui::ScrollArea::vertical()
+            theme::scroll_vertical()
                 .id_salt("installed-programs-table-body")
                 .max_height(body_height)
                 .auto_shrink([false, true])
-                .show_rows(ui, 44.0, visible.len(), |rows_ui, visible_rows| {
+                .show_rows(ui, theme::TABLE_ROW_HEIGHT, visible.len(), |rows_ui, visible_rows| {
             for index in visible_rows {
                 let program = visible[index];
                 rows_ui.push_id(program.identity.stable_id(), |ui| {
                     let row_response = ui.allocate_ui_with_layout(
-                        [table_width, 44.].into(),
+                        [table_width, theme::TABLE_ROW_HEIGHT].into(),
                         Layout::left_to_right(Align::Center),
                         |row| {
-                            row.set_min_height(44.0);
+                            row.set_min_height(theme::TABLE_ROW_HEIGHT);
                             row.spacing_mut().item_spacing.x = 8.0;
                             row.spacing_mut().item_spacing.y = previous_y_spacing;
                             let is_selected =
                                 self.program_ui.selected.as_ref() == Some(&program.identity);
                             if is_selected {
-                                row.painter().rect_filled(egui::Rect::from_min_size(row.cursor().min, [table_width, 44.].into()), 0., t.tint);
+                                row.painter().rect_filled(egui::Rect::from_min_size(row.cursor().min, [table_width, theme::TABLE_ROW_HEIGHT].into()), 0., t.tint);
                             }
                             let icon = if qa_fixture_mode {
                                 None
@@ -968,7 +987,15 @@ impl App {
             ui.spacing_mut().item_spacing.y = previous_y_spacing;
             if visible.is_empty() {
                 ui.add_space(10.);
-                theme::muted(ui, "No installed programs match this search.", t);
+                theme::muted(
+                    ui,
+                    if self.program_ui.search.is_empty() {
+                        "No installed programs were found."
+                    } else {
+                        "No installed programs match this search."
+                    },
+                    t,
+                );
             }
             if !inventory.errors.is_empty() {
                 ui.add_space(8.);

@@ -701,7 +701,7 @@ impl App {
                         ui.set_width(modal_width);
                         close |= software_dialog_heading(ui, &item.row.name, true);
                         ui.add_space(8.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(body_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| self.software_details(body, t, &item));
@@ -766,7 +766,7 @@ impl App {
                             can_dismiss,
                         );
                         ui.add_space(8.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(body_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| {
@@ -833,7 +833,7 @@ impl App {
                             can_dismiss,
                         );
                         ui.add_space(8.);
-                        egui::ScrollArea::vertical()
+                        theme::scroll_vertical()
                             .max_height(body_height)
                             .auto_shrink([false, true])
                             .show(ui, |body| {
@@ -1271,7 +1271,7 @@ impl App {
             self.software_ui.descending,
         );
         let visible_eligible = visible_eligible_keys(&items, &eligible_keys);
-        egui::ScrollArea::horizontal().id_salt("software-table-columns").auto_shrink([false, true]).show(ui, |ui| {
+        theme::scroll_horizontal().id_salt("software-table-columns").auto_shrink([false, true]).show(ui, |ui| {
         ui.set_min_width(580.);
         let table_width = ui.available_width().max(580.);
         let action_width = 108.0;
@@ -1402,11 +1402,11 @@ impl App {
         } else {
             items.len()
         };
-        egui::ScrollArea::vertical()
+        theme::scroll_vertical()
             .id_salt("software-table-body")
             .max_height(body_height)
             .auto_shrink([false, true])
-            .show_rows(ui, 44.0, row_count, |rows_ui, visible_rows| {
+            .show_rows(ui, theme::TABLE_ROW_HEIGHT, row_count, |rows_ui, visible_rows| {
                 for virtual_index in visible_rows {
                     if has_app_updates_group && virtual_index == 0 {
                         let selected_count = visible_eligible
@@ -1418,16 +1418,16 @@ impl App {
                         let mixed = selected_count > 0 && !all_selected;
                         let mut select_group = all_selected;
                         let group_response = rows_ui.allocate_ui_with_layout(
-                            [table_width, 44.].into(),
+                            [table_width, theme::TABLE_ROW_HEIGHT].into(),
                             Layout::left_to_right(Align::Center),
                             |row| {
-                                row.set_min_height(44.0);
+                                row.set_min_height(theme::TABLE_ROW_HEIGHT);
                                 row.spacing_mut().item_spacing.x = 8.0;
                                 if selected_count > 0 {
                                     row.painter().rect_filled(
                                         egui::Rect::from_min_size(
                                             row.cursor().min,
-                                            [table_width, 44.].into(),
+                                            [table_width, theme::TABLE_ROW_HEIGHT].into(),
                                         ),
                                         0.,
                                         t.tint,
@@ -1490,10 +1490,10 @@ impl App {
                     let key = item.row_key();
                     rows_ui.push_id(&key, |ui| {
                         let row_response = ui.allocate_ui_with_layout(
-                            [table_width, 44.].into(),
+                            [table_width, theme::TABLE_ROW_HEIGHT].into(),
                             Layout::left_to_right(Align::Center),
                             |row| {
-                                row.set_min_height(44.0);
+                                row.set_min_height(theme::TABLE_ROW_HEIGHT);
                                 row.spacing_mut().item_spacing.x = 8.0;
                                 row.spacing_mut().item_spacing.y = previous_y_spacing;
                                 let selected = self.software_ui.selected_updates.contains(&key);
@@ -1501,7 +1501,7 @@ impl App {
                                     row.painter().rect_filled(
                                         egui::Rect::from_min_size(
                                             row.cursor().min,
-                                            [table_width, 44.].into(),
+                                            [table_width, theme::TABLE_ROW_HEIGHT].into(),
                                         ),
                                         0.,
                                         t.tint,

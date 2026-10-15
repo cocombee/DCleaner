@@ -1,15 +1,17 @@
 use eframe::egui::{self, Color32, FontFamily, FontId, RichText, Stroke, Vec2};
 pub const CONTENT: f32 = 28.;
+pub const PAGE_PADDING: i8 = 40;
 pub const LABEL_GAP: f32 = 8.;
-pub const CONTROL_HEIGHT: f32 = 36.;
+pub const CONTROL_HEIGHT: f32 = 40.;
 pub const CONTROL_PADDING_X: f32 = 16.;
 pub const CHECKBOX_SIZE: f32 = 18.;
-pub const CONTROL_RADIUS: u8 = 18;
+pub const CONTROL_RADIUS: u8 = 20;
 pub const SECTION_RADIUS: u8 = 16;
 pub const FIELD_HEIGHT: f32 = 32.;
 pub const FIELD_RADIUS: u8 = 16;
-pub const TAB_HEIGHT: f32 = 28.;
+pub const TAB_HEIGHT: f32 = 40.;
 pub const TABLE_ACTION_HEIGHT: f32 = 26.;
+pub const TABLE_ROW_HEIGHT: f32 = 48.;
 pub const FONT_CAPTION: f32 = 12.;
 pub const FONT_BODY: f32 = 13.;
 pub const FONT_TITLE: f32 = 16.;
@@ -199,6 +201,16 @@ pub fn action_row<R>(
     .inner
 }
 
+pub fn scroll_vertical() -> egui::ScrollArea {
+    egui::ScrollArea::vertical()
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+}
+
+pub fn scroll_horizontal() -> egui::ScrollArea {
+    egui::ScrollArea::horizontal()
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+}
+
 pub fn tabs<R>(
     ui: &mut egui::Ui,
     contents: impl FnOnce(&mut egui::Ui) -> R,
@@ -214,7 +226,7 @@ pub fn tabs<R>(
             &mut visuals.widgets.active,
             &mut visuals.widgets.open,
         ] {
-            visual.corner_radius = 14.into();
+            visual.corner_radius = ((TAB_HEIGHT / 2.) as u8).into();
         }
         ui.horizontal_wrapped(contents)
     })
@@ -230,7 +242,14 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
             FontFamily::Proportional
         }),
     );
-    record_labeled_control(ui, "tab", response.rect, 14, label, ui.is_enabled());
+    record_labeled_control(
+        ui,
+        "tab",
+        response.rect,
+        (TAB_HEIGHT / 2.) as u8,
+        label,
+        ui.is_enabled(),
+    );
     response
 }
 
@@ -430,7 +449,7 @@ pub fn input(
         .fill(ui.visuals().extreme_bg_color)
         .stroke(ui.visuals().widgets.inactive.bg_stroke)
         .corner_radius(FIELD_RADIUS)
-        .inner_margin(egui::Margin::symmetric(10, 0));
+        .inner_margin(egui::Margin::symmetric(16, 0));
     let response = ui.add_enabled(
         enabled,
         egui::TextEdit::singleline(value)
@@ -1270,6 +1289,8 @@ fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
 #[derive(Clone, Copy)]
 pub enum Icon {
     Search,
+    Sun,
+    Moon,
     Info,
     EyeOff,
     Forward,
@@ -1390,6 +1411,39 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Sun => {
+            p.circle_stroke(point(10., 10.), rect.width() * 0.225, stroke);
+            for (a, b) in [
+                ((10., 0.), (10., 3.)),
+                ((10., 17.), (10., 20.)),
+                ((0., 10.), (3., 10.)),
+                ((17., 10.), (20., 10.)),
+                ((3., 3.), (5., 5.)),
+                ((15., 15.), (17., 17.)),
+                ((3., 17.), (5., 15.)),
+                ((15., 5.), (17., 3.)),
+            ] {
+                line(&[a, b]);
+            }
+        }
+        Icon::Moon => {
+            let mut points = Vec::new();
+            for index in 0..=20 {
+                let angle =
+                    -std::f32::consts::FRAC_PI_2 - index as f32 * std::f32::consts::PI * 1.5 / 20.;
+                points.push(point(10. + 8. * angle.cos(), 10. + 8. * angle.sin()));
+            }
+            let start = 6_f32.atan2(2.);
+            let end = (-2_f32).atan2(-6.) + std::f32::consts::TAU;
+            for index in 0..=16 {
+                let angle = start + (end - start) * index as f32 / 16.;
+                points.push(point(
+                    16. + 40_f32.sqrt() * angle.cos(),
+                    4. + 40_f32.sqrt() * angle.sin(),
+                ));
+            }
+            p.add(egui::Shape::line(points, stroke));
+        }
         Icon::Search => {
             p.circle_stroke(point(8., 8.), rect.width() * 0.275, stroke);
             line(&[(12., 12.), (18., 18.)]);

@@ -340,7 +340,7 @@ impl App {
                     let body_height = (ctx.content_rect().height()
                         - (ui.cursor().top() - content_top)
                         - 48. - 48. - 32.).max(96.);
-                    egui::ScrollArea::vertical()
+                    theme::scroll_vertical()
                         .id_salt("custom-clean-settings-body")
                         .max_height(body_height)
                         .auto_shrink([false, true])
@@ -771,7 +771,7 @@ impl App {
                 ui.add_space(8.);
 
                 let max_height = (ctx.content_rect().height() - 250.).clamp(120., 400.);
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .id_salt("custom-clean-popular-sites-list")
                     .max_height(max_height)
                     .auto_shrink([false, true])

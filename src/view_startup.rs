@@ -829,7 +829,7 @@ impl App {
                     ui.set_width((ctx.content_rect().width() - 100.).clamp(300., 540.));
                     ui.heading("Startup item details");
                     ui.add_space(12.);
-                    egui::ScrollArea::vertical()
+                    theme::scroll_vertical()
                         .max_height((ctx.content_rect().height() - 190.).clamp(140., 520.))
                         .show(ui, |ui| self.entry_details(ui, t));
                     ui.add_space(12.);
@@ -860,7 +860,7 @@ impl App {
         let modal = egui::Modal::new(egui::Id::new("startup-reviewed-change")).frame(theme::dialog_frame(t)).show(ctx, |ui| {
             ui.set_width(520.);
             let max_detail_height = (ui.ctx().content_rect().height() - 210.).clamp(160., 520.);
-            egui::ScrollArea::vertical()
+            theme::scroll_vertical()
                 .max_height(max_detail_height)
                 .show(ui, |ui| {
                     ui.heading(if action.is_recovery() {
@@ -972,7 +972,7 @@ impl App {
                     });
                 });
                 ui.separator();
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(body_height)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
@@ -1075,7 +1075,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.set_width((ctx.content_rect().width() - 100.).clamp(300., 560.));
                 let max_body_height = (ctx.content_rect().height() - 210.).clamp(150., 500.);
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(max_body_height)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
@@ -1502,8 +1502,8 @@ impl App {
             let wide = available >= 900.;
             let action_width = 34.;
             let state_width = if wide { 120. } else { 96. };
-            let publisher_width = if wide { 180. } else { 110. };
-            let path_width = if wide { 260. } else { 160. };
+            let publisher_width = if wide { 180. } else { (available * 0.17).clamp(96., 110.) };
+            let path_width = if wide { 260. } else { (available * 0.24).clamp(120., 160.) };
             let columns = 5;
             let column_spacing = ui.spacing().item_spacing.x * (columns - 1) as f32;
             let program_min_width = 180.;
@@ -1522,7 +1522,7 @@ impl App {
                 + action_width
                 + column_spacing
                 + 8.;
-            egui::ScrollArea::horizontal()
+            theme::scroll_horizontal()
                 .id_salt(("startup-table-horizontal", inventory.section.label()))
                 .auto_shrink([false, true])
                 .show(ui, |table_ui| {
@@ -1566,15 +1566,15 @@ impl App {
                         .max(120.);
                     let previous_y_spacing = table_ui.spacing().item_spacing.y;
                     table_ui.spacing_mut().item_spacing.y = 0.;
-                    egui::ScrollArea::vertical()
+                    theme::scroll_vertical()
                         .id_salt(("startup-table-body", inventory.section.label()))
                         .max_height(body_height)
                         .auto_shrink([false, true])
-                        .show_rows(table_ui, 44., entries.len(), |ui, range| {
+                        .show_rows(table_ui, theme::TABLE_ROW_HEIGHT, entries.len(), |ui, range| {
                 egui::Grid::new(("startup-inventory-grid", inventory.section.label()))
                 .num_columns(columns)
                 .striped(false)
-                .min_row_height(44.)
+                .min_row_height(theme::TABLE_ROW_HEIGHT)
                 .spacing([8., 0.])
                 .min_col_width(0.)
                 .show(ui, |ui| {

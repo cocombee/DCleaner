@@ -951,10 +951,11 @@ impl App {
                 theme::table_cell(ui,"Actions",action_width,32.);
             });
             ui.separator();
-            egui::ScrollArea::vertical()
+            ui.spacing_mut().item_spacing.y = 0.;
+            theme::scroll_vertical()
                 .id_salt("cloud-table-y")
                 .max_height(410.)
-                .show_rows(ui, 44., rows.len(), |ui, range| {
+                .show_rows(ui, theme::TABLE_ROW_HEIGHT, rows.len(), |ui, range| {
                     ui.spacing_mut().item_spacing.y = 0.;
                     for index in range {
                         let item = rows[index];
@@ -964,7 +965,7 @@ impl App {
                         ui.push_id(item.id(), |ui| {
                             ui.horizontal(|ui| {
                                 ui.allocate_ui_with_layout(
-                                    Vec2::new(checkbox_width, 44.),
+                                    Vec2::new(checkbox_width, theme::TABLE_ROW_HEIGHT),
                                     Layout::left_to_right(Align::Center),
                                     |ui| {
                                         let mut selected = self.cloud_ui.selected.contains(&item.id());
@@ -980,17 +981,17 @@ impl App {
                                     ui,
                                     RichText::new(item.display_name()).family(theme::semibold()),
                                     name_width,
-                                    44.,
+                                    theme::TABLE_ROW_HEIGHT,
                                 ).on_hover_text(item.display_name());
-                                theme::table_cell(ui, cloud_size(item), size_width, 44.)
+                                theme::table_cell(ui, cloud_size(item), size_width, theme::TABLE_ROW_HEIGHT)
                                     .on_hover_text("Size is provider-reported. Gmail and other estimates are marked ≈; — means unknown.");
                                 let date = item.provider_timestamp()
                                     .and_then(|d| chrono::DateTime::from_timestamp_millis(d.unix_millis()))
                                     .map(|d| d.format("%d %b %Y").to_string())
                                     .unwrap_or_else(|| "—".into());
-                                theme::table_cell(ui, date, date_width, 44.);
+                                theme::table_cell(ui, date, date_width, theme::TABLE_ROW_HEIGHT);
                                 ui.allocate_ui_with_layout(
-                                    Vec2::new(action_width, 44.),
+                                    Vec2::new(action_width, theme::TABLE_ROW_HEIGHT),
                                     Layout::left_to_right(Align::Center),
                                     |ui| {
                                         if theme::row_action(ui, "Review", !busy).clicked() {
@@ -1035,7 +1036,7 @@ impl App {
                         });
                         ui.painter().hline(
                             row_left..=row_right,
-                            row_top + 43.,
+                            row_top + theme::TABLE_ROW_HEIGHT - 1.,
                             egui::Stroke::new(1., t.border),
                         );
                     }
@@ -1277,7 +1278,7 @@ impl App {
                 CloudDialog::Trash{ids,partial,copies,race}=>{
                     ui.heading("Review cloud cleanup");ui.add_space(12.);theme::muted(ui,"Move only the reviewed items to provider trash. This may affect synced devices. Provider trash retention varies and quota may remain occupied; DCleaner never permanently deletes cloud content.",t);
                     if let Some(snapshot)=self.cloud_ui.snapshot.as_ref(){
-                        egui::ScrollArea::vertical().max_height(230.).show(ui,|ui|{for item in snapshot.items().iter().filter(|item|ids.contains(&item.id())){ui.horizontal(|ui|{theme::table_cell(ui,item.display_name(),350.,28.);ui.label(cloud_size(item));});}});
+                        theme::scroll_vertical().max_height(230.).show(ui,|ui|{for item in snapshot.items().iter().filter(|item|ids.contains(&item.id())){ui.horizontal(|ui|{theme::table_cell(ui,item.display_name(),350.,28.);ui.label(cloud_size(item));});}});
                         if !snapshot.is_complete(){theme::checkbox(ui,partial,"I reviewed the partial-scan issues and missing items.",!busy);}
                         let selected:HashSet<_>=ids.iter().copied().collect();let all_copies=snapshot.possible_duplicate_groups().groups().iter().any(|g|g.item_ids().iter().all(|id|selected.contains(id)));
                         if all_copies{theme::checkbox(ui,copies,"I intend to trash every displayed copy in at least one possible duplicate group.",!busy);}

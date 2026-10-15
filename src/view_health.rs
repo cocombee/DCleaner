@@ -1878,7 +1878,7 @@ impl App {
                 ui.add_space(8.);
                 ui.vertical_centered(|ui| theme::muted(ui, "Close the browsers you select before continuing. Unselected browsers remain open.", t));
                 ui.add_space(20.);
-                egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 280.).max(100.)).auto_shrink([false, true]).show(ui, |ui| {
+                theme::scroll_vertical().max_height((ctx.content_rect().height() - 280.).max(100.)).auto_shrink([false, true]).show(ui, |ui| {
                     if let Some(error) = &unavailable {
                         ui.colored_label(t.attention, format!("Browser status could not be checked: {error}"));
                         refresh = theme::secondary(ui, "Refresh status", !busy);
@@ -2001,7 +2001,7 @@ impl App {
                     });
                 });
                 ui.separator();
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(body_height)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
@@ -2132,7 +2132,7 @@ impl App {
                     });
                 });
                 ui.separator();
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(body_height)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {

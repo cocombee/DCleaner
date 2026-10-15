@@ -165,7 +165,7 @@ impl App {
                 ui.set_width((ctx.content_rect().width() - 32.).clamp(280., 560.));
                 ui.heading("Review diagnostics");
                 ui.add_space(12.);
-                egui::ScrollArea::vertical().id_salt("help-diagnostic-preview")
+                theme::scroll_vertical().id_salt("help-diagnostic-preview")
                     .max_height((ctx.content_rect().height() - 220.).max(80.)).show(ui, |ui| {
                         theme::muted(ui, "This is the complete report: app version, operating system, architecture, time and whether preferences and history could be read. It contains no file paths, program lists or raw error messages.", t);
                         ui.add_space(12.);

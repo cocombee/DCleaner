@@ -261,13 +261,24 @@ impl App {
         }
         ui.horizontal_wrapped(|ui| {
             theme::tabs(ui, |ui| {
-                for (tab, label) in [
-                    (Tab::Applications, "Applications"),
-                    (Tab::Active, "Active apps"),
-                    (Tab::Sleeping, "Sleeping apps"),
-                    (Tab::Excluded, "Excluded apps"),
+                for (tab, label, icon) in [
+                    (Tab::Applications, "Applications", theme::Icon::Applications),
+                    (Tab::Active, "Active apps", theme::Icon::Sun),
+                    (Tab::Sleeping, "Sleeping apps", theme::Icon::Moon),
+                    (Tab::Excluded, "Excluded apps", theme::Icon::EyeOff),
                 ] {
-                    theme::tab_value(ui, &mut self.optimizer_ui.tab, tab, label);
+                    if theme::tab_with_icon_count(
+                        ui,
+                        self.optimizer_ui.tab == tab,
+                        icon,
+                        label,
+                        None,
+                        t,
+                    )
+                    .clicked()
+                    {
+                        self.optimizer_ui.tab = tab;
+                    }
                 }
             });
         });
@@ -416,7 +427,7 @@ impl App {
         } else {
             Vec::new()
         };
-        egui::ScrollArea::horizontal().id_salt("optimizer-table-width").auto_shrink([false,true]).show(ui,|ui| {
+        theme::scroll_horizontal().id_salt("optimizer-table-width").auto_shrink([false,true]).show(ui,|ui| {
             let width = ui.available_width().max(560.);
             let name_width = width - 148. - 90. - 116. - 24.;
             let spacing_y = ui.spacing().item_spacing.y;
@@ -461,15 +472,15 @@ impl App {
             });
             ui.add_space(3.); ui.separator();
             let body_height = (ctx.content_rect().bottom()-ui.cursor().top()-74.-28.-24.).max(80.);
-            egui::ScrollArea::vertical().id_salt("optimizer-table-body").auto_shrink([false,false]).max_height(body_height)
-                .show_rows(ui,44.,indices.len()+retained.len(),|ui,visible| {
+            theme::scroll_vertical().id_salt("optimizer-table-body").auto_shrink([false,false]).max_height(body_height)
+                .show_rows(ui,theme::TABLE_ROW_HEIGHT,indices.len()+retained.len(),|ui,visible| {
                     for i in visible {
                         let program = indices.get(i).map(|index| &snapshot.programs[*index]);
                         let key = program.map(Program::key).unwrap_or_else(||retained[i-indices.len()].clone());
                         let name = program.map(|p|p.registration.display_name.as_str()).unwrap_or("Registration not found in this scan");
                         let excluded = self.optimizer_ui.settings_error.is_none() && self.optimizer_ui.settings.is_excluded(&key);
                         ui.push_id((&key,i),|ui| {
-                            ui.allocate_ui_with_layout(Vec2::new(width,44.),Layout::left_to_right(Align::Center),|row| {
+                            ui.allocate_ui_with_layout(Vec2::new(width,theme::TABLE_ROW_HEIGHT),Layout::left_to_right(Align::Center),|row| {
                                 row.spacing_mut().item_spacing.x=8.; row.spacing_mut().item_spacing.y=spacing_y;
                                 row.allocate_ui_with_layout(Vec2::new(name_width,40.),Layout::left_to_right(Align::Center),|cell| {
                                     cell.set_min_width(name_width); cell.set_max_width(name_width);
@@ -603,7 +614,7 @@ impl App {
                 });
             });
             ui.add_space(12.);
-            egui::ScrollArea::vertical().id_salt("optimizer-dialog-body").max_height((ctx.content_rect().height()-190.).max(80.)).show(ui,|ui| {
+            theme::scroll_vertical().id_salt("optimizer-dialog-body").max_height((ctx.content_rect().height()-190.).max(80.)).show(ui,|ui| {
                 match &dialog {
                     Dialog::Details(program)=>{
                         optimizer_detail(ui,"Application",&program.registration.display_name,t);
@@ -617,15 +628,15 @@ impl App {
                         ui.add_space(12.); ui.label(RichText::new("Background candidates").family(theme::semibold()));
                         if program.candidates.is_empty() {theme::muted(ui,"No unambiguous directory candidates were found. This does not prove that an app has no background components.",t);}
                         if !program.candidates.is_empty() {
-                            egui::ScrollArea::horizontal().id_salt("optimizer-component-columns").show(ui,|ui| {
+                            theme::scroll_horizontal().id_salt("optimizer-component-columns").show(ui,|ui| {
                                 ui.spacing_mut().item_spacing.y=0.;
                                 let width=ui.available_width().max(460.);
                                 let columns=[72.,120.,width-72.-120.-78.-24.,78.];
                                 ui.horizontal(|ui| {ui.spacing_mut().item_spacing.x=8.; for (label,w) in ["Type","Program","File path","State"].into_iter().zip(columns) {theme::table_cell(ui,RichText::new(label).color(t.muted),w,22.);} });
-                                egui::ScrollArea::vertical().id_salt("optimizer-component-rows").max_height(176.).show_rows(ui,44.,program.candidates.len(),|ui,range| {
+                                theme::scroll_vertical().id_salt("optimizer-component-rows").max_height(176.).show_rows(ui,theme::TABLE_ROW_HEIGHT,program.candidates.len(),|ui,range| {
                                     for index in range {let entry=&program.candidates[index];
                                         let state=match &entry.enabled {dcleaner::startup::EnabledState::Enabled=>"Enabled",dcleaner::startup::EnabledState::Disabled=>"Disabled",dcleaner::startup::EnabledState::Unknown {..}=>"Unavailable"};
-                                        ui.horizontal(|ui| {ui.spacing_mut().item_spacing.x=8.; for (text,w) in [entry.section.label().to_owned(),optimizer_field(&entry.program),optimizer_field(&entry.file_path),state.into()].into_iter().zip(columns) {theme::table_cell(ui,text.clone(),w,44.).on_hover_text(text);} });
+                                        ui.horizontal(|ui| {ui.spacing_mut().item_spacing.x=8.; for (text,w) in [entry.section.label().to_owned(),optimizer_field(&entry.program),optimizer_field(&entry.file_path),state.into()].into_iter().zip(columns) {theme::table_cell(ui,text.clone(),w,theme::TABLE_ROW_HEIGHT).on_hover_text(text);} });
                                     }
                                 });
                             });

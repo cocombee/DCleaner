@@ -640,7 +640,7 @@ impl App {
             let name_width = flexible * 0.44;
             let path_width = flexible - name_width;
 
-            egui::ScrollArea::horizontal()
+            theme::scroll_horizontal()
                 .id_salt("recycle-bin-table-horizontal")
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
@@ -680,7 +680,7 @@ impl App {
                         theme::table_cell(ui, "", action_width, 30.);
                     });
                     ui.separator();
-                    egui::ScrollArea::vertical()
+                    theme::scroll_vertical()
                         .id_salt("recycle-bin-table-rows")
                         .max_height(420.)
                         .auto_shrink([false, true])
@@ -875,7 +875,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.set_width(width);
                 ui.set_max_width(width);
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(height)
                     .show(ui, |ui| {
                         ui.heading("Recycle Bin item details");
@@ -956,7 +956,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.set_width(width);
                 ui.set_max_width(width);
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .max_height(height)
                     .show(ui, |ui| {
                         ui.heading("Review selected Recycle Bin items");

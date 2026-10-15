@@ -944,7 +944,7 @@ impl App {
                 );
             } else {
                 let query = self.privacy_ui.search.clone();
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .id_salt("privacy-records")
                     .max_height(390.)
                     .auto_shrink([false, true])

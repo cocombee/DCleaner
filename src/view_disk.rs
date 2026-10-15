@@ -114,11 +114,11 @@ impl App {
                     .max(88.);
                 if !report.files.is_empty() { ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.y = 0.;
-                    let table_scroll = egui::ScrollArea::vertical()
+                    let table_scroll = theme::scroll_vertical()
                     .id_salt("disk-results-table")
                         .max_height(body_height)
                     .auto_shrink([false, true])
-                    .show_rows(ui, 44., report.files.len(), |ui, range| {
+                    .show_rows(ui, theme::TABLE_ROW_HEIGHT, report.files.len(), |ui, range| {
                         for index in range {
                             let file = &report.files[index];
                             let path = file.path.display().to_string();
@@ -128,18 +128,18 @@ impl App {
                                         ui,
                                         path.clone(),
                                         path_width,
-                                        44.,
+                                        theme::TABLE_ROW_HEIGHT,
                                     )
                                     .on_hover_text(path);
                                     ui.allocate_ui_with_layout(
-                                        Vec2::new(size_width, 44.),
+                                        Vec2::new(size_width, theme::TABLE_ROW_HEIGHT),
                                         Layout::right_to_left(Align::Center),
                                         |ui| {
                                             ui.label(size(file.size));
                                         },
                                     );
                                     ui.allocate_ui_with_layout(
-                                        Vec2::new(actions_width, 44.),
+                                        Vec2::new(actions_width, theme::TABLE_ROW_HEIGHT),
                                         Layout::left_to_right(Align::Center),
                                         |ui| {
                                             if theme::row_action(ui, "Details", true).clicked() {
@@ -222,7 +222,7 @@ impl App {
                 });
                 ui.add_space(8.);
                 theme::muted(ui, "Full path", t);
-                egui::ScrollArea::vertical()
+                theme::scroll_vertical()
                     .id_salt("disk-details-path")
                     .max_height(150.)
                     .show(ui, |ui| {

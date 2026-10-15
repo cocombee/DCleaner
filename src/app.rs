@@ -453,6 +453,7 @@ impl App {
                 | "startup-help"
                 | "programs-empty"
                 | "programs-populated"
+                | "programs-search"
                 | "programs-details"
                 | "programs-error"
                 | "programs-intro"
@@ -1256,7 +1257,7 @@ impl App {
                         ui.label(&category.name);ui.with_layout(Layout::right_to_left(Align::Center),|ui|{ui.label(size(category.bytes()));theme::muted(ui,format!("{} files   {status}",category.files.len()),t);});});
                     if category.skipped>0{theme::muted(ui,format!("{} inaccessible or linked locations skipped",category.skipped),t);}
                     egui::CollapsingHeader::new(format!("View files — {}",category.name)).id_salt(&category.id).show(ui,|ui|{
-                        egui::ScrollArea::vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
+                        theme::scroll_vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
                             for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,&mut selected,!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(theme::FONT_CAPTION)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(theme::FONT_CAPTION));});}
                             if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
                         });});ui.separator();
@@ -2106,7 +2107,7 @@ impl App {
                             egui::Frame::new()
                                 .fill(t.sidebar)
                                 .stroke(egui::Stroke::new(1., t.border))
-                                .inner_margin(egui::Margin::symmetric(28, 18)),
+                                .inner_margin(egui::Margin::symmetric(theme::PAGE_PADDING, 18)),
                         )
                         .show(ui, |ui| {
                             ui.spacing_mut().interact_size.y = theme::CONTROL_HEIGHT;
@@ -2139,8 +2140,8 @@ impl App {
                 }
                 egui::Frame::new()
                     .inner_margin(egui::Margin {
-                        left: 28,
-                        right: 28,
+                        left: theme::PAGE_PADDING,
+                        right: theme::PAGE_PADDING,
                         top: if cfg!(windows) { 60 } else { 28 },
                         bottom: 28,
                     })
@@ -2223,7 +2224,7 @@ impl App {
                                 26.
                             });
                         }
-                        let page_scroll = egui::ScrollArea::vertical()
+                        let page_scroll = theme::scroll_vertical()
                             .auto_shrink([false, false])
                             .id_salt(self.page.name())
                             .show(ui, |ui| {
