@@ -9,6 +9,8 @@ use dcleaner::{
     },
 };
 use eframe::egui::{self, Align, Layout, RichText};
+#[cfg(debug_assertions)]
+use std::{collections::VecDeque, ffi::OsString, path::PathBuf};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, mpsc},
@@ -95,10 +97,45 @@ pub(super) enum RecycleBinEvent {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_recycle_bin_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Recycle Bin fixtures are available only in isolated visual QA.".into());
+        }
+        let mut ui = RecycleBinUi::default();
+        ui.loaded = true;
+        ui.journal_readable = false;
+        ui.journal_error = Some("Synthetic visual fixture; operation history was not read.".into());
+        match case {
+            "recyclebin-empty" => {
+                ui.inventory = Some(build_recycle_bin_preview_inventory(false, false));
+            }
+            "recyclebin-populated" | "recyclebin-details" => {
+                ui.inventory = Some(build_recycle_bin_preview_inventory(false, true));
+                if case == "recyclebin-details" {
+                    ui.detail_id = ui
+                        .inventory
+                        .as_ref()
+                        .and_then(|inventory| inventory.items.first())
+                        .map(RecycleBinItem::id);
+                }
+            }
+            "recyclebin-error" => {
+                ui.inventory = Some(build_recycle_bin_preview_inventory(true, false));
+            }
+            _ => return Err(format!("Unsupported Recycle Bin visual fixture: {case}")),
+        }
+        self.recycle_bin_ui = ui;
+        Ok(())
+    }
+
     /// Called by the Custom Clean navigation transition whenever the user
     /// enters Junk > Recycle Bin. The list is always refreshed for that visit.
     pub(super) fn recycle_bin_entered(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.recycle_bin_ui.operation != RecycleBinOperationState::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.recycle_bin_ui.operation != RecycleBinOperationState::Idle
+        {
             return;
         }
         self.recycle_bin_ui.loaded = false;
@@ -112,7 +149,8 @@ impl App {
     }
 
     pub(super) fn recycle_bin_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if !self.recycle_bin_ui.loaded
+        if !self.qa_fixture_mode()
+            && !self.recycle_bin_ui.loaded
             && self.recycle_bin_ui.operation == RecycleBinOperationState::Idle
             && !self.busy()
         {
@@ -371,7 +409,7 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new(inventory.item_count().to_string())
-                    .size(21.)
+                    .size(theme::FONT_DISPLAY)
                     .family(theme::semibold()),
             );
             theme::muted(ui, "items", t);
@@ -962,7 +1000,10 @@ impl App {
     }
 
     fn begin_recycle_bin_inventory(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.recycle_bin_ui.operation != RecycleBinOperationState::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.recycle_bin_ui.operation != RecycleBinOperationState::Idle
+        {
             return;
         }
         self.recycle_bin_ui.operation = RecycleBinOperationState::Loading;
@@ -1003,7 +1044,8 @@ impl App {
     }
 
     fn begin_recycle_bin_operation(&mut self, operation: RecycleBinOperation, ctx: &egui::Context) {
-        if self.busy()
+        if self.qa_fixture_mode()
+            || self.busy()
             || self.recycle_bin_ui.operation != RecycleBinOperationState::Idle
             || !self.recycle_bin_ui.journal_readable
             || self.data_dir.as_os_str().is_empty()
@@ -1255,4 +1297,91 @@ fn operation_label(operation: &str) -> &str {
 
 fn short_uuid(value: &str) -> &str {
     value.get(..8).unwrap_or(value)
+}
+
+#[cfg(debug_assertions)]
+struct RecycleBinPreviewPort {
+    items: Vec<recycle_bin::PortItem>,
+    sizes: VecDeque<RecycleBinSize>,
+    fail_list: bool,
+}
+
+#[cfg(debug_assertions)]
+impl recycle_bin::RecycleBinPort for RecycleBinPreviewPort {
+    fn list(&mut self) -> Result<Vec<recycle_bin::PortItem>, recycle_bin::PortError> {
+        if self.fail_list {
+            return Err(recycle_bin::PortError::unavailable(
+                "Synthetic fixture error: recycle-bin inventory was unavailable.",
+            ));
+        }
+        Ok(self.items.clone())
+    }
+
+    fn metadata(
+        &mut self,
+        _item: &recycle_bin::PortItem,
+    ) -> Result<RecycleBinSize, recycle_bin::PortError> {
+        self.sizes.pop_front().ok_or_else(|| {
+            recycle_bin::PortError::failed("Synthetic fixture metadata was not seeded.")
+        })
+    }
+
+    fn restore_one(&mut self, _item: &recycle_bin::PortItem) -> Result<(), recycle_bin::PortError> {
+        Err(recycle_bin::PortError::unsupported(
+            "Visual fixtures never restore items.",
+        ))
+    }
+
+    fn purge_one(&mut self, _item: &recycle_bin::PortItem) -> Result<(), recycle_bin::PortError> {
+        Err(recycle_bin::PortError::unsupported(
+            "Visual fixtures never purge items.",
+        ))
+    }
+}
+
+#[cfg(debug_assertions)]
+fn build_recycle_bin_preview_inventory(fail_list: bool, populated: bool) -> RecycleBinInventory {
+    let items = if populated {
+        vec![
+            recycle_bin::PortItem::new(
+                b"fixture-item-1".to_vec(),
+                OsString::from("meeting-notes.txt"),
+                PathBuf::from(r"C:\Fixture\Documents"),
+                1_790_000_000,
+            ),
+            recycle_bin::PortItem::new(
+                b"fixture-item-2".to_vec(),
+                OsString::from("render-cache.bin"),
+                PathBuf::from(r"C:\Fixture\Projects"),
+                1_789_000_000,
+            ),
+            recycle_bin::PortItem::new(
+                b"fixture-item-3".to_vec(),
+                OsString::from("archive-folder"),
+                PathBuf::from(r"C:\Fixture\Backups"),
+                1_788_000_000,
+            ),
+        ]
+    } else {
+        Vec::new()
+    };
+    let sizes = if populated {
+        VecDeque::from([
+            RecycleBinSize::Bytes(2_048),
+            RecycleBinSize::Bytes(0),
+            RecycleBinSize::Entries(3),
+        ])
+    } else {
+        VecDeque::new()
+    };
+    let mut port = RecycleBinPreviewPort {
+        items,
+        sizes,
+        fail_list,
+    };
+    recycle_bin::inventory(
+        &mut port,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
 }

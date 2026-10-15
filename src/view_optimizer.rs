@@ -3,6 +3,11 @@ use dcleaner::{
     optimizer_inventory::{self, Program, Settings, Snapshot},
     startup::FieldValue,
 };
+#[cfg(debug_assertions)]
+use dcleaner::{
+    programs::{InstalledProgram, ProgramIdentity, RegistryHive, RegistrySource, RegistryView},
+    startup::{EnabledState, EntryIdentity, StartupEntry, StartupId, StartupSection},
+};
 
 #[derive(Clone, Copy, Default, PartialEq)]
 enum Tab {
@@ -43,8 +48,56 @@ pub(super) enum OptimizerEvent {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_optimizer_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Optimizer QA fixtures require isolated fixture mode.".into());
+        }
+        let intro = case == "optimizer-intro";
+        let mut ui = OptimizerUi {
+            attempted: !intro,
+            ..OptimizerUi::default()
+        };
+        self.error = None;
+        self.notice = None;
+        self.progress.clear();
+        match case {
+            "optimizer-intro" => {}
+            "optimizer-empty" => {
+                ui.snapshot = Some(Arc::new(Snapshot::default()));
+            }
+            "optimizer-populated" | "optimizer-details" => {
+                let program = optimizer_qa_program();
+                ui.snapshot = Some(Arc::new(Snapshot {
+                    programs: vec![program.clone()],
+                    notes: vec![
+                        "Synthetic QA fixture; no installed-program or startup inventory was read."
+                            .into(),
+                    ],
+                    cancelled: false,
+                    partial: false,
+                }));
+                if case == "optimizer-details" {
+                    ui.dialog = Some(Dialog::Details(Arc::new(program)));
+                }
+            }
+            "optimizer-error" => {
+                self.error = Some(
+                    "Synthetic QA fixture error. No optimizer inventory or settings were read."
+                        .into(),
+                );
+            }
+            _ => return Err(format!("Unsupported Optimizer QA fixture: {case}")),
+        }
+        if !intro {
+            self.mark_feature_seen("optimizer");
+        }
+        self.optimizer_ui = ui;
+        Ok(())
+    }
+
     fn begin_optimizer_scan(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.optimizer_ui.loading = true;
@@ -107,7 +160,37 @@ impl App {
         }
     }
     pub(super) fn optimizer_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if !self.optimizer_ui.attempted && !self.busy() {
+        if self.qa_fixture_mode() {
+            theme::muted(
+                ui,
+                "QA fixture — synthetic data only; no inventory or effects were run.",
+                t,
+            );
+            ui.add_space(6.);
+        }
+        if !self.feature_seen("optimizer") {
+            if self.feature_intro(
+                ui,
+                t,
+                "optimizer",
+                "Review apps and startup options",
+                "Start with a read-only inventory of installed applications and possible background entries. Impact and sleep state are unavailable in this build.",
+                &[
+                    (
+                        "Improve overall performance",
+                        "Review app registrations and possible background entries; impact has not been measured.",
+                    ),
+                    (
+                        "More startup speed",
+                        "Review startup-related registrations. Putting apps to sleep is unavailable in this build.",
+                    ),
+                ],
+            ) {
+                self.start_optimizer(ctx);
+            }
+            return;
+        }
+        if !self.optimizer_ui.attempted && !self.busy() && !self.qa_fixture_mode() {
             self.begin_optimizer_scan(ctx);
         }
         ui.horizontal_wrapped(|ui| {
@@ -260,7 +343,7 @@ impl App {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.;
                 for (label,w) in [("Program",name_width),("Publisher",148.),("Impact",90.),("Actions",116.)] {
-                    theme::table_cell(ui,RichText::new(label).color(t.muted).size(12.),w,22.);
+                    theme::table_cell(ui,RichText::new(label).color(t.muted).size(theme::FONT_CAPTION),w,22.);
                 }
             });
             ui.add_space(3.); ui.separator();
@@ -279,7 +362,7 @@ impl App {
                                     cell.set_min_width(name_width); cell.set_max_width(name_width);
                                     cell.spacing_mut().item_spacing.x=8.;
                                     self.app_icons.show(cell,program.and_then(|p|p.registration.icon_resource()).as_deref(),22.);
-                                    let response = cell.add_sized([(name_width-30.).max(80.),40.],egui::Button::new((RichText::new(name).family(theme::semibold()),egui::Atom::grow())).frame(false).truncate());
+                                    let response = cell.add_sized([(name_width-30.).max(80.),40.],egui::Button::new((RichText::new(name).family(theme::semibold()).color(t.foreground),egui::Atom::grow())).frame(false).truncate());
                                     if response.clicked() { self.optimizer_ui.dialog=Some(optimizer_details_for(program,&key)); }
                                     response.on_hover_text(name).on_hover_text(&key);
                                 });
@@ -321,6 +404,27 @@ impl App {
         }
     }
     pub(super) fn optimizer_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if !self.feature_seen("optimizer") {
+            let compact = !self.feature_intro_wide(ctx);
+            let mut start = false;
+            theme::action_row(ui, |ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if compact {
+                        start = theme::primary(ui, "Scan now", t, !self.busy());
+                    } else {
+                        theme::muted(
+                            ui,
+                            "Review installed applications and possible background entries before deciding what to change.",
+                            t,
+                        );
+                    }
+                });
+            });
+            if start {
+                self.start_optimizer(ctx);
+            }
+            return;
+        }
         theme::action_row(ui, |ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if self.optimizer_ui.loading {
@@ -344,6 +448,12 @@ impl App {
             });
         });
     }
+
+    fn start_optimizer(&mut self, ctx: &egui::Context) {
+        self.mark_feature_seen("optimizer");
+        self.begin_optimizer_scan(ctx);
+    }
+
     pub(super) fn optimizer_dialog(&mut self, ctx: &egui::Context) {
         let Some(dialog) = self.optimizer_ui.dialog.clone() else {
             return;
@@ -403,13 +513,16 @@ impl App {
             theme::action_row(ui,|ui| {
                 if theme::secondary(ui,if matches!(dialog,Dialog::Details(_) | Dialog::RetainedKey(_)){"Close"} else {"Cancel"},can_close) {close=true;}
                 if let Dialog::Exclusion {key,excluded,..}=&dialog {
-                    if theme::primary(ui,if *excluded {"Exclude app"} else {"Remove exclusion"},t,!busy && self.optimizer_ui.settings_error.is_none()) {save=Some((key.clone(),*excluded));}
+                    if theme::primary(ui,if *excluded {"Exclude app"} else {"Remove exclusion"},t,!busy && !self.qa_fixture_mode() && self.optimizer_ui.settings_error.is_none()) {save=Some((key.clone(),*excluded));}
                 }
             });
         });
         if can_close && (close || response.should_close()) {
             self.optimizer_ui.dialog = None;
         } else if let Some((key, excluded)) = save {
+            if self.qa_fixture_mode() {
+                return;
+            }
             let root = self.data_dir.clone();
             let settings = self.optimizer_ui.settings.clone();
             let (tx, rx) = mpsc::channel();
@@ -425,6 +538,66 @@ impl App {
         }
     }
 }
+
+#[cfg(debug_assertions)]
+fn optimizer_qa_program() -> Program {
+    let hive = RegistryHive::CurrentUser;
+    let registry_source = RegistrySource {
+        hive,
+        view: RegistryView::Registry64,
+    };
+    Program {
+        registration: InstalledProgram {
+            identity: ProgramIdentity {
+                hive,
+                key_name: "dcleaner-qa-fixture".into(),
+            },
+            source: registry_source,
+            display_name: "QA fixture application (synthetic)".into(),
+            display_icon: None,
+            publisher: Some("Synthetic fixture publisher".into()),
+            version: Some("0.0-qa".into()),
+            install_location: None,
+            install_date: Some("20261015".into()),
+            estimated_size_bytes: None,
+            registered_uninstall_command: None,
+            uninstall_command: None,
+            uninstall_command_error: None,
+            system_component: false,
+            protected: false,
+            no_remove: false,
+        },
+        candidates: vec![StartupEntry {
+            id: StartupId("qa-fixture-component-1".into()),
+            section: StartupSection::WindowsServices,
+            program: FieldValue::Known {
+                value: "Synthetic background component".into(),
+            },
+            publisher: FieldValue::Unknown {
+                reason: "No publisher metadata is included in this fixture.".into(),
+            },
+            version: FieldValue::Unknown {
+                reason: "No version metadata is included in this fixture.".into(),
+            },
+            file_path: FieldValue::Unknown {
+                reason: "No executable path is included in this fixture.".into(),
+            },
+            command: FieldValue::Unknown {
+                reason: "No command line is included in this fixture.".into(),
+            },
+            enabled: EnabledState::Unknown {
+                reason: "The fixture does not represent an actual service state.".into(),
+            },
+            identity: EntryIdentity::WindowsService {
+                name: "qa-fixture-service".into(),
+            },
+            can_change_enabled: false,
+            change_limitation: Some("Synthetic QA fixture; no service control is available.".into()),
+        }],
+        association_note: "Synthetic QA fixture only. The component row is illustrative and was not associated with a real installation or native inventory.".into(),
+    }
+}
+
 fn optimizer_details_for(program: Option<&Program>, key: &str) -> Dialog {
     program
         .map(|p| Dialog::Details(Arc::new(p.clone())))

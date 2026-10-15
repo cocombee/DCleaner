@@ -109,6 +109,10 @@ pub(super) enum CloudEvent {
 
 impl App {
     #[cfg(debug_assertions)]
+    pub(super) fn qa_cloud_state(&self) -> serde_json::Value {
+        serde_json::json!({"introduced":self.cloud_ui.introduced,"history":self.cloud_ui.filter == CloudFilter::History})
+    }
+    #[cfg(debug_assertions)]
     pub(super) fn seed_cloud_qa(&mut self, case: &str) {
         self.cloud_ui = CloudUi {
             attempted: true,
@@ -417,8 +421,10 @@ impl App {
                 cloud_intro_steps(ui, t);
             }
             ui.add_space(16.);
-            if theme::primary(ui, "Get started", t, !busy) {
-                self.cloud_ui.introduced = true;
+            if ui.available_width() >= 760. {
+                if theme::primary(ui, "Get started", t, !busy) {
+                    self.cloud_ui.introduced = true;
+                }
             }
             ui.add_space(12.);
             if theme::secondary(ui, "Cleanup history", !busy) {
@@ -528,7 +534,7 @@ impl App {
                 ui.label(
                     RichText::new("Ready to review your cloud")
                         .family(theme::semibold())
-                        .size(20.),
+                        .size(theme::FONT_DISPLAY),
                 );
                 ui.add_space(12.);
                 theme::muted(
@@ -544,7 +550,7 @@ impl App {
             ui.label(
                 RichText::new("Clean your cloud storage account")
                     .family(theme::semibold())
-                    .size(22.),
+                    .size(theme::FONT_DISPLAY),
             );
             ui.add_space(8.);
             theme::muted(ui, "Connect an account to scan and review its files.", t);
@@ -567,7 +573,7 @@ impl App {
             ui.label(
                 RichText::new("Organize and clean your mailbox")
                     .family(theme::semibold())
-                    .size(22.),
+                    .size(theme::FONT_DISPLAY),
             );
             ui.add_space(8.);
             theme::muted(
@@ -622,7 +628,7 @@ impl App {
                     ui.label(
                         RichText::new(provider.label())
                             .family(theme::semibold())
-                            .size(15.),
+                            .size(theme::FONT_TITLE),
                     );
                     ui.add_space(6.);
                     theme::muted(
@@ -965,6 +971,7 @@ impl App {
     pub(super) fn cloud_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let busy = self.busy();
         let storage_available = self.cloud_storage_available();
+        let compact = ui.available_width() < 760.;
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if self.cloud_ui.filter == CloudFilter::History {
                 if theme::secondary(ui, "Refresh history", !busy) {
@@ -1001,6 +1008,10 @@ impl App {
                     self.begin_cloud_scan(ctx);
                 }
                 theme::muted(ui, &format!("{} selected", self.cloud_ui.selected.len()), t);
+            } else if !self.cloud_ui.introduced && compact {
+                if theme::primary(ui, "Get started", t, !busy) {
+                    self.cloud_ui.introduced = true;
+                }
             } else {
                 theme::muted(ui, "Choose a provider to connect", t);
             }
@@ -1260,7 +1271,11 @@ fn cloud_intro_steps(ui: &mut egui::Ui, t: Tokens) {
             ui.add_space(8.);
             ui.vertical(|ui| {
                 ui.set_width(text_width);
-                ui.label(RichText::new(title).family(theme::semibold()).size(15.));
+                ui.label(
+                    RichText::new(title)
+                        .family(theme::semibold())
+                        .size(theme::FONT_TITLE),
+                );
                 ui.add_space(6.);
                 ui.add(egui::Label::new(RichText::new(description).color(t.muted)).wrap());
                 if index == 0 {

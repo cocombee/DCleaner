@@ -7,6 +7,10 @@ pub(super) struct DiskUi {
 
 impl App {
     #[cfg(debug_assertions)]
+    pub(super) fn qa_disk_detail_open(&self) -> bool {
+        self.disk_ui.details.is_some()
+    }
+    #[cfg(debug_assertions)]
     pub(super) fn seed_disk_qa(&mut self, case: &str) {
         let root = PathBuf::from(r"C:\__dcleaner_visual_fixture__");
         let files = if case == "disk-empty" {
@@ -106,11 +110,13 @@ impl App {
                 });
                 ui.separator();
 
-                ui.scope(|ui| {
+                let body_height = (ui.clip_rect().bottom() - ui.cursor().top() - 28. - 24. - theme::LABEL_GAP)
+                    .max(88.);
+                if !report.files.is_empty() { ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.y = 0.;
-                    egui::ScrollArea::vertical()
+                    let table_scroll = egui::ScrollArea::vertical()
                     .id_salt("disk-results-table")
-                    .max_height(440.)
+                        .max_height(body_height)
                     .auto_shrink([false, false])
                     .show_rows(ui, 44., report.files.len(), |ui, range| {
                         for index in range {
@@ -150,7 +156,11 @@ impl App {
                             });
                         }
                     });
-                });
+                    #[cfg(debug_assertions)]
+                    theme::record_scroll(_ctx, "disk-table", table_scroll.inner_rect, table_scroll.content_size, table_scroll.state.offset);
+                    #[cfg(not(debug_assertions))]
+                    let _ = table_scroll;
+                }); }
 
                 if report.files.is_empty() {
                     ui.add_space(20.);
@@ -159,7 +169,7 @@ impl App {
             } else {
                 ui.add_space(28.);
                 ui.vertical_centered(|ui| {
-                    ui.label(RichText::new("See where your space goes").size(18.));
+                    ui.label(RichText::new("See where your space goes").size(theme::FONT_TITLE));
                     ui.add_space(8.);
                     theme::muted(
                         ui,

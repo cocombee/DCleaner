@@ -243,6 +243,73 @@ fn save_png(path: &Path, width: usize, height: usize, pixels: &[u8]) -> Result<(
         .map_err(|error| error.to_string())
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UiAction {
+    label: String,
+    occurrence: Option<usize>,
+}
+
+fn click_point(
+    context: &egui::Context,
+    action: &UiAction,
+    dimensions: [usize; 2],
+) -> Result<egui::Pos2, String> {
+    let geometry = crate::theme::geometry_json(context);
+    let controls = geometry["controls"]
+        .as_array()
+        .ok_or("Control geometry unavailable")?;
+    let matches: Vec<_> = controls
+        .iter()
+        .filter(|control| control["label"] == action.label && control["enabled"] == true)
+        .collect();
+    if matches.len() > 1 && action.occurrence.is_none() {
+        return Err(format!(
+            "Ambiguous rendered control; specify its occurrence: {}",
+            action.label
+        ));
+    }
+    let control = matches
+        .get(action.occurrence.unwrap_or(0))
+        .ok_or_else(|| format!("Enabled rendered control not found: {}", action.label))?;
+    let rect = control["rect"]
+        .as_array()
+        .ok_or("Control bounds unavailable")?;
+    let number = |index: usize| {
+        rect.get(index)
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32)
+            .ok_or("Invalid control bound")
+    };
+    let point = egui::pos2(number(0)? + number(2)? / 2., number(1)? + number(3)? / 2.);
+    if point.x < 0.
+        || point.y < 0.
+        || point.x >= dimensions[0] as f32
+        || point.y >= dimensions[1] as f32
+    {
+        return Err("Requested control is outside the rendered viewport.".into());
+    }
+    Ok(point)
+}
+
+fn capture_mesh_frame(
+    context: &egui::Context,
+    output: &egui::FullOutput,
+    textures: &Textures,
+    dimensions: [usize; 2],
+    destination: &Path,
+) -> Result<(), String> {
+    let primitives = context.tessellate(output.shapes.clone(), output.pixels_per_point);
+    let pixels = rasterize(
+        &primitives,
+        textures,
+        dimensions[0],
+        dimensions[1],
+        output.pixels_per_point,
+    )?;
+    save_png(destination, dimensions[0], dimensions[1], &pixels)
+}
+
 pub fn run() -> Result<(), String> {
     let destination = std::path::PathBuf::from(
         std::env::var_os("DCLEANER_QA_CAPTURE")
@@ -267,11 +334,47 @@ pub fn run() -> Result<(), String> {
     };
     let fixture_case = std::env::var("DCLEANER_QA_CASE")
         .map_err(|_| "Offscreen QA requires an explicit supported DCLEANER_QA_CASE; host inventories are never loaded.".to_string())?;
+    let mut actions: std::collections::VecDeque<UiAction> =
+        serde_json::from_str(&std::env::var("DCLEANER_QA_ACTIONS").unwrap_or_else(|_| "[]".into()))
+            .map_err(|error| format!("Invalid fixture UI actions: {error}"))?;
+    if actions.len() > 16
+        || actions.iter().any(|action| {
+            !matches!(
+                action.label.as_str(),
+                "Get started"
+                    | "Cleanup history"
+                    | "Details"
+                    | "Close"
+                    | "Copy path"
+                    | "About Startup Manager"
+                    | "Got it"
+                    | "Scan now"
+                    | "Start now"
+                    | "Sort Program"
+                    | "Sort Publisher"
+            )
+        })
+        || (!actions.is_empty()
+            && !fixture_case.starts_with("cloud-")
+            && !fixture_case.starts_with("disk-")
+            && !fixture_case.starts_with("startup-")
+            && !fixture_case.ends_with("-intro"))
+    {
+        return Err(
+            "Fixture actions must use the bounded, effect-free Cloud/Disk/Startup/first-use action set."
+                .into(),
+        );
+    }
     let context = egui::Context::default();
     let mut app = crate::app::App::new_fixture_with_context(&context, &fixture_case)?;
     let mut textures = Textures::default();
     let started = Instant::now();
     let mut idle_frames = 0;
+    let mut pending_events = Vec::new();
+    let mut release_at = None;
+    let mut awaiting_action: Option<UiAction> = None;
+    let mut action_log = Vec::new();
+    let mut copy_request_observed = false;
     loop {
         let mut input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -280,6 +383,7 @@ pub fn run() -> Result<(), String> {
             )),
             time: Some(started.elapsed().as_secs_f64()),
             focused: true,
+            events: std::mem::take(&mut pending_events),
             ..Default::default()
         };
         if let Some(viewport) = input.viewports.get_mut(&egui::ViewportId::ROOT) {
@@ -287,13 +391,80 @@ pub fn run() -> Result<(), String> {
             viewport.focused = Some(true);
         }
         let mut output = context.run_ui(input, |root| app.paint(root));
+        copy_request_observed |= output.platform_output.commands.iter().any(
+            |command| matches!(command,egui::OutputCommand::CopyText(text) if !text.is_empty()),
+        );
         textures.apply(&mut output.textures_delta)?;
+        if let Some(point) = release_at.take() {
+            pending_events.push(egui::Event::PointerButton {
+                pos: point,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+            idle_frames = 0;
+            textures.finish_frame();
+            continue;
+        }
         if app.qa_busy() {
             idle_frames = 0;
         } else {
             idle_frames += 1;
         }
         if idle_frames >= 20 {
+            if let Some(action) = awaiting_action.take() {
+                let state = app.qa_action_state(&action.label)?;
+                if action.label == "Copy path" && !copy_request_observed {
+                    return Err(
+                        "Copy path did not emit a copy request; no native clipboard was touched."
+                            .into(),
+                    );
+                }
+                let stem = destination
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .ok_or("Capture stem unavailable")?;
+                capture_mesh_frame(
+                    &context,
+                    &output,
+                    &textures,
+                    dimensions,
+                    &destination
+                        .with_file_name(format!("{stem}.step-{:02}-after.png", action_log.len())),
+                )?;
+                action_log.push(serde_json::json!({"label":action.label,"occurrence":action.occurrence,"post_state":state,"physical_input":false}));
+            }
+            if let Some(action) = actions.pop_front() {
+                app.qa_action_precondition(&action.label)?;
+                copy_request_observed = false;
+                let point = click_point(&context, &action, dimensions)?;
+                let stem = destination
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .ok_or("Capture stem unavailable")?;
+                capture_mesh_frame(
+                    &context,
+                    &output,
+                    &textures,
+                    dimensions,
+                    &destination
+                        .with_file_name(format!("{stem}.step-{:02}-before.png", action_log.len())),
+                )?;
+                pending_events.extend([
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                release_at = Some(point);
+                awaiting_action = Some(action);
+                idle_frames = 0;
+                textures.finish_frame();
+                continue;
+            }
             let primitives = context.tessellate(output.shapes, output.pixels_per_point);
             let pixels = rasterize(
                 &primitives,
@@ -303,6 +474,7 @@ pub fn run() -> Result<(), String> {
                 output.pixels_per_point,
             )?;
             save_png(&destination, dimensions[0], dimensions[1], &pixels)?;
+            std::fs::write(destination.with_extension("actions.json"),serde_json::to_vec_pretty(&serde_json::json!({"in_memory_egui_events":true,"physical_input":false,"native_effects":false,"actions":action_log})).map_err(|error|error.to_string())?).map_err(|error|error.to_string())?;
             std::fs::write(
                 destination.with_extension("layout.json"),
                 serde_json::to_vec_pretty(&crate::theme::geometry_json(&context))

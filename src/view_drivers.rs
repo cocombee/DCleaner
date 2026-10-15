@@ -1,5 +1,9 @@
 use super::*;
 use crate::theme;
+#[cfg(debug_assertions)]
+use dcleaner::drivers::{
+    DeviceInventory, DriverCatalogue, FieldFailure, FieldFailureKind, NativeIssue, SourceReport,
+};
 use dcleaner::{
     drivers::{
         self, CatalogueState, DeviceId, DeviceOffer, DriverCandidate, DriverDevice,
@@ -16,6 +20,7 @@ const MAX_DRIVER_BATCH_OFFERS: usize = 16;
 pub(super) struct DriverUi {
     snapshot: Option<DriverSnapshot>,
     attempted: bool,
+    intro_fixture: bool,
     loading: bool,
     query: String,
     tab: DriverTab,
@@ -35,6 +40,7 @@ impl Default for DriverUi {
         Self {
             snapshot: None,
             attempted: false,
+            intro_fixture: false,
             loading: false,
             query: String::new(),
             tab: DriverTab::Outdated,
@@ -155,6 +161,57 @@ enum DetailAction {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_drivers_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Driver QA fixtures require isolated fixture mode.".into());
+        }
+        if case == "drivers-intro" {
+            self.drivers_ui = DriverUi {
+                intro_fixture: true,
+                settings: Some(DriverSettings::default()),
+                ..DriverUi::default()
+            };
+            self.error = None;
+            self.notice = None;
+            self.progress.clear();
+            return Ok(());
+        }
+        let mut ui = DriverUi {
+            attempted: true,
+            settings: Some(DriverSettings::default()),
+            ..DriverUi::default()
+        };
+        self.error = None;
+        self.notice = None;
+        self.progress.clear();
+        match case {
+            "drivers-empty" => ui.snapshot = Some(driver_qa_snapshot(false)),
+            "drivers-populated" | "drivers-details" => {
+                let snapshot = driver_qa_snapshot(true);
+                // The synthetic device has no matching Windows Update offer, so show it under
+                // the no-offer / unknown tab instead of hiding it in Outdated.
+                ui.tab = DriverTab::Current;
+                if case == "drivers-details" {
+                    if let Some(device) = snapshot.inventory.devices.first() {
+                        ui.selected = device.id.clone();
+                        ui.dialog = Some(DriverDialog::Details(device.clone()));
+                    }
+                }
+                ui.snapshot = Some(snapshot);
+            }
+            "drivers-error" => {
+                self.error = Some(
+                    "Synthetic QA fixture error. No device inventory or update source was queried."
+                        .into(),
+                );
+            }
+            _ => return Err(format!("Unsupported Drivers QA fixture: {case}")),
+        }
+        self.drivers_ui = ui;
+        Ok(())
+    }
+
     pub(super) fn drivers_event(&mut self, event: DriverEvent) {
         match event {
             DriverEvent::Loaded {
@@ -337,7 +394,37 @@ impl App {
     }
 
     pub(super) fn drivers_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if !self.drivers_ui.attempted && !self.busy() {
+        if self.qa_fixture_mode() {
+            theme::muted(
+                ui,
+                "QA fixture — synthetic data only; no device inventory or driver effects were run.",
+                t,
+            );
+            ui.add_space(6.);
+        }
+        if self.drivers_intro_active() {
+            if self.feature_intro(
+                ui,
+                t,
+                "drivers",
+                "Review your device drivers",
+                "Check detected devices and matching Windows Update offers before deciding whether to update a driver.",
+                &[
+                    (
+                        "Easy to review",
+                        "See the detected device, its current driver details, and any offer Windows actually returns.",
+                    ),
+                    (
+                        "Check the change first",
+                        "Review the exact device and signed offer, plus backup and restart requirements, before confirming a supported update.",
+                    ),
+                ],
+            ) {
+                self.start_driver_scan(ctx);
+            }
+            return;
+        }
+        if !self.drivers_ui.attempted && !self.busy() && !self.qa_fixture_mode() {
             self.begin_driver_load(ctx);
         }
 
@@ -406,6 +493,30 @@ impl App {
     }
 
     pub(super) fn drivers_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if self.drivers_intro_active() {
+            let compact = !self.feature_intro_wide(ctx);
+            let mut start = false;
+            ui.horizontal_wrapped(|ui| {
+                theme::muted(
+                    ui,
+                    if compact {
+                        "Start a read-only device and driver scan"
+                    } else {
+                        "Choose Scan now in the introduction to read device and driver offers"
+                    },
+                    t,
+                );
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if compact && theme::primary(ui, "Scan now", t, !self.busy()) {
+                        start = true;
+                    }
+                });
+            });
+            if start {
+                self.start_driver_scan(ctx);
+            }
+            return;
+        }
         let busy = self.busy();
         let selected = self.selected_driver().cloned();
         let selected_updates = self.drivers_ui.selected_updates.clone();
@@ -757,7 +868,7 @@ impl App {
     }
 
     fn begin_driver_load(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.drivers_ui.attempted = true;
@@ -782,8 +893,21 @@ impl App {
         });
     }
 
+    fn drivers_intro_active(&self) -> bool {
+        if self.qa_fixture_mode() {
+            self.drivers_ui.intro_fixture
+        } else {
+            !self.feature_seen("drivers")
+        }
+    }
+
+    fn start_driver_scan(&mut self, ctx: &egui::Context) {
+        self.mark_feature_seen("drivers");
+        self.begin_driver_load(ctx);
+    }
+
     fn begin_driver_update(&mut self, intent: DriverUpdateIntent, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.drivers_ui.selected_updates.retain(|selected| {
@@ -815,7 +939,8 @@ impl App {
         selected_updates: Vec<SelectedDriverUpdate>,
         ctx: &egui::Context,
     ) {
-        if self.busy() || !self.driver_batch_can_apply(&selected_updates) {
+        if self.busy() || self.qa_fixture_mode() || !self.driver_batch_can_apply(&selected_updates)
+        {
             return;
         }
         let items: Vec<(DriverUpdateIntent, String)> = selected_updates
@@ -878,7 +1003,7 @@ impl App {
         restore_intent: DriverRestoreIntent,
         ctx: &egui::Context,
     ) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         let display_name = self.driver_display_name(&update_intent);
@@ -913,7 +1038,7 @@ impl App {
         theme::tabs(ui, |ui| {
             for (tab, label, count) in [
                 (DriverTab::Outdated, "Outdated", counts.0),
-                (DriverTab::Current, "Up-to-date", counts.1),
+                (DriverTab::Current, "No offer / unknown", counts.1),
                 (DriverTab::Deferred, "Skipped & Ignored", counts.2),
             ] {
                 let text = count.map(|count| format!("{label} · {count}"));
@@ -2447,6 +2572,11 @@ impl App {
     }
 
     fn set_driver_ignored(&mut self, device_id: DeviceId, ignored: bool) {
+        if self.qa_fixture_mode() {
+            self.error =
+                Some("QA fixture mode is read-only; no driver preference was saved.".into());
+            return;
+        }
         let Some(current) = self.drivers_ui.settings.clone() else {
             self.error =
                 Some("Saved driver choices are not readable; the device was not changed.".into());
@@ -2480,6 +2610,11 @@ impl App {
         candidate: drivers::CandidateIdentity,
         skipped: bool,
     ) {
+        if self.qa_fixture_mode() {
+            self.error =
+                Some("QA fixture mode is read-only; no driver preference was saved.".into());
+            return;
+        }
         let Some(current) = self.drivers_ui.settings.clone() else {
             self.error =
                 Some("Saved driver choices are not readable; the offer was not changed.".into());
@@ -2506,6 +2641,76 @@ impl App {
             }
         }
     }
+}
+
+#[cfg(debug_assertions)]
+fn driver_qa_snapshot(populated: bool) -> DriverSnapshot {
+    let issue = NativeIssue {
+        source: "Synthetic QA fixture".into(),
+        operation: "No native device or update-source query was issued.".into(),
+        failure: FieldFailure {
+            kind: FieldFailureKind::NotPresent,
+            native_code: None,
+        },
+    };
+    let devices = if populated {
+        let instance_id = "QA\\SYNTHETIC\\DISPLAY".to_owned();
+        vec![DriverDevice {
+            id: DeviceId::from_instance_id(&instance_id),
+            instance_id: FieldValue::Known { value: instance_id },
+            friendly_name: FieldValue::Known {
+                value: "QA fixture display adapter (synthetic)".into(),
+            },
+            class_name: FieldValue::Known {
+                value: "Display".into(),
+            },
+            class_guid: "4d36e968-e325-11ce-bfc1-08002be10318".into(),
+            hardware_ids: FieldValue::Known {
+                value: vec!["QA\\SYNTHETIC\\DISPLAY".into()],
+            },
+            compatible_ids: FieldValue::Known { value: Vec::new() },
+            provider: FieldValue::Known {
+                value: "Synthetic fixture metadata".into(),
+            },
+            installed_version: FieldValue::Known {
+                value: "0.0-qa".into(),
+            },
+            installed_date: FieldValue::Unknown {
+                failure: issue.failure.clone(),
+            },
+            inf_path: FieldValue::Unknown {
+                failure: issue.failure.clone(),
+            },
+            problem_code: FieldValue::Unknown {
+                failure: issue.failure.clone(),
+            },
+            offer: DeviceOffer::Unknown {
+                failure: issue.failure.clone(),
+            },
+        }]
+    } else {
+        Vec::new()
+    };
+    let inventory = DeviceInventory {
+        source: SourceReport {
+            quality: if populated {
+                InventoryQuality::Partial
+            } else {
+                InventoryQuality::Unavailable
+            },
+            item_count: devices.len(),
+            issues: vec![issue.clone()],
+        },
+        devices,
+    };
+    let catalogue = DriverCatalogue {
+        state: CatalogueState::Unavailable {
+            issue: issue.clone(),
+        },
+        candidates: Vec::new(),
+        issues: vec![issue],
+    };
+    DriverSnapshot::assemble(inventory, catalogue)
 }
 
 fn candidates_for<'a>(
@@ -2738,7 +2943,9 @@ fn device_identity_tooltip(device: &DriverDevice) -> String {
 fn tab_header(ui: &mut egui::Ui, label: &str, width: f32, t: Tokens) {
     theme::table_cell(
         ui,
-        RichText::new(label).size(12.).color(t.muted),
+        RichText::new(label)
+            .size(theme::FONT_CAPTION)
+            .color(t.muted),
         width,
         22.,
     );

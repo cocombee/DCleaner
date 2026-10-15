@@ -1,0 +1,653 @@
+{
+  "schema": 1,
+  "date": "2026-10-15",
+  "kind": "isolated-egui-CPU-visual-and-action-checkpoint",
+  "typography": {
+    "caption": 12,
+    "body": 13,
+    "title": 16,
+    "display": 24,
+    "maximum_size_tokens": 4,
+    "direct_numeric_UI_font_sizes_found": 0,
+    "regression": "both_themes_use_only_the_four_font_size_tokens"
+  },
+  "boundary": {
+    "synthetic_data": true,
+    "native_framebuffer": false,
+    "physical_input": false,
+    "installation_changed": false,
+    "native_effects": false,
+    "native_runtime_acceptance": false
+  },
+  "binaries": {
+    "debug_renderer_sha256": "e7d7cc3ccb52d82f90890bb5052b3547c72cf9cbac079510513ffb5e39a51b73",
+    "release_candidate_sha256": "9f571008c46f577e6dc7bab77ede2bdeee15bb6914fcea6464bf0228793a15ab",
+    "installed": false
+  },
+  "tests": {
+    "passed": 387,
+    "failed": 0,
+    "opt_in_ignored": 7,
+    "suite_results": 15,
+    "release_build": "passed",
+    "formatting": "passed"
+  },
+  "captures": [
+    {
+      "file": "screens/final-startup-help-minimum-dark.png",
+      "sha256": "0574ed831526d4792ed9e1e81b66fdd6a0f424116f19907ee141ca9a05559468",
+      "fixture": "startup-help",
+      "size": [
+        760,
+        600
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    },
+    {
+      "file": "screens/final-startup-help-minimum-light.png",
+      "sha256": "7bb992378693cbb152c2d8f8f93cb977434ffef3347c33d8d70c25e046680ebd",
+      "fixture": "startup-help",
+      "size": [
+        760,
+        600
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    },
+    {
+      "file": "screens/final-clean-settings-popular-sites-minimum-dark.png",
+      "sha256": "2b2aebbea76c7bba93cf345a222f899d0b7c6d6cb01a30ebe02b78c2eb0d7908",
+      "fixture": "clean-settings-popular-sites",
+      "size": [
+        760,
+        600
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    },
+    {
+      "file": "screens/final-clean-settings-popular-sites-wide-dark.png",
+      "sha256": "b1068cefb3e3a926409392461c697a5c97774373057e0c957b01dfd5a40675bf",
+      "fixture": "clean-settings-popular-sites",
+      "size": [
+        1240,
+        820
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    },
+    {
+      "file": "screens/final-startup-sort-actions-wide-dark.png",
+      "sha256": "57e814ad436e0a108a13648008d7787fafa597fcc0e95cb0a3d4a39056fff44c",
+      "fixture": "startup-populated",
+      "size": [
+        1240,
+        820
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    },
+    {
+      "file": "screens/final-health-intro-wide-dark.png",
+      "sha256": "cf7430e5af59d2e2b11b40f0ebb4ab714b5c828fdad6b4c67512e81f4f0759a6",
+      "fixture": "health-intro",
+      "size": [
+        1240,
+        820
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    },
+    {
+      "file": "screens/final-optimizer-intro-minimum-dark.png",
+      "sha256": "b33f658bc411bd1a0b346011ae8cd2435b0f3967a6417cf5ec7a81e97c8fbb22",
+      "fixture": "optimizer-intro",
+      "size": [
+        760,
+        600
+      ],
+      "visually_reviewed": true,
+      "font_tokens": {
+        "body": 13,
+        "caption": 12,
+        "display": 24,
+        "title": 16
+      }
+    }
+  ],
+  "action_stories": [
+    {
+      "scenario": "final-startup-sort-actions-wide-dark",
+      "actions": [
+        {
+          "label": "Sort Program",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Program",
+              "descending": true
+            }
+          }
+        },
+        {
+          "label": "Sort Publisher",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [],
+            "startup_info_open": false,
+            "startup_sort": {
+              "column": "Publisher",
+              "descending": false
+            }
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "v3-startup-interaction-minimum-dark",
+      "actions": [
+        {
+          "label": "About Startup Manager",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "startup_info_open": true
+          }
+        },
+        {
+          "label": "Got it",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "v2-cloud-interaction-minimum-dark",
+      "actions": [
+        {
+          "label": "Get started",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": true
+            },
+            "disk_details_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "v2-disk-interaction-minimum-dark",
+      "actions": [
+        {
+          "label": "Details",
+          "occurrence": 0,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": true
+          }
+        },
+        {
+          "label": "Copy path",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": true
+          }
+        },
+        {
+          "label": "Close",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-health-intro-minimum-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "health"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-health-intro-wide-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "health"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-programs-intro-minimum-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "programs"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-programs-intro-wide-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "programs"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-software-intro-minimum-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "software"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-software-intro-wide-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "software"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-drivers-intro-minimum-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "drivers"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-drivers-intro-wide-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "drivers"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-optimizer-intro-minimum-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "optimizer"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-optimizer-intro-wide-dark",
+      "actions": [
+        {
+          "label": "Scan now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "optimizer"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-duplicates-intro-minimum-dark",
+      "actions": [
+        {
+          "label": "Start now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "duplicates"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    },
+    {
+      "scenario": "intro-action-duplicates-intro-wide-dark",
+      "actions": [
+        {
+          "label": "Start now",
+          "occurrence": null,
+          "physical_input": false,
+          "post_state": {
+            "cloud": {
+              "history": false,
+              "introduced": false
+            },
+            "disk_details_open": false,
+            "seen_features": [
+              "duplicates"
+            ],
+            "startup_info_open": false
+          }
+        }
+      ],
+      "in_memory_egui_events": true,
+      "native_effects": false,
+      "physical_input": false
+    }
+  ],
+  "source_hashes": {
+    "src/app.rs": "5cb09864026f15c2445a2b2126d0b367db57fe63772f755db85b13b7c8dc1eeb",
+    "src/app_icons.rs": "9fbbaf7bd9431dd9d363b58ae796c677fd571461b7fa1129bf03915b6f656a08",
+    "src/brand.rs": "d6bbddf8b1036af986ca04bd55f657077f771d3476e9b140131eb0e8674724dd",
+    "src/cleanup.rs": "2762652f362ea63e780ea19b2956846230d4760e4676362a2143fb845072ae85",
+    "src/clean_settings.rs": "e26a3266de5a475903c3f9c8e8cfacaac49e032fd49c01de7b670a4b7b520765",
+    "src/cloud.rs": "579625721e07a0fa727e599feb93d1a39530402a145aa0f6bd185a67e2c530b0",
+    "src/cloud_actions.rs": "35801ce3e05b6eed8be4df2395e12d5dd31d280809cdeab8831dbb4ba8228673",
+    "src/cloud_auth.rs": "66b759c4cfd3d9c858ff7e8d61a2e04eeaa7cc4fb4a46c4d4523bc58162a0a59",
+    "src/cloud_drive.rs": "adf0b7966e22ccdc46c4427c735e4c4761a07739e3ec11f6a5d2127d6dce400f",
+    "src/cloud_dropbox.rs": "a9100fd7dd3dc9a98896ceefcf66f723d07d41e9d3d79381de543fb1f0f6c6de",
+    "src/cloud_gmail.rs": "7811ce89852965ff7ae42e558bc39ccdac60f37afebfb84a4a1df5d5ed6c135f",
+    "src/cloud_http.rs": "72d65275108a995ccd4fc71d45ea288a3ab7858ef75894a7e01b1395074baeb4",
+    "src/cloud_inventory.rs": "711750fb06002313cfbcde1ae23e42b278cc089e255f93233d86016efd037e78",
+    "src/cloud_onedrive.rs": "687568dbbdf464648414d82c8ad7c2eea51218373f163a85d3bf1a538a326776",
+    "src/cloud_store.rs": "295686a299641c143283d969f1733739964417cda60d81d8578a713e348b22f0",
+    "src/cloud_vault.rs": "99f93a9af6fc420bd1cfcec24d828403b0887ea252e5788ca0eedd7d4f54716a",
+    "src/custom_clean.rs": "dd1a0c8006fee09959585a4bf71fc63f53858e83c5f72091a2125588e48fd8bd",
+    "src/domain.rs": "3e8cb9405dae3b89ff4be7f1a104a1638d554bd345b57e75cd2fb565c10a8e35",
+    "src/drivers.rs": "92fbae1e53cd78962cf47bdcb04c7fd09c2aeb690075e84fdd8a0346b4fb0a86",
+    "src/duplicates.rs": "0d84aab3aa6a767110a443112285d4090042eefdeba28e0a46b367cff7261d57",
+    "src/effects.rs": "8d39579182974be6a016fcbb52b86501a02b4375885e5ef521a12731d46e6df0",
+    "src/health.rs": "da9293a42693c66150611db892667c6c1f447fadf3b9189dd987ba41b5f16472",
+    "src/health_tests.rs": "1f8f0ed21009c3393489b459e1b878257bbc3bb21a43de3c6515adadf01d2528",
+    "src/illustrations.rs": "792242fecd21013ef862c0541e45576c199ce7ee5d10584acdb7431bcbe859ba",
+    "src/instance.rs": "6bf56263bb80820786cfecd3e12b99bd1c1f34be6e620ec34c84eca42b773319",
+    "src/lib.rs": "d60f151349b29e561cc05503730628a9bd536e99afb02f5fd9512bf553b025e0",
+    "src/main.rs": "ff7e4777ff97d0d98584bbe5a01acbe6873f9fed358225520da8e4cf05f8c2ad",
+    "src/native_hash.rs": "c893bc84562d9eea2d2e691d18320ed8d95b316177f1a62113dd67066b520b38",
+    "src/offscreen_qa.rs": "c6a28021d5676d475e4015ce292450380dff611051d55358608332b2684c7fd5",
+    "src/optimizer_identity.rs": "e9049ff819ae25648807caba7b16e9d62c44f4e8f6e94779e1c5722b3c4751d9",
+    "src/optimizer_intents.rs": "791f43d67750a28482c87f930911aa90cffc962565e534ee63b2a1c28000cb33",
+    "src/optimizer_inventory.rs": "a8a6c62719dea743f117555e5bcbe97d23e311593dd4f9d5e51776bcb9182a4d",
+    "src/optimizer_pipe_io.rs": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
+    "src/optimizer_pipe_security.rs": "7d8bbfa1d63ae3a8eac016f70fd9f80bc238b92bb93400f0ec4c30be52c0cd8d",
+    "src/optimizer_protocol.rs": "278130548592ab3b42d5e21358379342ea44d8f39b38014a20c4203e4a659ee8",
+    "src/optimizer_registration.rs": "f6ef695efe83c1123285e1c734ee9782b679647a0d410c94c4bac3af7b1d227d",
+    "src/optimizer_registry_tx.rs": "49d3a4670979268b7b49cf84f477ad565a92dc385c856660703f95a46954e332",
+    "src/optimizer_requests.rs": "9c7aad7e295eda83aee4aa957fa4a268a41c8a85c29da25c3fafad2e991ffc89",
+    "src/platform.rs": "3ae254c5df95ddbda71d848eab72d031585d622eecae1c31342b10d50e3b2564",
+    "src/privacy.rs": "ae734814d05f2ff94039871d1187c6625b6c140067707114fd43cb3d5ad3f6a6",
+    "src/programs.rs": "eb29a03337afda5ba21bbfbc298758cee4c7b2738ae2c26d09499f6eea8b2a51",
+    "src/qa_core.rs": "14574c008f4241b9f530a04c1d66fda3e5e76d5d720b17bfe456201ca695885e",
+    "src/recycle_bin.rs": "c7d9731fcf9265c30537f6cc24a4f8528582f480cd7618448905b14ce38b65d6",
+    "src/scanner.rs": "9fdbe910a53e09860dff4200b18f31f1740b2c30abe6cddd60de92253f411b96",
+    "src/software.rs": "cec5ac95d2f0c0d3e94aa3922965e816cc6509c22581a8ee6c9f93502a2746d9",
+    "src/startup.rs": "ff0f2cc6cb10943c2b1da38c23fd8a428b5c855467a8fdfb9b1a48395f915f8f",
+    "src/store.rs": "957685222d0e9372777e2d84228d7c559b55c34d5b172cb965659d2d43931799",
+    "src/support.rs": "5d27f577db99303ee48f15aba0fceed5b07ca09b83d13d3398a0416a59eb0428",
+    "src/theme.rs": "9c444037dc358699fe16ce22afde16fd4716b1bf9abc1b61b1ef0885f48341af",
+    "src/view_clean_settings.rs": "e27f09de6f9959000769c56027b0e87d1339a036528d490db3c1ceb0d34a9148",
+    "src/view_cloud.rs": "0c4db1eb8abec0b01b796e41d91ceb1eadac1fa79b45cda3cf1349a957c26777",
+    "src/view_disk.rs": "dfb60c0b9fe01a84fa6cd42538bd31f3e4abb8e3a0845b364eeb99aceefe18a8",
+    "src/view_drivers.rs": "9678e5ec2dab4dee093a0ca89add66312aea5f62d1468582e039d21ffd83a917",
+    "src/view_duplicates.rs": "9c4298d820d5281a1f39df546e05751ee5096f472eaef3dae436896ef9e71848",
+    "src/view_health.rs": "0b43716e237d4481beb472be7dec9852aca6f54ee0161dd9cbe7bdcfacd4216c",
+    "src/view_help.rs": "178eaa051612f135a7333d33e6631de3b67f602042287268ee4f972dbe0b4f2c",
+    "src/view_optimizer.rs": "1706cc4d664d98eb0d2ff78babfe4106d9fdf28df9fd2607d86488a239c67f4f",
+    "src/view_privacy.rs": "ba11762e6e273119d41c57910ac7ceddd35d7abecd955cc5f6f1e2bb5ccf77ab",
+    "src/view_programs.rs": "ff4ca620f50ca3a2fa87c3060fe856ca330864ea075bee18b32ed4fd2f2b3f2e",
+    "src/view_recycle_bin.rs": "e57be975eba4c5703984110807844aeeea32e1808aa406213fccf8ec68c5b369",
+    "src/view_software.rs": "68834e204b358691cce2e7636c439359614edf0d834ca03957fc72e0a0c0045d",
+    "src/view_startup.rs": "78817d31af85fe7baa1a5d953269ba6d95d84c5ae185667d9851c8b1f2b5093d",
+    "src/visual_qa.rs": "6627f2896dc3240fddce9a3a81c73201382075d62fe66462fed2eb9f2ac6c119"
+  },
+  "limitations": [
+    "CPU rasterization reuses actual egui meshes but is not installed/GPU rendering acceptance.",
+    "Start actions prove in-memory navigation and first-use persistence intent; native inventory starts are blocked in fixtures.",
+    "Passing selected stories or stills does not establish every page, action, conditional dialog or full CCleaner parity.",
+    "Native effects, original service outcomes, cloud provisioning and macOS runtime parity remain separate open obligations.",
+    "The debug renderer predates the final three popular-site unit tests and the release-only unused-fixture-constant guard; rendered code is otherwise unchanged."
+  ]
+}

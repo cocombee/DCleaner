@@ -2,6 +2,8 @@
 //! selected cache catalogue entries. Effects are delegated to the shared
 //! cleanup owner only after exact-ID review and owner-specific revalidation.
 
+#[cfg(debug_assertions)]
+use crate::clean_settings::FolderInclusion;
 use crate::{
     clean_settings::{
         CustomCleanSettings, ExclusionType, FileDeletionMode, InclusionLocation, InclusionRule,
@@ -346,6 +348,210 @@ pub struct CustomCleanReport {
     files: Vec<CustomCleanFile>,
     skipped_entries: Vec<SkippedEntry>,
     capabilities: Vec<CapabilityNote>,
+    #[cfg(debug_assertions)]
+    #[serde(skip)]
+    visual_fixture: bool,
+}
+
+#[cfg(debug_assertions)]
+impl CustomCleanReport {
+    /// Fixed, synthetic report used only by debug visual QA. It never scans a
+    /// path and its hardcoded fixture identities must not authorize effects.
+    pub fn visual_fixture() -> Self {
+        Self::visual_fixture_populated()
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn visual_fixture_empty() -> Self {
+        visual_fixture_report(VisualFixtureKind::Empty)
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn visual_fixture_populated() -> Self {
+        visual_fixture_report(VisualFixtureKind::Populated)
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn visual_fixture_details() -> Self {
+        visual_fixture_report(VisualFixtureKind::Details)
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn visual_fixture_error() -> Self {
+        visual_fixture_report(VisualFixtureKind::Unavailable)
+    }
+}
+
+#[cfg(debug_assertions)]
+#[derive(Clone, Copy)]
+enum VisualFixtureKind {
+    Empty,
+    Populated,
+    Details,
+    Unavailable,
+}
+
+#[cfg(debug_assertions)]
+fn visual_fixture_report(kind: VisualFixtureKind) -> CustomCleanReport {
+    let folder = FolderInclusion {
+        folder: r"C:\__dcleaner_qa_fixture__\included".into(),
+        filter: Some(vec!["*.tmp".into(), "*.cache".into()]),
+        delete_self: false,
+        recursive: true,
+    };
+    let inclusion = InclusionRule {
+        location: InclusionLocation::Folder(folder),
+        age_threshold_hours: Some(24.0),
+    };
+    let rule_id = rule_id_for_inclusion(&inclusion);
+    let mut settings = CustomCleanSettings::default();
+    settings.inclusions.push(inclusion);
+    let _ = settings.set_rule_selection(".custom", Some(true));
+    let _ = settings.set_rule_selection(&rule_id, Some(true));
+
+    let unavailable = matches!(kind, VisualFixtureKind::Unavailable);
+    let detailed = matches!(
+        kind,
+        VisualFixtureKind::Details | VisualFixtureKind::Unavailable
+    );
+    let mut files = Vec::new();
+    if matches!(
+        kind,
+        VisualFixtureKind::Populated | VisualFixtureKind::Details
+    ) {
+        files.push(visual_fixture_file(
+            0x7a31_4d0e_95c2_4a60_8a12_5b8dfd93c101,
+            "recent-cache.tmp",
+            2_048,
+            &rule_id,
+            true,
+        ));
+        if detailed {
+            files.push(visual_fixture_file(
+                0x7a31_4d0e_95c2_4a60_8a12_5b8dfd93c102,
+                "older-cache.cache",
+                16_384,
+                &rule_id,
+                true,
+            ));
+            files.push(visual_fixture_file(
+                0x7a31_4d0e_95c2_4a60_8a12_5b8dfd93c103,
+                "too-recent.tmp",
+                512,
+                &rule_id,
+                false,
+            ));
+        }
+    }
+
+    let skipped_entries = if detailed {
+        vec![SkippedEntry {
+            rule_id: Some(rule_id.clone()),
+            path: Some(PathBuf::from(
+                r"C:\__dcleaner_qa_fixture__\included\unreadable.tmp",
+            )),
+            reason: if unavailable {
+                SkipReason::UnavailableRoot
+            } else {
+                SkipReason::EntryReadFailed
+            },
+        }]
+    } else {
+        Vec::new()
+    };
+    let capabilities = if matches!(kind, VisualFixtureKind::Details) {
+        vec![CapabilityNote {
+            kind: CapabilityKind::CookieExclusion,
+            blocking: false,
+            rule_id: None,
+            detail: "Cookie exclusions are stored settings and are not applied by this filesystem scanner. (Synthetic QA preview.)".into(),
+        }]
+    } else {
+        Vec::new()
+    };
+    let (visited, matched, eligible, too_recent, excluded, skipped, reason) = if unavailable {
+        (
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            Some("The synthetic fixture location is unavailable.".into()),
+        )
+    } else if matches!(kind, VisualFixtureKind::Empty) {
+        (18, 0, 0, 0, 0, 0, None)
+    } else if detailed {
+        (36, 3, 2, 1, 0, 1, None)
+    } else {
+        (12, 1, 1, 0, 0, 0, None)
+    };
+    let partial = unavailable || detailed;
+    let rules = vec![RuleScan {
+        id: rule_id,
+        name: "Synthetic included folder".into(),
+        selected: true,
+        available: !unavailable,
+        visited,
+        matched,
+        eligible,
+        too_recent,
+        excluded,
+        skipped,
+        truncated: false,
+        reason,
+    }];
+    CustomCleanReport {
+        id: Uuid::from_u128(0x7a31_4d0e_95c2_4a60_8a12_5b8dfd930001),
+        date: "2026-10-15T09:00:00+08:00".into(),
+        settings_fingerprint: settings_fingerprint(&settings),
+        settings_snapshot: settings,
+        default_age_days: 7,
+        elapsed_ms: 42,
+        match_steps_used: 128,
+        match_step_limit: MAX_MATCH_STEPS,
+        cancelled: false,
+        partial,
+        truncated: false,
+        skipped_count: skipped,
+        omitted_skip_details: 0,
+        rules,
+        files,
+        skipped_entries,
+        capabilities,
+        visual_fixture: true,
+    }
+}
+
+#[cfg(debug_assertions)]
+fn visual_fixture_file(
+    id: u128,
+    name: &str,
+    size: u64,
+    rule_id: &str,
+    eligible: bool,
+) -> CustomCleanFile {
+    let root = PathBuf::from(r"C:\__dcleaner_qa_fixture__\included");
+    CustomCleanFile {
+        candidate: Candidate {
+            id: Uuid::from_u128(id),
+            path: root.join(name),
+            root,
+            size,
+            modified_ns: 1_760_000_000_000_000_000,
+            created_ns: None,
+        },
+        matched_rule_ids: vec![rule_id.to_owned()],
+        eligibility: vec![RuleEligibility {
+            rule_id: rule_id.to_owned(),
+            selected: true,
+            eligible,
+            cutoff_ns: 1_759_900_000_000_000_000,
+            age_threshold_hours: Some(24.0),
+            age_threshold_days: None,
+            temporary_24h_applied: false,
+        }],
+    }
 }
 
 impl CustomCleanReport {
@@ -454,6 +660,10 @@ impl CustomCleanReport {
         ids: &[Uuid],
         acknowledge_partial: bool,
     ) -> Result<CustomCleanReview, String> {
+        #[cfg(debug_assertions)]
+        if self.visual_fixture {
+            return Err("A synthetic Custom Clean QA preview cannot authorize cleanup.".into());
+        }
         settings
             .validate()
             .map_err(|error| format!("Custom Clean settings are invalid: {error}"))?;
@@ -908,6 +1118,8 @@ pub fn scan(
         files,
         skipped_entries,
         capabilities,
+        #[cfg(debug_assertions)]
+        visual_fixture: false,
     })
 }
 

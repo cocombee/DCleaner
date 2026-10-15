@@ -358,9 +358,14 @@ fn settings_persist_and_corruption_is_preserved() {
     let prefs = Preferences {
         minimum_age_days: 30,
         dark: true,
+        seen_features: vec!["software".into(), "duplicates".into()],
         ..Default::default()
     };
     store::save_preferences(dir.path(), &prefs).unwrap();
+    assert_eq!(
+        store::load_preferences(dir.path()).unwrap().seen_features,
+        prefs.seen_features
+    );
     assert_eq!(
         store::load_preferences(dir.path())
             .unwrap()
@@ -374,6 +379,14 @@ fn settings_persist_and_corruption_is_preserved() {
         fs::read(dir.path().join("preferences.json")).unwrap(),
         b"broken"
     );
+}
+#[test]
+fn older_preferences_have_unseen_first_use_screens() {
+    let prefs: Preferences = serde_json::from_str(
+        r#"{"schema":1,"minimum_age_days":7,"selected_categories":["temp"],"dark":true}"#,
+    )
+    .unwrap();
+    assert!(prefs.seen_features.is_empty());
 }
 #[test]
 fn path_prefix_sibling_is_not_contained() {

@@ -85,6 +85,8 @@ pub struct Preferences {
     pub minimum_age_days: u32,
     pub selected_categories: Vec<String>,
     pub dark: bool,
+    #[serde(default)]
+    pub seen_features: Vec<String>,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -93,6 +95,7 @@ impl Default for Preferences {
             minimum_age_days: 7,
             selected_categories: vec!["temp".into(), "crash".into()],
             dark: true,
+            seen_features: Vec::new(),
         }
     }
 }

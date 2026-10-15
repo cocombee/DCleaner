@@ -3,9 +3,9 @@
   "target": "CCleaner Windows 7.12.1526 functional/layout reference",
   "scope": "Inventory of controls visible in supplied original captures, plus explicit uncovered pages. Not an exhaustive inventory of all reachable controls.",
   "status": "Original action-by-action runtime visual audit incomplete",
-  "capture_provenance": "User-supplied original images; agent visually reviewed saved pixels. No original clicks performed in this audit.",
+  "capture_provenance": "User-supplied native captures plus explicitly identified headless replays of unchanged installed UI bytes. Replay service data/preferences are synthetic and native effects are inert.",
   "distinction": "CCleaner captures define workflow/layout evidence. User navy design screenshots, DC logo and #3999D9 still define DCleaner styling.",
-  "desktop_constraint": "No mouse/keyboard automation, GUI launch, capture execution, host effects or installation performed.",
+  "desktop_constraint": "User-approved headless browsers and CPU renders only; no physical mouse/keyboard input, foreground activation, installation or real-host cleanup.",
   "acceptance_rule": "An action closes only with recorded source state, exact control, resulting state/dialog/artwork, cancel/back/error branches, and matching DCleaner interaction evidence. Screenshot presence and static REA alone never close it.",
   "sources": {
     "browser_close": {
@@ -1062,6 +1062,796 @@
       "acceptance": "open"
     }
   ],
+  "controlled_replay_observations": {
+    "schema": 1,
+    "entries": [
+      {
+        "scenario": "original-startup-results",
+        "evidence_id": "ev_bbcaf5ef02903bb7ee43df67078c5f34cdbca5abafe5a2b67c1a059a2813dbbf",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle-startup",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Cannot read properties of undefined (reading 'hash')"
+          }
+        ],
+        "screenshot_sha256": "a2530645ee2b2ed910fdd4f9aaaa9348f32852bc12f86cb6ae67388acd10cbbb",
+        "dom_sha256": "775e5d29f1b6197849cc140be054bb51c358169286978d3fe038aa7aba424a29",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-startup-help-dialog",
+        "evidence_id": "ev_fb0dc1bc465fa74524777b14d0e5affc3f60f840a70555bd88524eff5c4d7d53",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "help-dialog",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Cannot read properties of undefined (reading 'hash')"
+          }
+        ],
+        "screenshot_sha256": "5a0d2984da96986305ec2e1c07233b79f13c6680b27252eea4a017d5621d67f3",
+        "dom_sha256": "49ad0238210c84f249391a8ca88fbe7cd4cec917a3d54e81bef64a013cc1113f",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-startup-row-menu",
+        "evidence_id": "ev_7e2896ec816b47e1f877dd8ac550ee7c6bf97c884ce2ec1f902cedefb06f367e",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "row-menu",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Cannot read properties of undefined (reading 'hash')"
+          }
+        ],
+        "screenshot_sha256": "c04597a530f7a056475fa7312c98a22d1a09259cbdb61b313c9959ea97680ba3",
+        "dom_sha256": "767121844c73a2ba9a6fcef54c319575455bb7b374054674a4ddbacd1db7ada9",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-page-settings",
+        "evidence_id": "ev_757d7e2f6f6fcf7c6403d8c049c3c30d46550a2e5f98fd4404642790df061dd9",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle-settings",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "712136209e635140b632a59a6c9b5b554b98d193b7554c5e4a67b9710500674f",
+        "dom_sha256": "dc0b61999bed5c9aba6a540646deb2c33163df0ad1f41f3d91e57c2984daf340",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-page-help",
+        "evidence_id": "ev_876193307ebe817ffbdc258d05a67b6bf8f6e0d8f26ffa160a99943a6748299f",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle-help",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "0840778707037997f794f86adddb9cccc83b1473b1e846a66a256f864735982a",
+        "dom_sha256": "a4d95d9a4057059d5755343cb20f16b10394a5b907874d055577c186d37b319f",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-page-disk-analyzer",
+        "evidence_id": "ev_c4e994b41afb1b2c5b7b4a9615415f791b41ecfcad55abc4a7bc97d0cc8b7a6c",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle-disk-analyzer",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "78928241f36b84eca92e01ec78f6ed61c71646634dba6c3d7d2904d284411559",
+        "dom_sha256": "a7931b00a477fb2af453a6936cf360384e793777183f021e97b2875b1ea7d288",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-settings-scheduling",
+        "evidence_id": "ev_4b6e3fff79864bd6ab5b7e27e30e144d2ab87a4804d89677d14d99368d722652",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settings-scheduling",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "f6b178c6e62bc723ee8a3bd96a15825c8fdffc3f92ecaf2362247da7d4baf2a5",
+        "dom_sha256": "cdc0978fec6d49329f1c671c93c93b09e357348758b52f10767750006655496e",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-settings-updates",
+        "evidence_id": "ev_a59652e514a402f69a344f13dc223641bad7475b189ba20cdb8c3d56d4eb49fa",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settings-updates",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "da846bbde291a92e78e76fe75b8a3baa6fdefe320a14627708b2636c5460860b",
+        "dom_sha256": "50fd222889f4d90de2b47f7d8e0474b5e74795770828ed3d0d611f0df4804a97",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-settings-privacy",
+        "evidence_id": "ev_dac2ac56240a13835d7c1964d98b5bffcbeb76fca19295f9b0bd718ad0250718",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settings-privacy",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "5b9f973236a1444866dcebc77a7a5ee8f5deadd423190b3f5fea7448251de235",
+        "dom_sha256": "f05458da241776601b77f2778cafb6231064949748d2f6c4e126bf7fe60257ed",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-settings-my-subscription",
+        "evidence_id": "ev_71a696f65b510efd89ba3d32f404947c012925375cad197fa45e34bae25e406e",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settings-my-subscription",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "80a24c88d21fa3b829d0945b31971339a346f8fe05d1d31ec9b41583c6ecdd79",
+        "dom_sha256": "0e7c661063ec10a24e9603e122c9728a6f4a838183601894c72a87eaeb2da712",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-settings-about",
+        "evidence_id": "ev_9e4e13fe22ce6a2a96ccdcd05ad8b05ea90df37c11a25b81d80fded06c482f31",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settings-about",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "9c1e5f5b20c5387c9f761f500ff1a456e1e03cca3367af57cf45ac832aea5686",
+        "dom_sha256": "16b22a2ca89b11f67535f3365e3d84cf2403759b3af05fc9acdb1e4b5bfb5116",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-scheduling-main",
+        "evidence_id": "ev_c7b89295a645e8f2b6bf7652bfc5fc9fb44d4bfc6974f9a3c5591a5c929169e3",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-startup-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "open-scheduling",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "dismiss-intro",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "90fbf9c33ca5e0f9f10cfee768c5c29e9a185b29cd4a0e374287801f39d9d765",
+        "dom_sha256": "cbe9ee3d6446bba281204b44df72f9b71bad858b0b404e183c71af3ef5bd3d66",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-health-check",
+        "evidence_id": "ev_079093f3ab3b4c012048ad84af49e6bef7be7780a596920f3e1c3cc46b12c7e0",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "cbb1a6470a1809afe8027c25755bab168362c2b0e9bbddc533868e761346544a",
+        "dom_sha256": "3c55996cee3a5212bcc18924f47a0e8ef5885678b4f044842e1ace86c6a22871",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-custom-clean",
+        "evidence_id": "ev_50aadad281b8c5ee52409368efd243409ee11e9afd178b87e304e93647fdaaf1",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "250539f1dbc76b0a0ba77aa4c683269b4cc3e9d3fc9f76258b1a1c3a77126ec1",
+        "dom_sha256": "5aa88b015137276d66549f6a80a6b77b26a0b7d90bed284c45e3564c1beb4bf4",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-performance-optimizer",
+        "evidence_id": "ev_e7615df28aa57aa3d462d10aef5146c71c90b3d989db825c9e9de36b0f927774",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "af723ef95ba9aa43aba50dd47c6876b791a950cdf08611f3498f4c6f4a95315e",
+        "dom_sha256": "c8241061c2a1ca82a45a10e59c5c3d7b13c41ae11dcff851a835c139c63d9817",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-driver-updater",
+        "evidence_id": "ev_316559902b2d71eb4f153fba4b9b51f55f11479f51fbdc024ab81eaaff26a94c",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "126fe7f367a72d123fca24fc38b087469df9acef67df2aea99f9640c4de34afb",
+        "dom_sha256": "ce6ea0791cabb5cdb7d2ae824088804fbc13fb58fe1d6ca1f724ef1b0235ab64",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-software-updater",
+        "evidence_id": "ev_613035669939a58cba19ba3a4fa0a99ebe92887e7c8cac760c479ee20d891177",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "8e380ca87b970a5ff8db8bdecdd701c8af4872e622692fd41874a5be8957289f",
+        "dom_sha256": "47ce7b6feb2436e46c67e7a9221173a79c1f2e625adb593bde0ddaf3e7aa0266",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-software-remover",
+        "evidence_id": "ev_edeb1c01d0c1948c32c7ee656d330cf5268179933312e4b4f870ebdac257fa85",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "3bc28ed541beadef90bae9096fa5b7d55b9c9eb932d569f74f5894d4effa0419",
+        "dom_sha256": "2933cc8d845ee8af045a95eb133fc54d957e481937867136bd9a8fdefd9da23d",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      },
+      {
+        "scenario": "original-product-disk-analyzer",
+        "evidence_id": "ev_33e9e267669f3fbbe65ad1eda447bc01dc7861ab59be8ca426e82d56ce150297",
+        "authority": "controlled-replay",
+        "fixture": "synthetic-product-pages-ui-v1",
+        "steps": [
+          {
+            "step": "scenario_start",
+            "status": "completed",
+            "error": null
+          },
+          {
+            "step": "settle",
+            "status": "completed",
+            "error": null
+          }
+        ],
+        "events": [
+          {
+            "kind": "page-error",
+            "message": "Object"
+          },
+          {
+            "kind": "page-error",
+            "message": "Object"
+          }
+        ],
+        "screenshot_sha256": "e3d858f263827fbc7efe46c49989371f87dd903a6e8213a983545823483ce53e",
+        "dom_sha256": "a872af80ca152bbbc7e906b1b8bc1e3ece34aab876520387faa6669ad142241e",
+        "native_effects": false,
+        "native_runtime_acceptance": false,
+        "physical_input": false
+      }
+    ]
+  },
+  "controlled_replay_action_observations": {
+    "schema": "controlled-replay-action-observations/v1",
+    "fixture": {
+      "identity": "CCleaner 7 installed GUI via local controlled replay at 127.0.0.1:42831; inert synthetic component fixtures",
+      "native_effects": false,
+      "native_runtime_acceptance": false,
+      "external_network": false
+    },
+    "observations": [
+      {
+        "scenario": "Custom Clean Configure > Cookies",
+        "result": "Cookies configuration tab",
+        "evidence_id": "ev_67d2bf56f5599b8445539a06f5c3119ca0b57f658edcb4d73cf68b8907217dcd",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Controlled replay; UI evidence only"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Files to clean",
+        "result": "Files-to-clean configuration tab",
+        "evidence_id": "ev_53efcc29215a232e7eed746b42f0364b362bb280f270ff519f7e646117326156",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Controlled replay; UI evidence only"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Files to ignore",
+        "result": "Files-to-ignore configuration tab",
+        "evidence_id": "ev_04aab0a61be0ade4667b69074ddacc225941ea73a1c964b7ddff444fef1d8b4b",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Controlled replay; UI evidence only"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Deleting files",
+        "result": "Deletion configuration tab",
+        "evidence_id": "ev_4c2b3b11ddfb8bc56bbf14fd6f538d5937ebca51934b02c17a5a71ce5be4a2f3",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Controlled replay; UI evidence only"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Advanced",
+        "result": "Advanced configuration tab",
+        "evidence_id": "ev_e004c070758613921e6862424ea5dbe0589609238acdcde7fd9bfb70ae19ac63",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Controlled replay; UI evidence only"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Cookies > Add another website",
+        "result": "Add website dialog",
+        "evidence_id": "ev_25b517e8e116d6ec49e20cc27553d6120d702f69128f52868014cf185744f470",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "No submission performed"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Files to clean > Add",
+        "result": "Add path form",
+        "evidence_id": "ev_36f817cfc07a09ac83404c847abf95063e10f90d79f8e69279af890bf172dbdf",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "No submission or Browse performed"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Files to ignore > Add",
+        "result": "Add path form",
+        "evidence_id": "ev_09bd55215430c719996e3d3b01e21d246ac2853f75cff08d90662b362fa4e934",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "No submission or Browse performed"
+        ]
+      },
+      {
+        "scenario": "Custom Clean Configure > Cookies > Add popular websites",
+        "result": "Popular sites dialog; synthetic prechecked candidate rows; current exclusions reflected",
+        "evidence_id": "ev_7e77e4812b8cd8c70c20fda338a08b091060d3e7b83a923f9a8313220c5287aa",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Dialog evidence retained; current turn could not retrieve screenshot text through REA; shipped source independently defines candidate list and checked-state rule"
+        ]
+      },
+      {
+        "scenario": "Custom Clean > Scan now",
+        "result": "Custom Clean result route with 0 issues; Clean and fix and Scan again controls",
+        "evidence_id": "ev_062bb56c4ca191a9141502fb8ea40d5cd53284064f219654fc2ef483051010e8",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Synthetic empty result; Clean and fix was not clicked"
+        ]
+      },
+      {
+        "scenario": "Health Check > Scan now",
+        "result": "Privacy scan result route; 0 records, 0 B; Clean disabled and Skip enabled",
+        "evidence_id": "ev_5be4b941253c37d913b5ca8d4e0be9c79115016b213dc39bb9c5daf4c7a23164",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Synthetic empty result; no native cleanup performed"
+        ]
+      },
+      {
+        "scenario": "Software Updater > Scan now",
+        "result": "Outdated software results with one controlled sample product, version 1.0 to 1.1, low severity; Update all and Scan again controls",
+        "evidence_id": "ev_09eaa661ca7935119ed229dab9626166359963369e9359f02603d5a427f8e45c",
+        "screenshot_sha256": "b8a5e884b193b2b52c3498855549ce9f0329cf194cdb949e531cd28fd78cdda8",
+        "errors": [],
+        "limitations": [
+          "Synthetic component fixture; update control not clicked"
+        ]
+      },
+      {
+        "scenario": "Disk Analyzer > Start now",
+        "result": "Drive selection route; fixture drive available after mapped-letter correction",
+        "evidence_id": "ev_ff4f986ac5e78e996f112f22646415767a370ae3b11b697f04a39ba183ccbef1",
+        "screenshot_sha256": null,
+        "errors": [],
+        "limitations": [
+          "Controlled replay; drive selection screen captured but no duplicate scan result yet"
+        ]
+      }
+    ],
+    "failed_or_uncompleted": [
+      {
+        "scenario": "Current turn REA capture attempts",
+        "status": "No evidence returned; tool remained pending beyond 90 seconds, including a goto-only attempt",
+        "native_effects": false,
+        "limitation": "Do not treat as a successful capture or use it for acceptance claims"
+      }
+    ]
+  },
   "static_candidates": {
     "evidence": "performance-optimizer-contract.json and privately retained ccleaner7-ui-syntax.json; shipped-artifact static syntax only, no execution",
     "routes": [
@@ -1213,18 +2003,23 @@
       "runtime_verified": false
     },
     "execution_boundary": {
-      "headless_original_launch": "Rejected by automatic approval review; did not execute",
-      "explicit_headless_approval": "pending",
-      "dcleaner_cpu_fixture_render": "not executed",
-      "mouse_input": false,
-      "installation_changed": false
+      "headless_original_launch": "Executed after explicit user approval; unchanged authored UI with an inert bridge and synthetic fixture replies",
+      "explicit_headless_approval": "anything that achive the goal",
+      "dcleaner_cpu_fixture_render": "Executed with typed in-memory fixtures and bounded egui event actions; no native window",
+      "physical_input": false,
+      "installation_changed": false,
+      "native_effects": false,
+      "native_runtime_acceptance": false
     }
   },
   "summary": {
     "visible_control_groups": 60,
     "action_groups": 64,
-    "original_actions_executed": 0,
-    "runtime_visual_acceptances": 0
+    "original_native_actions_executed": 0,
+    "native_runtime_visual_acceptances": 0,
+    "controlled_replay_page_observations": 19,
+    "controlled_replay_action_observations": 13,
+    "scope_note": "Counts distinguish inert controlled UI replays from native service/effect acceptance. Observations are not all distinct controls and do not establish complete parity."
   },
   "additional_open_scope": [
     "Windows conditional menus, licence-dependent branches and destructive recovery paths",

@@ -7,6 +7,7 @@ use serde::Serialize;
 
 #[derive(Default)]
 pub(super) struct ProgramsUi {
+    intro_fixture: bool,
     inventory: Option<InventorySnapshot>,
     initial_load_attempted: bool,
     load_error: Option<String>,
@@ -75,12 +76,106 @@ struct HandoffFailureReceipt<'a> {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_programs_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Programs visual fixtures require fixture mode.".into());
+        }
+        if !matches!(
+            case,
+            "programs-intro"
+                | "programs-empty"
+                | "programs-populated"
+                | "programs-details"
+                | "programs-error"
+        ) {
+            return Err(format!("Unsupported Programs fixture: {case}"));
+        }
+        if case == "programs-intro" {
+            self.program_ui = ProgramsUi {
+                intro_fixture: true,
+                ..ProgramsUi::default()
+            };
+            self.error = None;
+            self.notice = None;
+            self.progress.clear();
+            return Ok(());
+        }
+
+        let populated = matches!(case, "programs-populated" | "programs-details");
+        let programs = if populated {
+            vec![
+                programs_qa_program("Example Editor", "fixture-editor", "4.2.0"),
+                programs_qa_program("Example Runtime", "fixture-runtime", "2.8.1"),
+                programs_qa_program("Example Utility", "fixture-utility", "1.5.3"),
+            ]
+        } else {
+            Vec::new()
+        };
+        let selected = programs.first().map(|program| program.identity.clone());
+        let inventory = if case == "programs-error" {
+            None
+        } else {
+            Some(InventorySnapshot {
+                programs,
+                errors: Vec::new(),
+            })
+        };
+        self.program_ui = ProgramsUi {
+            inventory,
+            initial_load_attempted: true,
+            load_error: (case == "programs-error")
+                .then(|| "Synthetic fixture error; no registry was read.".into()),
+            loading: false,
+            selected: selected.clone(),
+            dialog: if case == "programs-details" {
+                selected.map(ProgramsDialog::Details)
+            } else {
+                None
+            },
+            journal_loaded: true,
+            ..ProgramsUi::default()
+        };
+        self.error = None;
+        self.notice = None;
+        self.progress.clear();
+        Ok(())
+    }
+
     pub(super) fn programs_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if !self.program_ui.initial_load_attempted && !self.busy() {
+        if self.programs_intro_active() {
+            if self.feature_intro(
+                ui,
+                t,
+                "programs",
+                "Uninstall programs you no longer need",
+                "Review installed desktop apps and use their registered uninstall handoff when you decide to remove one.",
+                &[
+                    (
+                        "Free up storage",
+                        "See installed programs, versions, publishers and estimated sizes before choosing what to remove.",
+                    ),
+                    (
+                        "Temporary uninstall",
+                        "Reversible temporary removal is not available in this version; only the app’s registered uninstaller can be handed off.",
+                    ),
+                    (
+                        "Review security risks",
+                        "Confirm the exact program and native uninstall request before handing control to its uninstaller.",
+                    ),
+                ],
+            ) {
+                self.start_programs(ctx);
+            }
+            return;
+        }
+        if !self.qa_fixture_mode() && !self.program_ui.initial_load_attempted && !self.busy() {
             self.begin_program_inventory(ctx);
         }
-        self.load_program_journal();
-        self.refresh_program_inventory_after_return(ctx);
+        if !self.qa_fixture_mode() {
+            self.load_program_journal();
+            self.refresh_program_inventory_after_return(ctx);
+        }
 
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
@@ -139,7 +234,31 @@ impl App {
             });
     }
 
-    pub(super) fn programs_footer(&mut self, ui: &mut egui::Ui, _t: Tokens, ctx: &egui::Context) {
+    pub(super) fn programs_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if self.programs_intro_active() {
+            let compact = !self.feature_intro_wide(ctx);
+            let mut start = false;
+            ui.horizontal_wrapped(|ui| {
+                theme::muted(
+                    ui,
+                    if compact {
+                        "Start a read-only installed-program scan"
+                    } else {
+                        "Choose Scan now in the introduction to scan installed programs"
+                    },
+                    t,
+                );
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if compact && theme::primary(ui, "Scan now", t, !self.busy()) {
+                        start = true;
+                    }
+                });
+            });
+            if start {
+                self.start_programs(ctx);
+            }
+            return;
+        }
         ui.horizontal_wrapped(|ui| {
             let selected = self.selected_program().cloned();
             let selected_name = selected
@@ -164,7 +283,7 @@ impl App {
                             Some(ProgramsDialog::Details(program.identity.clone()));
                     }
                 }
-                if theme::secondary(ui, "Refresh", !self.busy()) {
+                if theme::secondary(ui, "Refresh", !self.busy() && !self.qa_fixture_mode()) {
                     self.begin_program_inventory(ctx);
                 }
             });
@@ -470,6 +589,7 @@ impl App {
             unavailable_card(ui, t, "Inventory unavailable", error);
         }
         let busy = self.busy();
+        let qa_fixture_mode = self.qa_fixture_mode();
         let mut row_details = None;
         let mut row_uninstall_review = None;
         if let Some(inventory) = self.program_ui.inventory.as_ref() {
@@ -535,7 +655,11 @@ impl App {
                             row.spacing_mut().item_spacing.y = previous_y_spacing;
                             let is_selected =
                                 self.program_ui.selected.as_ref() == Some(&program.identity);
-                            let icon = program.icon_resource();
+                            let icon = if qa_fixture_mode {
+                                None
+                            } else {
+                                program.icon_resource()
+                            };
                             let name = row
                                 .allocate_ui_with_layout(
                                     [name_width, 40.].into(),
@@ -553,7 +677,8 @@ impl App {
                                             is_selected,
                                             (
                                                 RichText::new(&program.display_name)
-                                                    .family(theme::semibold()),
+                                                    .family(theme::semibold())
+                                                    .color(t.foreground),
                                                 egui::Atom::grow(),
                                             ),
                                         )
@@ -723,7 +848,7 @@ impl App {
     }
 
     fn begin_program_inventory(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.program_ui.initial_load_attempted = true;
@@ -740,8 +865,21 @@ impl App {
         });
     }
 
+    fn programs_intro_active(&self) -> bool {
+        if self.qa_fixture_mode() {
+            self.program_ui.intro_fixture
+        } else {
+            !self.feature_seen("programs")
+        }
+    }
+
+    fn start_programs(&mut self, ctx: &egui::Context) {
+        self.mark_feature_seen("programs");
+        self.begin_program_inventory(ctx);
+    }
+
     fn begin_program_uninstall(&mut self, request: UninstallRequest, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         let target_name = self
@@ -826,6 +964,9 @@ impl App {
     }
 
     fn load_program_journal(&mut self) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         if self.program_ui.journal_loaded {
             return;
         }
@@ -843,7 +984,8 @@ impl App {
     }
 
     fn refresh_program_inventory_after_return(&mut self, ctx: &egui::Context) {
-        if !self.program_ui.waiting_for_uninstaller_return || self.busy() {
+        if self.qa_fixture_mode() || !self.program_ui.waiting_for_uninstaller_return || self.busy()
+        {
             return;
         }
         match ctx.input(|input| input.viewport().focused) {
@@ -857,10 +999,48 @@ impl App {
     }
 }
 
+#[cfg(debug_assertions)]
+fn programs_qa_program(name: &str, key_name: &str, version: &str) -> InstalledProgram {
+    let executable = format!(r"C:\Fixture\{key_name}\uninstall.exe");
+    let registered = format!("\"{executable}\" /SILENT");
+    InstalledProgram {
+        identity: ProgramIdentity {
+            hive: RegistryHive::CurrentUser,
+            key_name: key_name.into(),
+        },
+        source: RegistrySource {
+            hive: RegistryHive::CurrentUser,
+            view: RegistryView::Registry64,
+        },
+        display_name: name.into(),
+        display_icon: None,
+        publisher: Some("Example Publisher".into()),
+        version: Some(version.into()),
+        install_location: Some(std::path::PathBuf::from(format!(
+            r"C:\Fixture\{}",
+            key_name
+        ))),
+        install_date: Some("20250115".into()),
+        estimated_size_bytes: Some(12_582_912),
+        registered_uninstall_command: Some(registered.clone()),
+        uninstall_command: Some(programs::UninstallCommand {
+            registered,
+            executable,
+            arguments: vec!["/SILENT".into()],
+        }),
+        uninstall_command_error: None,
+        system_component: false,
+        protected: false,
+        no_remove: false,
+    }
+}
+
 fn table_heading(ui: &mut egui::Ui, label: &str, width: f32, t: Tokens) {
     theme::table_cell(
         ui,
-        RichText::new(label).size(12.).color(t.muted),
+        RichText::new(label)
+            .size(theme::FONT_CAPTION)
+            .color(t.muted),
         width,
         22.,
     );

@@ -8,6 +8,11 @@ use dcleaner::{
     },
     store::{self, Journal},
 };
+#[cfg(debug_assertions)]
+use dcleaner::{
+    domain::Candidate,
+    duplicates::{DuplicateFile, DuplicateGroup},
+};
 use eframe::egui::{self, Align, Layout, RichText, Vec2};
 use std::{
     path::PathBuf,
@@ -32,6 +37,7 @@ struct DriveChoice {
 pub(super) struct DuplicateUi {
     scope: ScanScope,
     drives: Vec<DriveChoice>,
+    drives_loaded: bool,
     folders: Vec<PathBuf>,
     options: DuplicateOptions,
     minimum_size_text: String,
@@ -40,6 +46,7 @@ pub(super) struct DuplicateUi {
     report: Option<DuplicateReport>,
     cleanup_review: bool,
     acknowledge_all_copies: bool,
+    expand_qa_details: bool,
 }
 
 impl Default for DuplicateUi {
@@ -47,13 +54,8 @@ impl Default for DuplicateUi {
         let options = DuplicateOptions::default();
         Self {
             scope: ScanScope::Drives,
-            drives: available_drives()
-                .into_iter()
-                .map(|path| DriveChoice {
-                    path,
-                    selected: true,
-                })
-                .collect(),
+            drives: Vec::new(),
+            drives_loaded: false,
             folders: Vec::new(),
             minimum_size_text: options.minimum_size.to_string(),
             file_types_text: String::new(),
@@ -62,6 +64,28 @@ impl Default for DuplicateUi {
             report: None,
             cleanup_review: false,
             acknowledge_all_copies: false,
+            expand_qa_details: false,
+        }
+    }
+}
+
+impl DuplicateUi {
+    #[cfg(debug_assertions)]
+    pub(super) fn inert_fixture() -> Self {
+        let options = DuplicateOptions::default();
+        Self {
+            scope: ScanScope::Folders,
+            drives: Vec::new(),
+            drives_loaded: true,
+            folders: vec![PathBuf::from(r"C:\__dcleaner_qa_fixture__")],
+            minimum_size_text: options.minimum_size.to_string(),
+            file_types_text: String::new(),
+            options,
+            options_open: false,
+            report: None,
+            cleanup_review: false,
+            acknowledge_all_copies: false,
+            expand_qa_details: false,
         }
     }
 }
@@ -74,8 +98,76 @@ pub(super) enum DuplicateEvent {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_duplicates_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Duplicate Finder QA fixtures require isolated fixture mode.".into());
+        }
+        if !matches!(
+            case,
+            "duplicates-intro"
+                | "duplicates-empty"
+                | "duplicates-populated"
+                | "duplicates-details"
+                | "duplicates-error"
+        ) {
+            return Err(format!("Unsupported Duplicate Finder QA fixture: {case}"));
+        }
+        self.duplicate_ui = DuplicateUi::inert_fixture();
+        if case == "duplicates-intro" {
+            self.duplicate_ui.report = None;
+            self.error = None;
+        } else {
+            self.mark_feature_seen("duplicates");
+            let report = duplicate_qa_report(case);
+            self.duplicate_ui.expand_qa_details = case == "duplicates-details";
+            self.duplicate_ui.report = Some(report);
+            self.duplicate_ui.cleanup_review = false;
+            self.duplicate_ui.acknowledge_all_copies = false;
+            self.error = self
+                .duplicate_ui
+                .report
+                .as_ref()
+                .and_then(|report| report.error.clone());
+        }
+        self.notice = None;
+        self.progress.clear();
+        Ok(())
+    }
+
     pub(super) fn duplicates_page(&mut self, ui: &mut egui::Ui, t: Tokens, _ctx: &egui::Context) {
+        let fixture_mode = self.qa_fixture_mode();
         let busy = self.busy();
+        if fixture_mode {
+            theme::muted(
+                ui,
+                "QA fixture — synthetic paths and metadata only; no folder scan or file operation was run.",
+                t,
+            );
+            ui.add_space(6.);
+        }
+        if !self.feature_seen("duplicates") {
+            if self.feature_intro(
+                ui,
+                t,
+                "duplicates",
+                "Find duplicate files",
+                "Start a read-only scan of the selected locations. All detected drives are initially selected; review every match before moving files.",
+                &[
+                    (
+                        "Declutter disk space",
+                        "Find byte-for-byte matches in the selected locations; the scan does not move files.",
+                    ),
+                    (
+                        "Clean more thoroughly, safely",
+                        "Review the matching groups and confirm each proposed move to the Recycle Bin.",
+                    ),
+                ],
+            ) {
+                self.start_duplicate_scan(_ctx);
+            }
+            return;
+        }
         self.source_card(ui, t, busy);
         ui.add_space(10.);
         self.options_card(ui, t, busy);
@@ -86,15 +178,49 @@ impl App {
     }
 
     pub(super) fn duplicates_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if !self.feature_seen("duplicates") {
+            let compact = !self.feature_intro_wide(ctx);
+            let mut start = false;
+            theme::action_row(ui, |ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if compact {
+                        start = theme::primary(ui, "Start now", t, !self.busy());
+                    } else {
+                        theme::muted(
+                            ui,
+                            "Start a read-only scan, then review matching files before any move.",
+                            t,
+                        );
+                    }
+                });
+            });
+            if start {
+                self.start_duplicate_scan(ctx);
+            }
+            return;
+        }
         let busy = self.busy();
         self.duplicate_action_bar(ui, t, ctx, busy);
+    }
+
+    fn start_duplicate_scan(&mut self, ctx: &egui::Context) {
+        self.mark_feature_seen("duplicates");
+        if !self.qa_fixture_mode()
+            && self.duplicate_ui.scope == ScanScope::Drives
+            && !self.duplicate_ui.drives_loaded
+        {
+            self.refresh_duplicate_drives();
+        }
+        self.begin_duplicate_scan(ctx);
     }
 
     pub(super) fn duplicates_dialog(&mut self, ctx: &egui::Context) {
         if !self.duplicate_ui.cleanup_review {
             return;
         }
-        if !self.busy() && ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+        let fixture_mode = self.qa_fixture_mode();
+        let busy = self.busy();
+        if !busy && ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.duplicate_ui.cleanup_review = false;
             self.duplicate_ui.acknowledge_all_copies = false;
             return;
@@ -152,7 +278,8 @@ impl App {
                     self.duplicate_ui.cleanup_review = false;
                     self.duplicate_ui.acknowledge_all_copies = false;
                 }
-                let can_continue = selected_count > 0
+                let can_continue = !fixture_mode
+                    && selected_count > 0
                     && !cancelled
                     && self.history_readable
                     && (!all_copies_selected || self.duplicate_ui.acknowledge_all_copies);
@@ -261,6 +388,7 @@ impl App {
     }
 
     fn drive_picker(&mut self, ui: &mut egui::Ui, t: Tokens, busy: bool) {
+        let fixture_mode = self.qa_fixture_mode();
         let mut settings_changed = false;
         ui.horizontal_wrapped(|ui| {
             if theme::secondary(ui, "Select all drives", !busy) {
@@ -275,28 +403,21 @@ impl App {
                     drive.selected = false;
                 }
             }
-            if theme::secondary(ui, "Refresh drives", !busy) {
-                let old = self
-                    .duplicate_ui
-                    .drives
-                    .iter()
-                    .map(|drive| (path_identity(&drive.path), drive.selected))
-                    .collect::<std::collections::HashMap<_, _>>();
-                let refreshed = available_drives()
-                    .into_iter()
-                    .map(|path| DriveChoice {
-                        selected: old.get(&path_identity(&path)).copied().unwrap_or(true),
-                        path,
-                    })
-                    .collect();
+            if theme::secondary(ui, "Refresh drives", !busy && !fixture_mode) && !fixture_mode {
+                self.refresh_duplicate_drives();
                 settings_changed = true;
-                self.duplicate_ui.drives = refreshed;
             }
         });
         if self.duplicate_ui.drives.is_empty() {
             theme::muted(
                 ui,
-                "No accessible drive roots were found. Choose specific folders instead.",
+                if fixture_mode {
+                    "Drive roots are not loaded in this isolated fixture; no host drive inventory was queried."
+                } else if self.duplicate_ui.drives_loaded {
+                    "No accessible drive roots were found. Choose specific folders instead."
+                } else {
+                    "Drive roots have not been loaded. Choose Refresh drives or specific folders."
+                },
                 t,
             );
             if settings_changed {
@@ -331,10 +452,28 @@ impl App {
         }
     }
 
+    fn refresh_duplicate_drives(&mut self) {
+        let old = self
+            .duplicate_ui
+            .drives
+            .iter()
+            .map(|drive| (path_identity(&drive.path), drive.selected))
+            .collect::<std::collections::HashMap<_, _>>();
+        self.duplicate_ui.drives = available_drives()
+            .into_iter()
+            .map(|path| DriveChoice {
+                selected: old.get(&path_identity(&path)).copied().unwrap_or(true),
+                path,
+            })
+            .collect();
+        self.duplicate_ui.drives_loaded = true;
+    }
+
     fn folder_picker(&mut self, ui: &mut egui::Ui, t: Tokens, busy: bool) {
+        let fixture_mode = self.qa_fixture_mode();
         let mut settings_changed = false;
         ui.horizontal_wrapped(|ui| {
-            if theme::secondary(ui, "Add folder", !busy) {
+            if theme::secondary(ui, "Add folder", !busy && !fixture_mode) && !fixture_mode {
                 if let Some(folder) = rfd::FileDialog::new()
                     .set_title("Choose a folder to scan for duplicates")
                     .pick_folder()
@@ -456,6 +595,8 @@ impl App {
     }
 
     fn results_card(&mut self, ui: &mut egui::Ui, t: Tokens, busy: bool) {
+        let expand_qa_details = self.duplicate_ui.expand_qa_details;
+        let qa_fixture_mode = self.qa_fixture_mode();
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
@@ -489,7 +630,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(size_text(report.potential_reclaimable_bytes))
-                        .size(22.)
+                        .size(theme::FONT_DISPLAY)
                         .family(theme::semibold()),
                 );
                 theme::muted(ui, "logical size beyond one copy per group", t);
@@ -545,7 +686,9 @@ impl App {
                 ui.add_space(10.);
                 theme::muted(
                     ui,
-                    if report.cancelled {
+                    if let Some(error) = report.error.as_deref() {
+                        error
+                    } else if report.cancelled {
                         "No verified duplicate groups were completed before cancellation."
                     } else {
                         "No identical files were found in this scan."
@@ -576,6 +719,7 @@ impl App {
                             );
                             egui::CollapsingHeader::new(title)
                                 .id_salt(group.id)
+                                .default_open(expand_qa_details)
                                 .show(ui, |ui| {
                                     ui.horizontal_wrapped(|ui| {
                                         let mut all_selected = group.files.iter().all(|file| file.selected);
@@ -593,7 +737,11 @@ impl App {
                                         }
                                         theme::muted(
                                             ui,
-                                            "Groups contain byte-for-byte verified matches.",
+                                            if qa_fixture_mode {
+                                                "Synthetic QA preview group; no files were read or compared."
+                                            } else {
+                                                "Groups contain byte-for-byte verified matches."
+                                            },
                                             t,
                                         );
                                     });
@@ -733,7 +881,7 @@ impl App {
     }
 
     fn begin_duplicate_scan(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         let roots = match self.duplicate_ui.scope {
@@ -792,7 +940,7 @@ impl App {
     }
 
     fn begin_duplicate_cleanup(&mut self, ctx: &egui::Context) {
-        if self.busy() || !self.history_readable {
+        if self.busy() || self.qa_fixture_mode() || !self.history_readable {
             return;
         }
         let Some(report) = self.duplicate_ui.report.as_ref() else {
@@ -844,6 +992,72 @@ impl App {
         }
         self.duplicate_ui.cleanup_review = false;
         self.duplicate_ui.acknowledge_all_copies = false;
+    }
+}
+
+#[cfg(debug_assertions)]
+fn duplicate_qa_report(case: &str) -> DuplicateReport {
+    let is_error = case == "duplicates-error";
+    let populated = matches!(case, "duplicates-populated" | "duplicates-details");
+    let root = PathBuf::from(r"C:\__dcleaner_qa_fixture__");
+    let groups = if populated {
+        let size = 1_048_576;
+        let timestamp = 1_700_000_000_000_000_000;
+        vec![DuplicateGroup {
+            id: Uuid::new_v4(),
+            size,
+            files: ["fixture-copy-a.bin", "fixture-copy-b.bin"]
+                .into_iter()
+                .map(|name| DuplicateFile {
+                    candidate: Candidate {
+                        id: Uuid::new_v4(),
+                        path: root.join(name),
+                        root: root.clone(),
+                        size,
+                        modified_ns: timestamp,
+                        created_ns: Some(timestamp - 86_400_000_000_000),
+                    },
+                    selected: false,
+                })
+                .collect(),
+        }]
+    } else {
+        Vec::new()
+    };
+    let duplicate_files: usize = groups.iter().map(|group| group.files.len()).sum();
+    let duplicate_bytes = groups
+        .iter()
+        .map(|group| group.size.saturating_mul(group.files.len() as u64))
+        .sum::<u64>();
+    let potential_reclaimable_bytes = groups
+        .iter()
+        .map(|group| {
+            group
+                .size
+                .saturating_mul(group.files.len().saturating_sub(1) as u64)
+        })
+        .sum::<u64>();
+    DuplicateReport {
+        id: Uuid::new_v4(),
+        groups,
+        roots_requested: 1,
+        roots_available: usize::from(!is_error),
+        entries_seen: if populated { 2 } else { 0 },
+        candidate_files: duplicate_files,
+        fingerprinted_files: duplicate_files,
+        duplicate_files,
+        duplicate_bytes,
+        potential_reclaimable_bytes,
+        filtered_count: 0,
+        skipped_count: 0,
+        skipped_entries: Vec::new(),
+        omitted_skip_details: 0,
+        bytes_read: 0,
+        truncated: false,
+        cancelled: false,
+        partial: is_error,
+        elapsed_ms: 0,
+        error: is_error.then(|| "Synthetic QA fixture error. No folder was scanned.".into()),
     }
 }
 

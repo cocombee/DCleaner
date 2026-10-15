@@ -43,6 +43,7 @@ pub(super) struct PrivacyUi {
     cookie_settings_readable: bool,
     cookie_settings_error: Option<String>,
     cookie_domain_input: String,
+    clear_cookie_input_on_save: bool,
     report: Option<PrivacyReport>,
     selected_ids: HashSet<Uuid>,
     search: String,
@@ -79,6 +80,7 @@ impl Default for PrivacyUi {
             cookie_settings_readable: false,
             cookie_settings_error: None,
             cookie_domain_input: String::new(),
+            clear_cookie_input_on_save: false,
             report: None,
             selected_ids: HashSet::new(),
             search: String::new(),
@@ -124,6 +126,89 @@ pub(super) enum PrivacyEvent {
 }
 
 impl App {
+    pub(super) fn sync_privacy_cookie_settings(&mut self, settings: CookieExceptionSettings) {
+        let changed = settings != self.privacy_ui.cookie_settings;
+        self.privacy_ui.cookie_settings = settings;
+        self.privacy_ui.cookie_settings_readable = true;
+        self.privacy_ui.cookie_settings_error = None;
+        if changed {
+            self.privacy_ui.report = None;
+            self.privacy_ui.selected_ids.clear();
+            self.privacy_ui.cleanup_review = false;
+            self.privacy_ui.detail_id = None;
+        }
+    }
+
+    pub(super) fn mark_privacy_cookie_settings_unverified(&mut self, message: &str) {
+        self.privacy_ui.cookie_settings_readable = false;
+        self.privacy_ui.cookie_settings_error = Some(message.to_owned());
+        self.privacy_ui.report = None;
+        self.privacy_ui.selected_ids.clear();
+        self.privacy_ui.cleanup_review = false;
+        self.privacy_ui.detail_id = None;
+    }
+
+    #[cfg(test)]
+    pub(super) fn privacy_cookie_test_state(&self) -> (CookieExceptionSettings, bool, bool, bool) {
+        (
+            self.privacy_ui.cookie_settings.clone(),
+            self.privacy_ui.cookie_settings_readable,
+            self.privacy_ui.report.is_some(),
+            self.privacy_ui.cleanup_review,
+        )
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_privacy_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Privacy fixtures are available only in isolated visual QA.".into());
+        }
+        let ui = &mut self.privacy_ui;
+        *ui = PrivacyUi::default();
+        ui.loaded = true;
+        ui.cookie_settings_readable = true;
+        ui.restore_error = Some("Synthetic visual fixture; recovery storage was not read.".into());
+        match case {
+            "privacy-empty" => {
+                let (_, mut report) = privacy::visual_preview_fixture();
+                report.records.clear();
+                report.profiles_scanned = 0;
+                ui.report = Some(report);
+                ui.cookie_settings.keep_domains = vec!["example.test".into()];
+            }
+            "privacy-populated" | "privacy-details" => {
+                let (inventory, report) = privacy::visual_preview_fixture();
+                ui.profiles = inventory.profiles;
+                ui.selected_profiles = ui
+                    .profiles
+                    .iter()
+                    .map(|profile| profile.id.clone())
+                    .collect();
+                ui.report = Some(report);
+                if case == "privacy-details" {
+                    ui.detail_id = ui
+                        .report
+                        .as_ref()
+                        .and_then(|report| report.records.first())
+                        .map(|record| record.id);
+                }
+            }
+            "privacy-error" => {
+                ui.inventory_partial = true;
+                ui.inventory_skips = vec![
+                    "Synthetic fixture error: browser profile discovery was unavailable.".into(),
+                ];
+                ui.cookie_settings_readable = false;
+                ui.cookie_settings_error =
+                    Some("Synthetic fixture error: cookie settings could not be validated.".into());
+                ui.restore_error =
+                    Some("Synthetic fixture error: recovery metadata is unavailable.".into());
+            }
+            _ => return Err(format!("Unsupported Privacy visual fixture: {case}")),
+        }
+        Ok(())
+    }
+
     pub(super) fn privacy_overview_status(&self) -> String {
         match self.privacy_ui.report.as_ref() {
             Some(report) if !report.cancelled => {
@@ -135,7 +220,10 @@ impl App {
     }
 
     pub(super) fn privacy_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if !self.privacy_ui.loaded && self.privacy_ui.operation == PrivacyOperation::Idle {
+        if !self.qa_fixture_mode()
+            && !self.privacy_ui.loaded
+            && self.privacy_ui.operation == PrivacyOperation::Idle
+        {
             self.begin_privacy_inventory(ctx);
         }
         self.privacy_sources(ui, t, ctx);
@@ -150,7 +238,7 @@ impl App {
     }
 
     pub(super) fn privacy_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        let privacy_busy = self.privacy_ui.operation != PrivacyOperation::Idle;
+        let privacy_busy = self.privacy_ui.operation != PrivacyOperation::Idle || self.busy();
         ui.set_min_height(40.);
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
             match self.privacy_ui.operation {
@@ -282,13 +370,13 @@ impl App {
                 }
                 match settings {
                     Ok(settings) => {
-                        self.privacy_ui.cookie_settings = settings;
-                        self.privacy_ui.cookie_settings_readable = true;
-                        self.privacy_ui.cookie_settings_error = None;
+                        self.sync_cookie_settings_owners(settings);
                     }
                     Err(error) => {
-                        self.privacy_ui.cookie_settings_readable = false;
-                        self.privacy_ui.cookie_settings_error = Some(error);
+                        self.mark_cookie_settings_unverified();
+                        self.privacy_ui.cookie_settings_error = Some(format!(
+                            "Cookie rules could not be verified: {error}. Reload saved rules before scanning or cleanup."
+                        ));
                         self.privacy_ui.categories.remove(&PrivacyCategory::Cookies);
                     }
                 }
@@ -356,17 +444,26 @@ impl App {
                 self.privacy_ui.operation = PrivacyOperation::Idle;
                 match result {
                     Ok(settings) => {
-                        self.privacy_ui.cookie_settings = settings;
-                        self.privacy_ui.cookie_settings_readable = true;
-                        self.privacy_ui.cookie_settings_error = None;
+                        if self.privacy_ui.clear_cookie_input_on_save {
+                            self.privacy_ui.cookie_domain_input.clear();
+                        }
+                        self.privacy_ui.clear_cookie_input_on_save = false;
+                        self.sync_cookie_settings_owners(settings);
                         self.privacy_ui.report = None;
                         self.privacy_ui.selected_ids.clear();
+                        self.privacy_ui.cleanup_review = false;
                         self.notice = Some(
                             "Cookie keep domains were saved. Scan again to apply them to results."
                                 .into(),
                         );
                     }
-                    Err(error) => self.privacy_ui.cookie_settings_error = Some(error),
+                    Err(error) => {
+                        self.privacy_ui.clear_cookie_input_on_save = false;
+                        self.mark_cookie_settings_unverified();
+                        self.privacy_ui.cookie_settings_error = Some(format!(
+                            "Cookie-save outcome is uncertain: {error}. Reload saved rules before scanning or cleanup."
+                        ));
+                    }
                 }
             }
             PrivacyEvent::CleanupProgress { done, total } => {
@@ -619,6 +716,7 @@ impl App {
 
     fn privacy_cookie_settings(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let busy = self.privacy_ui.operation != PrivacyOperation::Idle || self.busy();
+        let editable = !busy && self.privacy_ui.cookie_settings_readable;
         let mut changed = false;
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -628,16 +726,17 @@ impl App {
             });
             ui.add_space(6.);
             theme::control_row(ui, |ui| {
-                theme::input(ui, &mut self.privacy_ui.cookie_domain_input, 245., "example.com", !busy);
-                if theme::field_action(ui, "Add domain", !busy) {
+                theme::input(ui, &mut self.privacy_ui.cookie_domain_input, 245., "example.com", editable);
+                if theme::field_action(ui, "Add domain", editable) {
                     match privacy::normalize_cookie_domain(&self.privacy_ui.cookie_domain_input) {
                         Ok(domain) => {
                             let mut domains = self.privacy_ui.cookie_settings.keep_domains.clone();
                             if !domains.iter().any(|existing| existing == &domain) {
                                 domains.push(domain);
-                                self.begin_save_cookie_settings(domains, ctx);
+                                self.begin_save_cookie_settings(domains, ctx, true);
+                            } else {
+                                self.privacy_ui.cookie_domain_input.clear();
                             }
-                            self.privacy_ui.cookie_domain_input.clear();
                         }
                         Err(error) => self.privacy_ui.cookie_settings_error = Some(error),
                     }
@@ -660,7 +759,7 @@ impl App {
                     theme::action_row(ui, |ui| {
                         ui.label(domain);
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if theme::secondary(ui, "Remove", !busy) {
+                            if theme::secondary(ui, "Remove", editable) {
                                 remove = Some(index);
                             }
                         });
@@ -669,7 +768,7 @@ impl App {
                 if let Some(index) = remove {
                     let mut domains = self.privacy_ui.cookie_settings.keep_domains.clone();
                     domains.remove(index);
-                    self.begin_save_cookie_settings(domains, ctx);
+                    self.begin_save_cookie_settings(domains, ctx, false);
                     changed = true;
                 }
             }
@@ -1204,7 +1303,10 @@ impl App {
     }
 
     fn begin_privacy_inventory(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.privacy_ui.operation != PrivacyOperation::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.privacy_ui.operation != PrivacyOperation::Idle
+        {
             return;
         }
         self.privacy_ui.operation = PrivacyOperation::Loading;
@@ -1246,7 +1348,10 @@ impl App {
     }
 
     fn begin_privacy_scan(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.privacy_ui.operation != PrivacyOperation::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.privacy_ui.operation != PrivacyOperation::Idle
+        {
             return;
         }
         let profiles = self
@@ -1309,7 +1414,10 @@ impl App {
     }
 
     fn begin_close_request(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.privacy_ui.operation != PrivacyOperation::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.privacy_ui.operation != PrivacyOperation::Idle
+        {
             return;
         }
         let selected = self
@@ -1343,7 +1451,10 @@ impl App {
     }
 
     fn refresh_running_browsers(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.privacy_ui.operation != PrivacyOperation::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.privacy_ui.operation != PrivacyOperation::Idle
+        {
             return;
         }
         self.privacy_ui.operation = PrivacyOperation::ClosingBrowsers;
@@ -1358,8 +1469,17 @@ impl App {
         });
     }
 
-    fn begin_save_cookie_settings(&mut self, domains: Vec<String>, ctx: &egui::Context) {
-        if self.busy() || self.privacy_ui.operation != PrivacyOperation::Idle {
+    fn begin_save_cookie_settings(
+        &mut self,
+        domains: Vec<String>,
+        ctx: &egui::Context,
+        clear_input_on_success: bool,
+    ) {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.privacy_ui.operation != PrivacyOperation::Idle
+            || !self.privacy_ui.cookie_settings_readable
+        {
             return;
         }
         if self.data_dir.as_os_str().is_empty() {
@@ -1368,6 +1488,7 @@ impl App {
             return;
         }
         self.privacy_ui.operation = PrivacyOperation::SavingSettings;
+        self.privacy_ui.clear_cookie_input_on_save = clear_input_on_success;
         self.progress = "Saving cookie keep domains…".into();
         let data_dir = self.data_dir.clone();
         let ctx = ctx.clone();
@@ -1381,7 +1502,8 @@ impl App {
     }
 
     fn begin_privacy_cleanup(&mut self, ctx: &egui::Context) {
-        if self.busy()
+        if self.qa_fixture_mode()
+            || self.busy()
             || self.privacy_ui.operation != PrivacyOperation::Idle
             || !self.history_readable
         {
@@ -1428,7 +1550,8 @@ impl App {
     }
 
     fn begin_prepare_restore(&mut self, id: Uuid, ctx: &egui::Context) {
-        if self.busy()
+        if self.qa_fixture_mode()
+            || self.busy()
             || self.privacy_ui.operation != PrivacyOperation::Idle
             || self.data_dir.as_os_str().is_empty()
         {
@@ -1448,7 +1571,10 @@ impl App {
     }
 
     fn begin_privacy_restore(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.privacy_ui.operation != PrivacyOperation::Idle {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || self.privacy_ui.operation != PrivacyOperation::Idle
+        {
             return;
         }
         let Some(plan) = self.privacy_ui.restore_plan.clone() else {
@@ -1469,6 +1595,9 @@ impl App {
     }
 
     fn refresh_privacy_recovery_options(&mut self) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         if self.data_dir.as_os_str().is_empty() {
             self.privacy_ui.restore_error = Some("Application data storage is unavailable.".into());
             return;

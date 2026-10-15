@@ -8,11 +8,57 @@ pub const FIELD_HEIGHT: f32 = 32.;
 pub const FIELD_RADIUS: u8 = 8;
 pub const TAB_HEIGHT: f32 = 28.;
 pub const TABLE_ACTION_HEIGHT: f32 = 22.;
+pub const FONT_CAPTION: f32 = 12.;
+pub const FONT_BODY: f32 = 13.;
+pub const FONT_TITLE: f32 = 16.;
+pub const FONT_DISPLAY: f32 = 24.;
+
+#[cfg(test)]
+mod typography_tests {
+    use super::*;
+
+    #[test]
+    fn both_themes_use_only_the_four_font_size_tokens() {
+        let allowed = [FONT_CAPTION, FONT_BODY, FONT_TITLE, FONT_DISPLAY];
+        for dark in [false, true] {
+            let context = egui::Context::default();
+            apply(&context, dark);
+            for (style, font) in &context
+                .style_of(if dark {
+                    egui::Theme::Dark
+                } else {
+                    egui::Theme::Light
+                })
+                .text_styles
+            {
+                assert!(allowed.contains(&font.size), "{style:?}: {}", font.size);
+            }
+        }
+        assert!(FONT_CAPTION < FONT_BODY && FONT_BODY < FONT_TITLE && FONT_TITLE < FONT_DISPLAY);
+    }
+}
 
 #[cfg(debug_assertions)]
 #[derive(Clone, Default, serde::Serialize)]
 struct GeometryFrame {
     controls: Vec<ControlGeometry>,
+    scroll_areas: Vec<serde_json::Value>,
+}
+#[cfg(debug_assertions)]
+pub fn record_scroll(
+    ctx: &egui::Context,
+    name: &str,
+    inner: egui::Rect,
+    content: Vec2,
+    offset: Vec2,
+) {
+    ctx.data_mut(|data| {
+        let id = egui::Id::new("native-control-geometry");
+        if let Some(mut frame) = data.get_temp::<GeometryFrame>(id) {
+            frame.scroll_areas.push(serde_json::json!({"name":name,"viewport":[inner.left(),inner.top(),inner.width(),inner.height()],"content":[content.x,content.y],"offset":[offset.x,offset.y]}));
+            data.insert_temp(id, frame);
+        }
+    });
 }
 #[cfg(debug_assertions)]
 #[derive(Clone, serde::Serialize)]
@@ -20,6 +66,10 @@ struct ControlGeometry {
     role: String,
     rect: [f32; 4],
     radius: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    enabled: Option<bool>,
 }
 #[cfg(debug_assertions)]
 pub fn begin_geometry_frame(ctx: &egui::Context) {
@@ -34,13 +84,15 @@ pub fn begin_geometry_frame(ctx: &egui::Context) {
 }
 #[cfg(debug_assertions)]
 pub fn geometry_json(ctx: &egui::Context) -> serde_json::Value {
-    ctx.data(|data| {
+    let mut frame = ctx.data(|data| {
         serde_json::to_value(
             data.get_temp::<GeometryFrame>(egui::Id::new("native-control-geometry"))
                 .unwrap_or_default(),
         )
         .unwrap_or_default()
-    })
+    });
+    frame["font_tokens"] = serde_json::json!({"caption":FONT_CAPTION,"body":FONT_BODY,"title":FONT_TITLE,"display":FONT_DISPLAY});
+    frame
 }
 fn record_control(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
     #[cfg(debug_assertions)]
@@ -51,11 +103,47 @@ fn record_control(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
                 role: role.to_owned(),
                 rect: [rect.left(), rect.top(), rect.width(), rect.height()],
                 radius,
+                label: None,
+                enabled: None,
             });
             data.insert_temp(id, frame);
         }
     });
     let _ = (ui, role, rect, radius);
+}
+
+fn record_labeled_control(
+    ui: &egui::Ui,
+    role: &str,
+    rect: egui::Rect,
+    radius: u8,
+    label: &str,
+    enabled: bool,
+) {
+    record_control(ui, role, rect, radius);
+    #[cfg(debug_assertions)]
+    ui.ctx().data_mut(|data| {
+        let id = egui::Id::new("native-control-geometry");
+        if let Some(mut frame) = data.get_temp::<GeometryFrame>(id) {
+            if let Some(control) = frame.controls.last_mut() {
+                control.label = Some(label.to_owned());
+                control.enabled = Some(enabled && ui.is_enabled());
+            }
+            data.insert_temp(id, frame);
+        }
+    });
+    let _ = (label, enabled);
+}
+#[cfg(debug_assertions)]
+pub(crate) fn record_fixture_control(ui: &egui::Ui, label: &str, response: &egui::Response) {
+    record_labeled_control(
+        ui,
+        "icon-action",
+        response.rect,
+        13,
+        label,
+        response.enabled(),
+    );
 }
 
 fn field_style(ui: &mut egui::Ui) {
@@ -369,18 +457,28 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.spacing.scroll.dormant_handle_opacity = 0.35;
     style.text_styles.insert(
         egui::TextStyle::Body,
-        FontId::new(13., FontFamily::Proportional),
+        FontId::new(FONT_BODY, FontFamily::Proportional),
     );
     style
         .text_styles
-        .insert(egui::TextStyle::Button, FontId::new(13., semibold()));
+        .insert(egui::TextStyle::Button, FontId::new(FONT_BODY, semibold()));
     style.text_styles.insert(
         egui::TextStyle::Small,
-        FontId::new(11., FontFamily::Proportional),
+        FontId::new(FONT_CAPTION, FontFamily::Proportional),
     );
-    style
-        .text_styles
-        .insert(egui::TextStyle::Heading, FontId::new(22., semibold()));
+    style.text_styles.insert(
+        egui::TextStyle::Heading,
+        FontId::new(FONT_DISPLAY, semibold()),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Monospace,
+        FontId::new(FONT_CAPTION, FontFamily::Monospace),
+    );
+    for font in style.text_styles.values_mut() {
+        if ![FONT_CAPTION, FONT_BODY, FONT_TITLE, FONT_DISPLAY].contains(&font.size) {
+            font.size = FONT_BODY;
+        }
+    }
     let theme = if dark {
         egui::Theme::Dark
     } else {
@@ -428,7 +526,7 @@ pub fn primary(ui: &mut egui::Ui, label: &str, t: Tokens, enabled: bool) -> bool
             .min_size(Vec2::new(120., CONTROL_HEIGHT)),
     );
     focus_ring(ui, &response, CONTROL_RADIUS + 2);
-    record_control(ui, "primary", response.rect, CONTROL_RADIUS);
+    record_labeled_control(ui, "primary", response.rect, CONTROL_RADIUS, label, enabled);
     response.clicked()
 }
 pub fn secondary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
@@ -450,7 +548,14 @@ pub fn secondary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
                     .min_size(Vec2::new(100., CONTROL_HEIGHT)),
             );
             focus_ring(ui, &response, CONTROL_RADIUS + 2);
-            record_control(ui, "secondary", response.rect, CONTROL_RADIUS);
+            record_labeled_control(
+                ui,
+                "secondary",
+                response.rect,
+                CONTROL_RADIUS,
+                label,
+                enabled,
+            );
             response.clicked()
         },
     )
@@ -466,7 +571,7 @@ fn compact_action(ui: &mut egui::Ui, label: &str, enabled: bool, height: f32) ->
     let response = ui
         .scope(|ui| {
             ui.spacing_mut().button_padding = Vec2::new(10., 2.);
-            let font = FontId::new(12., semibold());
+            let font = FontId::new(FONT_CAPTION, semibold());
             let width = (ui
                 .painter()
                 .layout_no_wrap(label.to_owned(), font, ui.visuals().text_color())
@@ -476,14 +581,14 @@ fn compact_action(ui: &mut egui::Ui, label: &str, enabled: bool, height: f32) ->
                 .max(72.);
             ui.add_enabled(
                 enabled,
-                egui::Button::new(RichText::new(label).family(semibold()).size(12.))
+                egui::Button::new(RichText::new(label).family(semibold()).size(FONT_CAPTION))
                     .corner_radius((height / 2.) as u8)
                     .min_size(Vec2::new(width, height)),
             )
         })
         .inner;
     focus_ring(ui, &response, (height / 2.) as u8 + 2);
-    record_control(
+    record_labeled_control(
         ui,
         if height == TABLE_ACTION_HEIGHT {
             "table-action"
@@ -492,6 +597,8 @@ fn compact_action(ui: &mut egui::Ui, label: &str, enabled: bool, height: f32) ->
         },
         response.rect,
         (height / 2.) as u8,
+        label,
+        enabled,
     );
     response
 }
@@ -704,7 +811,11 @@ pub fn window_chrome(ui: &mut egui::Ui, t: Tokens) {
     }
 }
 pub fn muted(ui: &mut egui::Ui, label: impl Into<String>, t: Tokens) {
-    ui.label(RichText::new(label.into()).color(t.muted).size(12.));
+    ui.label(
+        RichText::new(label.into())
+            .color(t.muted)
+            .size(FONT_CAPTION),
+    );
 }
 fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
     if response.has_focus() {
@@ -754,7 +865,7 @@ pub fn section_navigation(
                         } else {
                             FontFamily::Proportional
                         })
-                        .size(12.)
+                        .size(FONT_CAPTION)
                         .color(if selected { t.foreground } else { t.muted }),
                     egui::Atom::grow(),
                 ))

@@ -1,5 +1,7 @@
 use super::*;
 use crate::theme;
+#[cfg(debug_assertions)]
+use dcleaner::startup::SourceOutcome;
 use dcleaner::{
     effects::{self, EffectHistory, EffectJournal},
     startup::{
@@ -51,6 +53,7 @@ pub(super) struct StartupUi {
     descending: bool,
     selected: Option<StartupId>,
     details_open: bool,
+    info_open: bool,
     was_focused: bool,
     last_refresh: Option<std::time::Instant>,
     background_read: Option<Receiver<StartupInventory>>,
@@ -71,6 +74,7 @@ impl Default for StartupUi {
             descending: false,
             selected: None,
             details_open: false,
+            info_open: false,
             was_focused: false,
             last_refresh: None,
             background_read: None,
@@ -133,6 +137,94 @@ impl ReviewAction {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_startup_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Startup visual fixtures require fixture mode.".into());
+        }
+        if case == "startup-help" {
+            self.startup_ui = StartupUi {
+                info_open: true,
+                ..StartupUi::default()
+            };
+            return Ok(());
+        }
+        if !matches!(
+            case,
+            "startup-empty" | "startup-populated" | "startup-details" | "startup-error"
+        ) {
+            return Err(format!("Unsupported Startup Manager fixture: {case}"));
+        }
+
+        let populated = !matches!(case, "startup-empty");
+        let partial = case == "startup-error";
+        let mut inventories = HashMap::new();
+        for section in StartupSection::ALL {
+            let entries = if populated {
+                vec![startup_qa_entry(
+                    section,
+                    if partial {
+                        EnabledState::Unknown {
+                            reason: "Synthetic fixture state is unknown.".into(),
+                        }
+                    } else if section == StartupSection::ScheduledTasks
+                        || section == StartupSection::WindowsServices
+                    {
+                        EnabledState::Disabled
+                    } else {
+                        EnabledState::Enabled
+                    },
+                )]
+            } else {
+                Vec::new()
+            };
+            let mut sources = vec![SourceOutcome {
+                source: format!("Synthetic {case} fixture"),
+                state: SourceState::Read {
+                    items: entries.len(),
+                },
+            }];
+            if partial {
+                sources.push(SourceOutcome {
+                    source: "Synthetic inaccessible fixture source".into(),
+                    state: SourceState::Inaccessible {
+                        reason: "Synthetic permission error; no native source was read.".into(),
+                    },
+                });
+            }
+            inventories.insert(
+                section,
+                StartupInventory {
+                    section,
+                    quality: if partial {
+                        InventoryQuality::Partial
+                    } else {
+                        InventoryQuality::Complete
+                    },
+                    entries,
+                    sources,
+                },
+            );
+        }
+
+        let selected = inventories
+            .get(&StartupSection::StartupApps)
+            .and_then(|inventory| inventory.entries.first())
+            .map(|entry| entry.id.clone());
+        self.startup_ui = StartupUi {
+            inventories,
+            loaded: true,
+            selected: selected.clone(),
+            details_open: case == "startup-details" && selected.is_some(),
+            last_refresh: Some(std::time::Instant::now()),
+            ..StartupUi::default()
+        };
+        self.error = None;
+        self.notice = None;
+        self.progress.clear();
+        Ok(())
+    }
+
     pub(super) fn startup_overview_status(&self) -> String {
         self.startup_ui
             .inventories
@@ -247,7 +339,7 @@ impl App {
     }
 
     pub(super) fn startup_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if !self.startup_ui.loaded && !self.busy() {
+        if !self.qa_fixture_mode() && !self.startup_ui.loaded && !self.busy() {
             self.begin_startup_load(ctx);
         }
 
@@ -287,7 +379,35 @@ impl App {
         self.history_panel(ui, t);
     }
 
+    pub(super) fn startup_info_button(&mut self, ui: &mut egui::Ui) {
+        let t = theme::tokens(self.prefs.dark);
+        let response = ui.add_sized(
+            [26., 26.],
+            egui::Button::new(RichText::new("i").family(theme::semibold()).color(t.muted))
+                .corner_radius(13)
+                .fill(t.tint)
+                .stroke(egui::Stroke::new(1., t.border)),
+        );
+        #[cfg(debug_assertions)]
+        theme::record_fixture_control(ui, "About Startup Manager", &response);
+        if response.on_hover_text("About Startup Manager").clicked() {
+            self.startup_ui.info_open = true;
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_startup_info_open(&self) -> bool {
+        self.startup_ui.info_open
+    }
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_startup_sort_state(&self) -> serde_json::Value {
+        serde_json::json!({"column":self.startup_ui.sort.label(),"descending":self.startup_ui.descending})
+    }
+
     pub(super) fn startup_refresh_external_state(&mut self, ctx: &egui::Context) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         if let Some(receiver) = self.startup_ui.background_read.take() {
             match receiver.try_recv() {
                 Ok(inventory) => {
@@ -336,7 +456,6 @@ impl App {
 
     pub(super) fn startup_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let busy = self.busy();
-        let selected_entry = self.selected_entry().cloned();
         let selected_history = self
             .startup_ui
             .selected_history
@@ -366,35 +485,20 @@ impl App {
             .unwrap_or_else(|| format!("{} · not loaded", section.label()));
         let mut should_refresh = false;
         let mut should_export = false;
-        let mut prepare_change = None;
         let mut open_history_review = false;
-        let mut open_location = None;
 
         ui.horizontal_wrapped(|ui| {
             theme::muted(ui, inventory_summary, t);
             ui.separator();
-            if theme::secondary(ui, "Refresh", !busy) {
+            if theme::secondary(ui, "Refresh", !busy && !self.qa_fixture_mode()) {
                 should_refresh = true;
             }
-            if theme::secondary(ui, "Export JSON", !busy && self.startup_ui.loaded) {
+            if theme::secondary(
+                ui,
+                "Export JSON",
+                !busy && self.startup_ui.loaded && !self.qa_fixture_mode(),
+            ) {
                 should_export = true;
-            }
-            if let Some(entry) = &selected_entry {
-                if let FieldValue::Known { value } = &entry.file_path {
-                    if theme::secondary(ui, "Open file location", !busy) {
-                        open_location = Some(value.clone());
-                    }
-                }
-                if entry.can_change_enabled {
-                    let target = !matches!(&entry.enabled, EnabledState::Enabled);
-                    let label = if target { "Enable" } else { "Disable" };
-                    if theme::primary(ui, label, t, !busy) {
-                        prepare_change = Some((entry.id.clone(), target));
-                    }
-                } else if let Some(limitation) = &entry.change_limitation {
-                    ui.add_enabled(false, egui::Button::new("Read only"))
-                        .on_hover_text(limitation);
-                }
             }
             if history_action.is_some()
                 && theme::secondary(
@@ -421,23 +525,15 @@ impl App {
         if should_export {
             self.export_startup_inventory();
         }
-        if let Some(path) = open_location {
-            match open_in_explorer(&path) {
-                Ok(()) => self.notice = Some("The file location was opened in Explorer.".into()),
-                Err(error) => {
-                    self.error = Some(format!("The file location could not be opened: {error}"))
-                }
-            }
-        }
-        if let Some((id, target)) = prepare_change {
-            self.begin_startup_prepare(id, target, ctx);
-        }
         if open_history_review {
             self.startup_ui.review = history_action;
         }
     }
 
     pub(super) fn startup_dialog(&mut self, ctx: &egui::Context) {
+        if self.startup_ui.info_open {
+            self.startup_info_dialog(ctx);
+        }
         if self.startup_ui.details_open {
             let t = theme::tokens(self.prefs.dark);
             let mut close = false;
@@ -537,8 +633,102 @@ impl App {
         }
     }
 
+    fn startup_info_dialog(&mut self, ctx: &egui::Context) {
+        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.startup_ui.info_open = false;
+            return;
+        }
+        let t = theme::tokens(self.prefs.dark);
+        let width = (ctx.content_rect().width() - 100.).clamp(260., 728.);
+        let body_height = (ctx.content_rect().height() - 190.).clamp(120., 520.);
+        let columns = if width < 500. { 1 } else { 2 };
+        let mut close = false;
+        let modal = egui::Modal::new(egui::Id::new("startup-manager-help"))
+            .frame(theme::dialog_frame(t))
+            .show(ctx, |ui| {
+                ui.set_width(width);
+                ui.horizontal(|ui| {
+                    startup_gauge_icon(ui, t);
+                    ui.label(RichText::new("Startup Manager").family(theme::semibold()).size(theme::FONT_TITLE));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let close_button = ui.add_sized(
+                            [28., 28.],
+                            egui::Button::new(RichText::new("×").size(theme::FONT_TITLE).color(t.muted))
+                                .corner_radius(14)
+                                .fill(t.tint)
+                                .stroke(egui::Stroke::new(1., t.border)),
+                        );
+                        if close_button.on_hover_text("Close help").clicked() {
+                            close = true;
+                        }
+                    });
+                });
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height(body_height)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Label::new(
+                                "Review the items that can run automatically, inspect their source and current state, and review the exact identity before changing a supported entry.",
+                            )
+                            .wrap(),
+                        );
+                        ui.add_space(14.);
+                        let cards = [
+                            (
+                                theme::Icon::Startup,
+                                "Startup apps",
+                                "Run entries and Startup-folder shortcuts registered for the user or machine.",
+                            ),
+                            (
+                                theme::Icon::History,
+                                "Scheduled tasks",
+                                "Task Scheduler registrations, with their available trigger and action details.",
+                            ),
+                            (
+                                theme::Icon::Programs,
+                                "Context menu",
+                                "Shell commands and extensions registered for Windows Explorer menus.",
+                            ),
+                            (
+                                theme::Icon::Optimizer,
+                                "Windows services",
+                                "Service startup configuration and current service state.",
+                            ),
+                        ];
+                        for row_start in (0..cards.len()).step_by(columns) {
+                            ui.columns(columns, |column_uis| {
+                                for (column_index, column_ui) in column_uis.iter_mut().enumerate() {
+                                    if let Some((icon, title, description)) =
+                                        cards.get(row_start + column_index)
+                                    {
+                                        startup_help_card(
+                                            column_ui,
+                                            t,
+                                            *icon,
+                                            title,
+                                            description,
+                                        );
+                                    }
+                                }
+                            });
+                            ui.add_space(10.);
+                        }
+                    });
+                ui.separator();
+                ui.with_layout(
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| close |= theme::primary(ui, "Got it", t, true),
+                );
+            });
+        if close || modal.should_close() {
+            self.startup_ui.info_open = false;
+        }
+    }
+
     fn begin_startup_load(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.startup_ui.background_read = None;
@@ -564,7 +754,7 @@ impl App {
     }
 
     fn begin_startup_prepare(&mut self, id: StartupId, target_enabled: bool, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.startup_ui.background_read = None;
@@ -591,7 +781,7 @@ impl App {
     }
 
     fn begin_startup_action(&mut self, action: ReviewAction, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.error = None;
@@ -799,10 +989,16 @@ impl App {
                 .max(program_min_width);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.;
-                table_header(ui, program_width, "Program");
-                if show_publisher { table_header(ui, publisher_width, "Publisher"); }
-                if show_path { table_header(ui, path_width, "File path"); }
-                table_header(ui, state_width, "State");
+                for (column, width, visible) in [(SortColumn::Program,program_width,true), (SortColumn::Publisher,publisher_width,show_publisher), (SortColumn::FilePath,path_width,show_path), (SortColumn::Enabled,state_width,true)] {
+                    if visible && sortable_header(ui,width,column.label(),self.startup_ui.sort==column,self.startup_ui.descending,t) {
+                        if self.startup_ui.sort == column {
+                            self.startup_ui.descending = !self.startup_ui.descending;
+                        } else {
+                            self.startup_ui.sort = column;
+                            self.startup_ui.descending = false;
+                        }
+                    }
+                }
                 table_header(ui, action_width, "Actions");
             });
             ui.separator();
@@ -825,13 +1021,22 @@ impl App {
                             ui.set_min_width(program_width);
                             ui.set_max_width(program_width);
                             ui.spacing_mut().item_spacing.x = 8.;
-                            let resource = match &entry.file_path { FieldValue::Known { value } => Some(value.as_str()), _ => None };
+                            let resource = if self.qa_fixture_mode() {
+                                None
+                            } else {
+                                match &entry.file_path {
+                                    FieldValue::Known { value } => Some(value.as_str()),
+                                    _ => None,
+                                }
+                            };
                             self.app_icons.show(ui, resource, 22.);
                             ui.spacing_mut().button_padding = Vec2::ZERO;
                             ui.add_sized(
                             [(program_width - 30.).max(40.), 36.],
                             egui::Button::new((
-                                RichText::new(program.clone()).family(theme::semibold()),
+                                RichText::new(program.clone())
+                                    .family(theme::semibold())
+                                    .color(t.foreground),
                                 egui::Atom::grow(),
                             ))
                             .selected(selected)
@@ -889,7 +1094,10 @@ impl App {
                                     ui.close();
                                 }
                                 if ui
-                                    .add_enabled(!busy, egui::Button::new("Save to text file"))
+                                    .add_enabled(
+                                        !busy && !self.qa_fixture_mode(),
+                                        egui::Button::new("Save to text file"),
+                                    )
                                     .clicked()
                                 {
                                     save_text = true;
@@ -897,7 +1105,12 @@ impl App {
                                 }
                                 if let FieldValue::Known { value } = &entry.file_path {
                                     if !value.is_empty()
-                                        && ui.button("Open in folder").clicked()
+                                        && ui
+                                            .add_enabled(
+                                                !self.qa_fixture_mode(),
+                                                egui::Button::new("Open in folder"),
+                                            )
+                                            .clicked()
                                     {
                                         open_location = Some(value.clone());
                                         ui.close();
@@ -913,7 +1126,7 @@ impl App {
             });
             ui.spacing_mut().item_spacing.y = previous_y_spacing;
         });
-        if save_text {
+        if save_text && !self.qa_fixture_mode() {
             self.export_startup_text(inventory);
         }
         if let Some(id) = detail_selection {
@@ -988,7 +1201,7 @@ impl App {
                     if ui
                         .selectable_label(
                             self.startup_ui.selected_history == Some(record.id),
-                            egui::RichText::new(label).size(12.),
+                            egui::RichText::new(label).size(theme::FONT_CAPTION),
                         )
                         .on_hover_text(if record.state == "uncertain" {
                             "Outcome not confirmed. Review the typed saved intent before attempting guarded recovery."
@@ -1035,6 +1248,9 @@ impl App {
     }
 
     fn export_startup_inventory(&mut self) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         let mut inventories = StartupSection::ALL
             .into_iter()
             .filter_map(|section| self.startup_ui.inventories.get(&section).cloned())
@@ -1065,6 +1281,9 @@ impl App {
     }
 
     fn export_startup_text(&mut self, inventory: &StartupInventory) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         if matches!(&inventory.quality, InventoryQuality::Unavailable) {
             self.error = Some(
                 "This tab has no usable inventory to export. Refresh the native sources first."
@@ -1110,6 +1329,167 @@ impl App {
             }
         }
     }
+}
+
+#[cfg(debug_assertions)]
+fn startup_qa_entry(section: StartupSection, enabled: EnabledState) -> StartupEntry {
+    let identity = match section {
+        StartupSection::StartupApps => EntryIdentity::StartupRunValue {
+            hive: dcleaner::startup::RegistryHive::CurrentUser,
+            key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
+            value_name: "FixtureExample".into(),
+            approval_hive: dcleaner::startup::RegistryHive::CurrentUser,
+            approval_key: r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+                .into(),
+        },
+        StartupSection::ScheduledTasks => EntryIdentity::ScheduledTask {
+            path: r"\Fixture\ExampleTask".into(),
+        },
+        StartupSection::ContextMenu => EntryIdentity::ContextMenuRegistration {
+            hive: dcleaner::startup::RegistryHive::CurrentUser,
+            key: r"Software\Classes\*\shell\FixtureExample".into(),
+            registration: "FixtureVerb".into(),
+        },
+        StartupSection::WindowsServices => EntryIdentity::WindowsService {
+            name: "FixtureService".into(),
+        },
+    };
+    let (program, file_path, command) = match section {
+        StartupSection::StartupApps => (
+            "Example Startup App",
+            FieldValue::Known {
+                value: r"C:\Fixture\Example\example.exe".into(),
+            },
+            FieldValue::Known {
+                value: r#""C:\Fixture\Example\example.exe" --start"#.into(),
+            },
+        ),
+        StartupSection::ScheduledTasks => (
+            "Example Scheduled Task",
+            FieldValue::Known {
+                value: r"C:\Fixture\Example\task.exe".into(),
+            },
+            FieldValue::Known {
+                value: r#""C:\Fixture\Example\task.exe" --scheduled"#.into(),
+            },
+        ),
+        StartupSection::ContextMenu => (
+            "Example Context Menu Command",
+            FieldValue::Known {
+                value: r"C:\Fixture\Example\context.exe".into(),
+            },
+            FieldValue::Known {
+                value: r#""C:\Fixture\Example\context.exe" --menu"#.into(),
+            },
+        ),
+        StartupSection::WindowsServices => (
+            "Example Windows Service",
+            FieldValue::Known {
+                value: r"C:\Fixture\Example\service.exe".into(),
+            },
+            FieldValue::Known {
+                value: r#""C:\Fixture\Example\service.exe" --service"#.into(),
+            },
+        ),
+    };
+    let can_change_enabled = !matches!(&enabled, EnabledState::Unknown { .. });
+    let change_limitation = match &enabled {
+        EnabledState::Unknown { reason } => Some(reason.clone()),
+        EnabledState::Enabled | EnabledState::Disabled => None,
+    };
+    StartupEntry {
+        id: StartupId::for_identity(&identity),
+        section,
+        program: FieldValue::Known {
+            value: program.into(),
+        },
+        publisher: FieldValue::Known {
+            value: "Example Publisher".into(),
+        },
+        version: FieldValue::Known {
+            value: "1.2.3".into(),
+        },
+        file_path,
+        command,
+        enabled,
+        identity,
+        can_change_enabled,
+        change_limitation,
+    }
+}
+
+fn startup_gauge_icon(ui: &mut egui::Ui, t: Tokens) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(34.), egui::Sense::hover());
+    let center = egui::Pos2::new(rect.center().x, rect.center().y + 3.);
+    let radius = 11.;
+    let arc = (0..=16)
+        .map(|index| {
+            let angle = std::f32::consts::PI + std::f32::consts::PI * index as f32 / 16.;
+            egui::Pos2::new(
+                center.x + radius * angle.cos(),
+                center.y + radius * angle.sin(),
+            )
+        })
+        .collect::<Vec<_>>();
+    ui.painter()
+        .add(egui::Shape::line(arc, egui::Stroke::new(2., t.primary)));
+    ui.painter().line_segment(
+        [
+            egui::Pos2::new(center.x - radius, center.y),
+            egui::Pos2::new(center.x + radius, center.y),
+        ],
+        egui::Stroke::new(1.5, t.muted),
+    );
+    ui.painter().line_segment(
+        [center, egui::Pos2::new(center.x + 5., center.y - 6.)],
+        egui::Stroke::new(2., t.primary),
+    );
+    ui.painter().circle_filled(center, 2., t.primary);
+}
+
+fn startup_help_card(
+    ui: &mut egui::Ui,
+    t: Tokens,
+    icon: theme::Icon,
+    title: &str,
+    description: &str,
+) {
+    let width = (ui.available_width() - 24.).max(0.);
+    egui::Frame::new()
+        .fill(t.canvas)
+        .stroke(egui::Stroke::new(1., t.border))
+        .corner_radius(8)
+        .inner_margin(12.)
+        .show(ui, |ui| {
+            ui.set_min_width(width);
+            ui.set_width(width);
+            ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                ui.horizontal(|ui| {
+                    let (icon_rect, _) =
+                        ui.allocate_exact_size(Vec2::splat(22.), egui::Sense::hover());
+                    theme::paint_icon(ui.painter(), icon_rect, icon, t.primary);
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(title)
+                                .family(theme::semibold())
+                                .size(theme::FONT_TITLE)
+                                .color(t.foreground),
+                        )
+                        .wrap(),
+                    );
+                });
+                ui.add_space(5.);
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(description)
+                            .size(theme::FONT_CAPTION)
+                            .color(t.muted),
+                    )
+                    .wrap()
+                    .halign(Align::Min),
+                );
+            });
+        });
 }
 
 fn startup_export_enabled(state: &EnabledState) -> &'static str {
@@ -1476,11 +1856,42 @@ fn table_header(ui: &mut egui::Ui, width: f32, label: &str) {
     theme::table_cell(
         ui,
         RichText::new(label)
-            .size(12.)
+            .size(theme::FONT_CAPTION)
             .color(ui.visuals().weak_text_color()),
         width,
         24.,
     );
+}
+
+fn sortable_header(
+    ui: &mut egui::Ui,
+    width: f32,
+    label: &str,
+    selected: bool,
+    descending: bool,
+    t: Tokens,
+) -> bool {
+    let arrow = if selected {
+        if descending { "↓" } else { "↑" }
+    } else {
+        "↕"
+    };
+    let response = ui.add_sized(
+        [width, 24.],
+        egui::Button::new((
+            RichText::new(label)
+                .size(theme::FONT_CAPTION)
+                .color(t.muted),
+            egui::Atom::grow(),
+            RichText::new(arrow)
+                .size(theme::FONT_CAPTION)
+                .color(if selected { t.primary } else { t.muted }),
+        ))
+        .frame(false),
+    );
+    #[cfg(debug_assertions)]
+    theme::record_fixture_control(ui, &format!("Sort {label}"), &response);
+    response.on_hover_text(format!("Sort by {label}")).clicked()
 }
 
 fn field_text(field: &FieldValue<String>) -> String {
@@ -1614,7 +2025,7 @@ fn service_start_mode(start_type: u32) -> &'static str {
 
 fn review_detail(ui: &mut egui::Ui, label: &str, value: &str, t: Tokens) {
     theme::muted(ui, label, t);
-    ui.add(egui::Label::new(RichText::new(value).size(12.)).wrap());
+    ui.add(egui::Label::new(RichText::new(value).size(theme::FONT_CAPTION)).wrap());
     ui.add_space(8.);
 }
 

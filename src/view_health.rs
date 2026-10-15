@@ -38,6 +38,7 @@ pub(super) struct HealthUi {
     cookie_settings_readable: bool,
     cookie_settings_error: Option<String>,
     cookie_domain_input: String,
+    clear_cookie_input_on_save: bool,
     cookie_settings_stale: bool,
     partial_acknowledged: bool,
     permanent_acknowledged: bool,
@@ -61,6 +62,7 @@ impl Default for HealthUi {
             cookie_settings_readable: false,
             cookie_settings_error: None,
             cookie_domain_input: String::new(),
+            clear_cookie_input_on_save: false,
             cookie_settings_stale: false,
             partial_acknowledged: false,
             permanent_acknowledged: false,
@@ -115,12 +117,149 @@ struct HealthUpdateFailure<'a> {
 }
 
 impl App {
+    pub(super) fn sync_health_cookie_settings(&mut self, settings: CookieExceptionSettings) {
+        let changed = settings != self.health_ui.cookie_settings;
+        self.health_ui.cookie_settings = settings;
+        self.health_ui.cookie_settings_readable = true;
+        self.health_ui.cookie_settings_error = None;
+        if changed
+            && self
+                .health_ui
+                .coordinator
+                .report(HealthStep::Privacy)
+                .is_some()
+        {
+            self.health_ui.cookie_settings_stale = true;
+            if let Some(plan_id) = self
+                .health_ui
+                .action_plan
+                .as_ref()
+                .map(HealthActionPlan::id)
+            {
+                match self.health_ui.coordinator.cancel_action_review(plan_id) {
+                    Ok(()) => self.health_ui.action_plan = None,
+                    Err(error) => self.error = Some(error),
+                }
+            }
+            self.health_ui.permanent_acknowledged = false;
+            if matches!(
+                self.health_ui.coordinator.status(HealthStep::Privacy),
+                HealthStepStatus::Reviewing { .. }
+            ) {
+                let _ = self.health_ui.coordinator.deselect_all();
+            }
+        }
+    }
+
+    pub(super) fn mark_health_cookie_settings_unverified(&mut self, message: &str) {
+        self.health_ui.cookie_settings_readable = false;
+        self.health_ui.cookie_settings_error = Some(message.to_owned());
+        self.health_ui.cookie_settings_stale = true;
+        if let Some(plan_id) = self
+            .health_ui
+            .action_plan
+            .as_ref()
+            .map(HealthActionPlan::id)
+        {
+            match self.health_ui.coordinator.cancel_action_review(plan_id) {
+                Ok(()) => self.health_ui.action_plan = None,
+                Err(error) => self.error = Some(error),
+            }
+        }
+        self.health_ui.permanent_acknowledged = false;
+        if matches!(
+            self.health_ui.coordinator.status(HealthStep::Privacy),
+            HealthStepStatus::Reviewing { .. }
+        ) {
+            let _ = self.health_ui.coordinator.deselect_all();
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn health_cookie_test_state(
+        &self,
+    ) -> (CookieExceptionSettings, bool, bool, bool, bool) {
+        (
+            self.health_ui.cookie_settings.clone(),
+            self.health_ui.cookie_settings_readable,
+            self.health_ui.cookie_settings_stale,
+            self.health_ui
+                .coordinator
+                .report(HealthStep::Privacy)
+                .is_some(),
+            self.health_ui.action_plan.is_some(),
+        )
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_health_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Health fixtures are available only in isolated visual QA.".into());
+        }
+        if case != "health-intro" {
+            self.mark_feature_seen("health");
+        }
+        self.health_ui = HealthUi::default();
+        self.health_ui.cookie_settings_readable = true;
+        self.health_ui.initialized = true;
+        if matches!(case, "health-welcome" | "health-intro") {
+            return Ok(());
+        }
+        self.health_ui.started = true;
+        if case == "health-error" {
+            let coordinator = &mut self.health_ui.coordinator;
+            coordinator.inspect_privacy_browsers(Ok(Vec::new()))?;
+            coordinator.begin_scan(HealthStep::Privacy)?;
+            coordinator.complete_scan(HealthStepReport::failed(
+                HealthStep::Privacy,
+                "Synthetic fixture error: the read-only browser scan could not be completed.",
+            ))?;
+            return Ok(());
+        }
+
+        let target = match case {
+            "health-privacy" => Some(HealthStep::Privacy),
+            "health-space" => Some(HealthStep::Space),
+            "health-issues" => Some(HealthStep::ResolveIssues),
+            "health-summary" => None,
+            _ => return Err(format!("Unsupported Health visual fixture: {case}")),
+        };
+        let coordinator = &mut self.health_ui.coordinator;
+        for step in HealthStep::ORDER {
+            if target.is_some_and(|target| step == target) {
+                seed_health_fixture_step(coordinator, step)?;
+                break;
+            }
+            if target.is_none() || target.is_some_and(|target| step != target) {
+                seed_health_fixture_step(coordinator, step)?;
+                coordinator.skip_current_step()?;
+                coordinator.advance()?;
+            }
+            if target.is_some_and(|target| step == target) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn health_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if !self.feature_seen("health") {
+            if self.feature_intro(ui, t, "health", "Run your first scan", "Review privacy records, reclaimable space and system issues. You choose what to change after reviewing the results.", &[]) {
+                self.mark_feature_seen("health");
+                self.health_ui.started = true;
+                self.begin_health_prerequisites(ctx);
+            }
+            return;
+        }
         if !self.health_ui.started {
             self.overview(ui, t);
             return;
         }
-        if !self.health_ui.initialized && !self.health_ui.initializing && !self.busy() {
+        if !self.qa_fixture_mode()
+            && !self.health_ui.initialized
+            && !self.health_ui.initializing
+            && !self.busy()
+        {
             self.begin_health_prerequisites(ctx);
         }
         self.health_stepper(ui, t);
@@ -134,6 +273,24 @@ impl App {
     }
 
     pub(super) fn health_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if !self.feature_seen("health") {
+            if !self.feature_intro_wide(ctx) {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if theme::primary(ui, "Scan now", t, !self.busy()) {
+                        self.mark_feature_seen("health");
+                        self.health_ui.started = true;
+                        self.begin_health_prerequisites(ctx);
+                    }
+                });
+            } else {
+                theme::muted(
+                    ui,
+                    "Start a read-only review of current system findings.",
+                    t,
+                );
+            }
+            return;
+        }
         if !self.health_ui.started {
             let busy = self.busy();
             theme::action_row(ui, |ui| {
@@ -292,13 +449,13 @@ impl App {
                 self.update_health_browser_state(running);
                 match cookie_settings {
                     Ok(settings) => {
-                        self.health_ui.cookie_settings = settings;
-                        self.health_ui.cookie_settings_readable = true;
-                        self.health_ui.cookie_settings_error = None;
+                        self.sync_cookie_settings_owners(settings);
                     }
                     Err(error) => {
-                        self.health_ui.cookie_settings_readable = false;
-                        self.health_ui.cookie_settings_error = Some(error);
+                        self.mark_cookie_settings_unverified();
+                        self.health_ui.cookie_settings_error = Some(format!(
+                            "Cookie rules could not be verified: {error}. Reload saved rules before scanning or cleanup."
+                        ));
                     }
                 }
             }
@@ -330,32 +487,33 @@ impl App {
                 self.worker = None;
                 match result {
                     Ok(settings) => {
-                        let changed = settings != self.health_ui.cookie_settings;
-                        self.health_ui.cookie_settings = settings;
-                        self.health_ui.cookie_settings_readable = true;
-                        self.health_ui.cookie_settings_error = None;
-                        if changed
-                            && self
-                                .health_ui
-                                .coordinator
-                                .report(HealthStep::Privacy)
-                                .is_some()
-                        {
-                            self.health_ui.cookie_settings_stale = true;
-                            if matches!(
-                                self.health_ui.coordinator.status(HealthStep::Privacy),
-                                HealthStepStatus::Reviewing { .. }
-                            ) {
-                                let _ = self.health_ui.coordinator.deselect_all();
-                            }
-                            self.notice = Some(
-                                "Cookie rules changed. Rescan Privacy before reviewing its earlier rows.".into(),
-                            );
-                        } else {
-                            self.notice = Some("Cookie keep-domain rules were saved.".into());
+                        if self.health_ui.clear_cookie_input_on_save {
+                            self.health_ui.cookie_domain_input.clear();
                         }
+                        self.health_ui.clear_cookie_input_on_save = false;
+                        let changed = settings != self.health_ui.cookie_settings;
+                        self.sync_cookie_settings_owners(settings);
+                        self.notice = Some(
+                            if changed
+                                && self
+                                    .health_ui
+                                    .coordinator
+                                    .report(HealthStep::Privacy)
+                                    .is_some()
+                            {
+                                "Cookie rules changed. Rescan Privacy before reviewing its earlier rows.".into()
+                            } else {
+                                "Cookie keep-domain rules were saved.".into()
+                            },
+                        );
                     }
-                    Err(error) => self.health_ui.cookie_settings_error = Some(error),
+                    Err(error) => {
+                        self.health_ui.clear_cookie_input_on_save = false;
+                        self.mark_cookie_settings_unverified();
+                        self.health_ui.cookie_settings_error = Some(format!(
+                            "Cookie-save outcome is uncertain: {error}. Reload saved rules before scanning or cleanup."
+                        ));
+                    }
                 }
             }
             HealthEvent::ScanProgress {
@@ -482,7 +640,7 @@ impl App {
     }
 
     fn begin_health_prerequisites(&mut self, ctx: &egui::Context) {
-        if self.busy() || self.health_ui.initializing {
+        if self.qa_fixture_mode() || self.busy() || self.health_ui.initializing {
             return;
         }
         self.health_ui.initializing = true;
@@ -510,7 +668,7 @@ impl App {
     }
 
     fn begin_health_scan(&mut self, step: HealthStep, ctx: &egui::Context) {
-        if self.busy() {
+        if self.qa_fixture_mode() || self.busy() {
             return;
         }
         if step == HealthStep::Privacy && !self.health_ui.cookie_settings_readable {
@@ -569,7 +727,7 @@ impl App {
     }
 
     fn begin_health_browser_refresh(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.qa_fixture_mode() || self.busy() {
             return;
         }
         let repaint = ctx.clone();
@@ -584,7 +742,7 @@ impl App {
     }
 
     fn begin_health_browser_close(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.qa_fixture_mode() || self.busy() {
             return;
         }
         let selected = self
@@ -616,14 +774,28 @@ impl App {
         });
     }
 
-    fn begin_health_cookie_save(&mut self, domains: Vec<String>, ctx: &egui::Context) {
-        if self.busy() || self.data_dir.as_os_str().is_empty() {
+    fn begin_health_cookie_save(
+        &mut self,
+        domains: Vec<String>,
+        ctx: &egui::Context,
+        clear_input_on_success: bool,
+    ) {
+        if self.qa_fixture_mode() || self.busy() {
+            return;
+        }
+        if !self.health_ui.cookie_settings_readable {
+            self.health_ui.cookie_settings_error =
+                Some("Reload saved cookie rules before changing them.".into());
+            return;
+        }
+        if self.data_dir.as_os_str().is_empty() {
             self.health_ui.cookie_settings_error = Some(
                 "Application data storage is unavailable; cookie rules were not saved.".into(),
             );
             return;
         }
         let root = self.data_dir.clone();
+        self.health_ui.clear_cookie_input_on_save = clear_input_on_success;
         let repaint = ctx.clone();
         let (tx, rx) = mpsc::channel();
         self.worker = Some(rx);
@@ -636,6 +808,12 @@ impl App {
     }
 
     fn begin_health_action_review(&mut self) {
+        if self.qa_fixture_mode()
+            || !self.health_ui.cookie_settings_readable
+            || self.health_ui.cookie_settings_stale
+        {
+            return;
+        }
         let partial = self
             .health_ui
             .coordinator
@@ -656,7 +834,12 @@ impl App {
     }
 
     fn begin_health_effects(&mut self, ctx: &egui::Context) {
-        if self.busy() || !self.history_readable {
+        if self.qa_fixture_mode()
+            || self.busy()
+            || !self.history_readable
+            || !self.health_ui.cookie_settings_readable
+            || self.health_ui.cookie_settings_stale
+        {
             return;
         }
         let Some(plan) = self.health_ui.action_plan.take() else {
@@ -840,7 +1023,11 @@ impl App {
                 ui.label(RichText::new("Running browser review").family(theme::semibold()));
                 theme::muted(ui, format!("{} process(es)", running.len()), t);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if theme::secondary(ui, "Review…", !self.busy()) {
+                    if theme::secondary(
+                        ui,
+                        "Review…",
+                                !self.busy(),
+                    ) {
                         self.health_ui.browser_review_open = true;
                     }
                 });
@@ -930,9 +1117,10 @@ impl App {
                     let mut domains = self.health_ui.cookie_settings.keep_domains.clone();
                     if !domains.contains(&domain) {
                         domains.push(domain);
-                        self.begin_health_cookie_save(domains, ctx);
+                        self.begin_health_cookie_save(domains, ctx, true);
+                    } else {
+                        self.health_ui.cookie_domain_input.clear();
                     }
-                    self.health_ui.cookie_domain_input.clear();
                 }
                 Err(error) => self.health_ui.cookie_settings_error = Some(error),
             }
@@ -941,7 +1129,7 @@ impl App {
             let mut domains = self.health_ui.cookie_settings.keep_domains.clone();
             if index < domains.len() {
                 domains.remove(index);
-                self.begin_health_cookie_save(domains, ctx);
+                self.begin_health_cookie_save(domains, ctx, false);
             }
         }
     }
@@ -1550,6 +1738,8 @@ impl App {
                             !busy
                                 && self.history_readable
                                 && self.data_dir.is_absolute()
+                                && self.health_ui.cookie_settings_readable
+                                && !self.health_ui.cookie_settings_stale
                                 && (!requires_permanent || self.health_ui.permanent_acknowledged),
                         );
                     });
@@ -2252,4 +2442,96 @@ fn run_health_effects(
         }
     }
     result
+}
+
+#[cfg(debug_assertions)]
+fn seed_health_fixture_step(
+    coordinator: &mut health::HealthCoordinator,
+    step: HealthStep,
+) -> Result<(), String> {
+    if step == HealthStep::Privacy {
+        coordinator.inspect_privacy_browsers(Ok(Vec::new()))?;
+    }
+    coordinator.begin_scan(step)?;
+    coordinator.complete_scan(health_fixture_report(step))
+}
+
+#[cfg(debug_assertions)]
+fn health_fixture_report(step: HealthStep) -> HealthStepReport {
+    use dcleaner::{
+        domain::{Analysis, CategoryResult, CleanupPolicy},
+        privacy::{PrivacyCategory, PrivacyReport, ProfileInventory},
+        recycle_bin::{InventoryCompletion, RecycleBinInventory},
+        startup::{InventoryQuality, SourceOutcome, SourceState, StartupInventory, StartupSection},
+    };
+
+    fn analysis(categories: &[(&str, &str, &str)]) -> Analysis {
+        Analysis {
+            id: Uuid::from_u128(0x4443_4c45_414e_4552_4845_414c_5448_0001),
+            date: "fixture-only".into(),
+            minimum_age_days: 1,
+            cleanup_policy: CleanupPolicy::MinimumAge,
+            elapsed_ms: 18,
+            cancelled: false,
+            categories: categories
+                .iter()
+                .map(|(id, name, group)| CategoryResult {
+                    id: (*id).into(),
+                    name: (*name).into(),
+                    group: (*group).into(),
+                    files: Vec::new(),
+                    skipped: 0,
+                    available: true,
+                    truncated: false,
+                })
+                .collect(),
+        }
+    }
+
+    match step {
+        HealthStep::Privacy => HealthStepReport::privacy(
+            ProfileInventory::default(),
+            PrivacyReport {
+                id: Uuid::from_u128(0x4443_4c45_414e_4552_4845_414c_5448_0002),
+                profiles_scanned: 0,
+                records: Vec::new(),
+                skipped: Vec::new(),
+                skipped_count: 0,
+                omitted_skip_details: 0,
+                partial: false,
+                truncated: false,
+                cancelled: false,
+                cookie_exempted: 0,
+                categories_scanned: vec![PrivacyCategory::Cookies, PrivacyCategory::History],
+                elapsed_ms: 18,
+            },
+            analysis(&[("chrome", "Browser cache", "Fixture")]),
+        ),
+        HealthStep::Space => HealthStepReport::space(
+            analysis(&[
+                ("temp", "Temporary files", "Fixture"),
+                ("crash", "Crash reports", "Fixture"),
+                ("chrome", "Application cache", "Fixture"),
+            ]),
+            RecycleBinInventory {
+                id: Uuid::from_u128(0x4443_4c45_414e_4552_4845_414c_5448_0003),
+                completion: InventoryCompletion::Complete,
+                items: Vec::new(),
+                issues: Vec::new(),
+                known_file_bytes: 0,
+            },
+        ),
+        HealthStep::ResolveIssues => HealthStepReport::resolve_issues(
+            StartupInventory {
+                section: StartupSection::StartupApps,
+                quality: InventoryQuality::Complete,
+                entries: Vec::new(),
+                sources: vec![SourceOutcome {
+                    source: "Synthetic in-memory fixture".into(),
+                    state: SourceState::Read { items: 0 },
+                }],
+            },
+            Err("Synthetic fixture: installed-application inventory is unavailable.".into()),
+        ),
+    }
 }

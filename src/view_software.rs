@@ -8,11 +8,17 @@ use dcleaner::{
         SoftwareSnapshot, SoftwareStatus, UpdateReceipt, UpdateRequest, UpdateVerification,
     },
 };
+#[cfg(debug_assertions)]
+use dcleaner::{
+    programs::{ProgramIdentity, RegistryHive, RegistrySource, RegistryView},
+    software::{SoftwareIdentity, WingetRow},
+};
 use serde::Serialize;
 use std::cmp::Ordering;
 
 #[derive(Default)]
 pub(super) struct SoftwareUi {
+    intro_fixture: bool,
     snapshot: Option<SoftwareSnapshot>,
     attempted: bool,
     loading: bool,
@@ -99,6 +105,82 @@ struct UpdateFailureReceipt<'a> {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_software_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Software Updater visual fixtures require fixture mode.".into());
+        }
+        if !matches!(
+            case,
+            "software-intro"
+                | "software-empty"
+                | "software-populated"
+                | "software-details"
+                | "software-error"
+        ) {
+            return Err(format!("Unsupported Software Updater fixture: {case}"));
+        }
+        if case == "software-intro" {
+            self.software_ui = SoftwareUi {
+                intro_fixture: true,
+                ..SoftwareUi::default()
+            };
+            self.error = None;
+            self.notice = None;
+            self.progress.clear();
+            return Ok(());
+        }
+
+        let items = if matches!(case, "software-populated" | "software-details") {
+            vec![
+                software_qa_item(
+                    "Example Editor",
+                    "Example.Editor",
+                    "1.0.0",
+                    Some("1.1.0"),
+                    SoftwareStatus::UpdateAvailable,
+                ),
+                software_qa_item(
+                    "Example Runtime",
+                    "Example.Runtime",
+                    "3.4.0",
+                    None,
+                    SoftwareStatus::Current,
+                ),
+            ]
+        } else {
+            Vec::new()
+        };
+        let selected_item = items.first().cloned();
+        self.software_ui = SoftwareUi {
+            snapshot: if case == "software-error" {
+                None
+            } else {
+                Some(SoftwareSnapshot {
+                    items,
+                    registration_issues: Vec::new(),
+                })
+            },
+            attempted: true,
+            loading: false,
+            load_error: (case == "software-error")
+                .then(|| "Synthetic fixture error; WinGet and registry were not queried.".into()),
+            selected: selected_item.as_ref().map(SoftwareItem::row_key),
+            dialog: if case == "software-details" {
+                selected_item.map(SoftwareDialog::Details)
+            } else {
+                None
+            },
+            history: Vec::new(),
+            history_error: None,
+            ..SoftwareUi::default()
+        };
+        self.error = None;
+        self.notice = None;
+        self.progress.clear();
+        Ok(())
+    }
+
     pub(super) fn software_overview_status(&self) -> String {
         self.software_counts()
             .map(|(updates, _, _)| format!("{updates} updates"))
@@ -106,7 +188,32 @@ impl App {
     }
 
     pub(super) fn software_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if (!self.software_ui.attempted || self.software_ui.refresh_after_update) && !self.busy() {
+        if self.software_intro_active() {
+            if self.feature_intro(
+                ui,
+                t,
+                "software",
+                "Find available software updates",
+                "Scan installed packages against the configured WinGet source, then review each exact package before starting an update.",
+                &[
+                    (
+                        "Scan for updates",
+                        "Read update offers from the configured WinGet source; other catalogues are not included.",
+                    ),
+                    (
+                        "Keep control of each change",
+                        "Review package identity and version first. Some updates use the vendor’s interactive installer or require a restart.",
+                    ),
+                ],
+            ) {
+                self.start_software_scan(ctx);
+            }
+            return;
+        }
+        if !self.qa_fixture_mode()
+            && (!self.software_ui.attempted || self.software_ui.refresh_after_update)
+            && !self.busy()
+        {
             self.begin_software_load(ctx);
         }
         let count_text = self
@@ -201,6 +308,30 @@ impl App {
     }
 
     pub(super) fn software_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if self.software_intro_active() {
+            let compact = !self.feature_intro_wide(ctx);
+            let mut start = false;
+            ui.horizontal_wrapped(|ui| {
+                theme::muted(
+                    ui,
+                    if compact {
+                        "Start a read-only software update scan"
+                    } else {
+                        "Choose Scan now in the introduction to check available updates"
+                    },
+                    t,
+                );
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if compact && theme::primary(ui, "Scan now", t, !self.busy()) {
+                        start = true;
+                    }
+                });
+            });
+            if start {
+                self.start_software_scan(ctx);
+            }
+            return;
+        }
         let busy = self.busy();
         let selected = self.selected_software_item().cloned();
         let mut refresh = false;
@@ -519,7 +650,7 @@ impl App {
     }
 
     fn begin_software_load(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.software_ui.loading = true;
@@ -553,8 +684,21 @@ impl App {
         });
     }
 
+    fn software_intro_active(&self) -> bool {
+        if self.qa_fixture_mode() {
+            self.software_ui.intro_fixture
+        } else {
+            !self.feature_seen("software")
+        }
+    }
+
+    fn start_software_scan(&mut self, ctx: &egui::Context) {
+        self.mark_feature_seen("software");
+        self.begin_software_load(ctx);
+    }
+
     fn begin_software_update(&mut self, request: UpdateRequest, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         let display_name = request.display_name.clone();
@@ -718,10 +862,13 @@ impl App {
                                 row.spacing_mut().item_spacing.x = 8.0;
                                 row.spacing_mut().item_spacing.y = previous_y_spacing;
                                 let selected = self.software_ui.selected.as_deref() == Some(&key);
-                                let icon = item
-                                    .registration
-                                    .as_ref()
-                                    .and_then(|program| program.icon_resource());
+                                let icon = if self.qa_fixture_mode() {
+                                    None
+                                } else {
+                                    item.registration
+                                        .as_ref()
+                                        .and_then(|program| program.icon_resource())
+                                };
                                 let name = row
                                     .allocate_ui_with_layout(
                                         [name_width, 40.].into(),
@@ -742,7 +889,8 @@ impl App {
                                                         selected,
                                                         (
                                                             RichText::new(&item.row.name)
-                                                                .family(theme::semibold()),
+                                                                .family(theme::semibold())
+                                                                .color(t.foreground),
                                                             egui::Atom::grow(),
                                                         ),
                                                     )
@@ -817,7 +965,7 @@ impl App {
                                                 .label(
                                                     RichText::new("Blocked")
                                                         .color(t.muted)
-                                                        .size(12.),
+                                                        .size(theme::FONT_CAPTION),
                                                 )
                                                 .on_hover_text(reason);
                                         } else {
@@ -830,87 +978,91 @@ impl App {
                                 }
                                 let more = theme::row_more(row, true);
                                 egui::Popup::menu(&more).show(|ui| {
-                            if ui.button("Details").clicked() {
-                                self.software_ui.selected = Some(key.clone());
-                                self.software_ui.dialog =
-                                    Some(SoftwareDialog::Details(item.clone()));
-                                ui.close();
-                            }
-                            ui.separator();
-                            if let Some(identity) = item.identity.as_ref() {
-                                let preference = self
-                                    .software_ui
-                                    .settings
-                                    .preference_for(identity)
-                                    .map(|value| value.state);
-                                match preference {
-                                    Some(SoftwarePreferenceState::SkipVersion) => {
-                                        if ui
-                                            .add_enabled(
-                                                preference_actions_enabled,
-                                                egui::Button::new("Restore skipped version"),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.restore_software_preference(item);
-                                            ui.close();
-                                        }
+                                    if ui.button("Details").clicked() {
+                                        self.software_ui.selected = Some(key.clone());
+                                        self.software_ui.dialog =
+                                            Some(SoftwareDialog::Details(item.clone()));
+                                        ui.close();
                                     }
-                                    Some(SoftwarePreferenceState::Ignored) => {
-                                        if ui
-                                            .add_enabled(
-                                                preference_actions_enabled,
-                                                egui::Button::new("Restore ignored package"),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.restore_software_preference(item);
-                                            ui.close();
+                                    ui.separator();
+                                    if let Some(identity) = item.identity.as_ref() {
+                                        let preference = self
+                                            .software_ui
+                                            .settings
+                                            .preference_for(identity)
+                                            .map(|value| value.state);
+                                        match preference {
+                                            Some(SoftwarePreferenceState::SkipVersion) => {
+                                                if ui
+                                                    .add_enabled(
+                                                        preference_actions_enabled,
+                                                        egui::Button::new(
+                                                            "Restore skipped version",
+                                                        ),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.restore_software_preference(item);
+                                                    ui.close();
+                                                }
+                                            }
+                                            Some(SoftwarePreferenceState::Ignored) => {
+                                                if ui
+                                                    .add_enabled(
+                                                        preference_actions_enabled,
+                                                        egui::Button::new(
+                                                            "Restore ignored package",
+                                                        ),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.restore_software_preference(item);
+                                                    ui.close();
+                                                }
+                                            }
+                                            None if item.row.available_version.is_some() => {
+                                                if ui
+                                                    .add_enabled(
+                                                        preference_actions_enabled,
+                                                        egui::Button::new("Skip this version"),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.skip_software_version(item);
+                                                    ui.close();
+                                                }
+                                                if ui
+                                                    .add_enabled(
+                                                        preference_actions_enabled,
+                                                        egui::Button::new("Ignore package"),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.ignore_software_package(item);
+                                                    ui.close();
+                                                }
+                                            }
+                                            None => {
+                                                if ui
+                                                    .add_enabled(
+                                                        preference_actions_enabled,
+                                                        egui::Button::new("Ignore package"),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.ignore_software_package(item);
+                                                    ui.close();
+                                                }
+                                            }
                                         }
-                                    }
-                                    None if item.row.available_version.is_some() => {
-                                        if ui
-                                            .add_enabled(
-                                                preference_actions_enabled,
-                                                egui::Button::new("Skip this version"),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.skip_software_version(item);
-                                            ui.close();
-                                        }
-                                        if ui
-                                            .add_enabled(
-                                                preference_actions_enabled,
-                                                egui::Button::new("Ignore package"),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.ignore_software_package(item);
-                                            ui.close();
-                                        }
-                                    }
-                                    None => {
-                                        if ui
-                                            .add_enabled(
-                                                preference_actions_enabled,
-                                                egui::Button::new("Ignore package"),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.ignore_software_package(item);
-                                            ui.close();
-                                        }
-                                    }
-                                }
-                            } else {
-                                theme::muted(
+                                    } else {
+                                        theme::muted(
                                     ui,
                                     "No unique installed registration matches this package.",
                                     t,
                                 );
-                            }
-                        });
+                                    }
+                                });
                             },
                         );
                         let rect = row_response.response.rect;
@@ -1036,6 +1188,9 @@ impl App {
     }
 
     fn restore_software_preference(&mut self, item: &SoftwareItem) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         let Some(identity) = &item.identity else {
             return;
         };
@@ -1054,6 +1209,9 @@ impl App {
     }
 
     fn persist_preference(&mut self, preference: SoftwarePreference) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         if self.software_ui.settings_error.is_some() {
             self.error = Some(
                 "Saved updater choices cannot be changed until the settings file can be read."
@@ -1070,6 +1228,9 @@ impl App {
     }
 
     fn save_proposed_software_settings(&mut self, proposed: SoftwareSettings) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         match software::save_settings(&self.data_dir, &proposed) {
             Ok(()) => {
                 self.software_ui.settings = proposed;
@@ -1184,6 +1345,67 @@ fn publisher(item: &SoftwareItem) -> &str {
         .unwrap_or("")
 }
 
+#[cfg(debug_assertions)]
+fn software_qa_item(
+    name: &str,
+    package_id: &str,
+    installed_version: &str,
+    available_version: Option<&str>,
+    status: SoftwareStatus,
+) -> SoftwareItem {
+    let registration = ProgramIdentity {
+        hive: RegistryHive::CurrentUser,
+        key_name: format!(
+            "fixture-{}",
+            package_id.to_ascii_lowercase().replace('.', "-")
+        ),
+    };
+    let registry_source = RegistrySource {
+        hive: RegistryHive::CurrentUser,
+        view: RegistryView::Registry64,
+    };
+    let software_identity = SoftwareIdentity {
+        registration: registration.clone(),
+        registry_source,
+        package_id: package_id.to_ascii_lowercase(),
+        source_id: software::WINGET_SOURCE.into(),
+    };
+    let registered_program = InstalledProgram {
+        identity: registration,
+        source: registry_source,
+        display_name: name.into(),
+        display_icon: None,
+        publisher: Some("Example Publisher".into()),
+        version: Some(installed_version.into()),
+        install_location: Some(std::path::PathBuf::from(format!(
+            r"C:\Fixture\{}",
+            package_id.replace('.', "-")
+        ))),
+        install_date: Some("20250115".into()),
+        estimated_size_bytes: Some(18_874_368),
+        registered_uninstall_command: None,
+        uninstall_command: None,
+        uninstall_command_error: None,
+        system_component: false,
+        protected: false,
+        no_remove: false,
+    };
+    SoftwareItem {
+        row: WingetRow {
+            name: name.into(),
+            package_id: package_id.into(),
+            installed_version: Some(installed_version.into()),
+            available_version: available_version.map(str::to_owned),
+            source_id: software::WINGET_SOURCE.into(),
+        },
+        registration: Some(registered_program),
+        identity: Some(software_identity),
+        status,
+        association_note: None,
+        preference_note: None,
+    }
+}
+
 fn version_sort(left: Option<&str>, right: Option<&str>) -> Ordering {
     left.unwrap_or("").cmp(right.unwrap_or(""))
 }
@@ -1211,7 +1433,9 @@ fn status_color(status: SoftwareStatus, t: Tokens) -> eframe::egui::Color32 {
 fn table_heading(ui: &mut egui::Ui, label: &str, width: f32, t: Tokens) {
     theme::table_cell(
         ui,
-        RichText::new(label).size(12.).color(t.muted),
+        RichText::new(label)
+            .size(theme::FONT_CAPTION)
+            .color(t.muted),
         width,
         22.,
     );

@@ -19,6 +19,9 @@ use std::{
     time::Duration,
 };
 use uuid::Uuid;
+#[cfg(debug_assertions)]
+#[path = "qa_core.rs"]
+mod qa_core;
 #[path = "view_clean_settings.rs"]
 mod view_clean_settings;
 #[path = "view_cloud.rs"]
@@ -331,6 +334,14 @@ impl App {
         };
         #[cfg(not(debug_assertions))]
         let (clean_browser, clean_bin) = (false, false);
+        #[cfg(debug_assertions)]
+        let duplicate_ui = if fixture {
+            view_duplicates::DuplicateUi::inert_fixture()
+        } else {
+            Default::default()
+        };
+        #[cfg(not(debug_assertions))]
+        let duplicate_ui = Default::default();
         Self {
             illustrations: Default::default(),
             qa_fixture_mode: fixture,
@@ -344,7 +355,7 @@ impl App {
             #[cfg(debug_assertions)]
             visual_capture,
             software_ui: Default::default(),
-            duplicate_ui: Default::default(),
+            duplicate_ui,
             program_ui: Default::default(),
             optimizer_ui: Default::default(),
             startup_ui: Default::default(),
@@ -402,13 +413,108 @@ impl App {
                 | "disk-partial"
                 | "disk-details"
                 | "disk-empty"
+                | "startup-empty"
+                | "startup-populated"
+                | "startup-details"
+                | "startup-error"
+                | "startup-help"
+                | "programs-empty"
+                | "programs-populated"
+                | "programs-details"
+                | "programs-error"
+                | "programs-intro"
+                | "software-empty"
+                | "software-populated"
+                | "software-details"
+                | "software-error"
+                | "software-intro"
+                | "optimizer-empty"
+                | "optimizer-populated"
+                | "optimizer-details"
+                | "optimizer-error"
+                | "optimizer-intro"
+                | "drivers-empty"
+                | "drivers-populated"
+                | "drivers-details"
+                | "drivers-error"
+                | "drivers-intro"
+                | "duplicates-empty"
+                | "duplicates-populated"
+                | "duplicates-details"
+                | "duplicates-error"
+                | "duplicates-intro"
+                | "clean-empty"
+                | "clean-populated"
+                | "clean-details"
+                | "clean-error"
+                | "history-empty"
+                | "history-populated"
+                | "settings"
+                | "help"
+                | "help-diagnostics"
+                | "clean-settings-inclusions"
+                | "clean-settings-cookies"
+                | "clean-settings-popular-sites"
+                | "clean-settings-exclusions"
+                | "clean-settings-rules"
+                | "clean-settings-deletion"
+                | "health-welcome"
+                | "health-intro"
+                | "health-privacy"
+                | "health-space"
+                | "health-issues"
+                | "health-summary"
+                | "health-error"
+                | "privacy-empty"
+                | "privacy-populated"
+                | "privacy-details"
+                | "privacy-error"
+                | "recyclebin-empty"
+                | "recyclebin-populated"
+                | "recyclebin-details"
+                | "recyclebin-error"
         ) {
             return Err(format!("Unsupported isolated visual fixture: {case}"));
         }
         let mut app = Self::construct(context, true);
-        if case.starts_with("cloud-") {
+        if case.starts_with("health-") {
+            app.page = Page::Overview;
+            app.seed_health_qa(case)?;
+        } else if case.starts_with("privacy-") {
+            app.page = Page::Clean;
+            app.clean_browser = true;
+            app.seed_privacy_qa(case)?;
+        } else if case.starts_with("recyclebin-") {
+            app.page = Page::Clean;
+            app.clean_bin = true;
+            app.seed_recycle_bin_qa(case)?;
+        } else if case.starts_with("clean-settings-") {
+            app.seed_clean_settings_qa(case)?;
+        } else if case.starts_with("clean-") || case.starts_with("history-") || case == "settings" {
+            app.seed_core_qa(case)?;
+        } else if case == "help" || case == "help-diagnostics" {
+            app.seed_help_qa(case)?;
+        } else if case.starts_with("cloud-") {
             app.page = Page::Cloud;
             app.seed_cloud_qa(case);
+        } else if case.starts_with("startup-") {
+            app.page = Page::Startup;
+            app.seed_startup_qa(case)?;
+        } else if case.starts_with("programs-") {
+            app.page = Page::Programs;
+            app.seed_programs_qa(case)?;
+        } else if case.starts_with("software-") {
+            app.page = Page::Software;
+            app.seed_software_qa(case)?;
+        } else if case.starts_with("optimizer-") {
+            app.page = Page::Optimizer;
+            app.seed_optimizer_qa(case)?;
+        } else if case.starts_with("drivers-") {
+            app.page = Page::Drivers;
+            app.seed_drivers_qa(case)?;
+        } else if case.starts_with("duplicates-") {
+            app.page = Page::Duplicates;
+            app.seed_duplicates_qa(case)?;
         } else {
             app.page = Page::Disk;
             app.seed_disk_qa(case);
@@ -416,7 +522,7 @@ impl App {
         Ok(app)
     }
     fn begin_scan(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.page = Page::Clean;
@@ -458,7 +564,7 @@ impl App {
         });
     }
     fn begin_clean(&mut self, ctx: &egui::Context) {
-        if self.busy() || !self.history_readable {
+        if self.busy() || self.qa_fixture_mode() || !self.history_readable {
             return;
         }
         let Some(analysis) = self.analysis.clone() else {
@@ -649,7 +755,138 @@ impl App {
             }
         }
     }
+    fn feature_seen(&self, kind: &str) -> bool {
+        self.prefs.seen_features.iter().any(|seen| seen == kind)
+    }
+    fn mark_feature_seen(&mut self, kind: &str) {
+        if !self.feature_seen(kind) {
+            self.prefs.seen_features.push(kind.to_owned());
+            self.persist();
+        }
+    }
+    fn feature_intro_wide(&self, ctx: &egui::Context) -> bool {
+        let window_width = ctx.content_rect().width();
+        window_width - if window_width < 1000. { 64. } else { 260. } - 2. * theme::CONTENT >= 780.
+    }
+    fn feature_intro(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: Tokens,
+        kind: &str,
+        title: &str,
+        subtitle: &str,
+        bullets: &[(&str, &str)],
+    ) -> bool {
+        let wide = self.feature_intro_wide(ui.ctx());
+        let art_width = if wide { 330. } else { 230. };
+        let mut start = false;
+        if kind == "health" {
+            ui.vertical_centered(|ui| {
+                self.illustrations.feature(ui, kind, art_width);
+                ui.add_space(20.);
+                ui.label(
+                    RichText::new(title)
+                        .family(theme::semibold())
+                        .size(theme::FONT_DISPLAY)
+                        .color(t.foreground),
+                );
+                ui.add_space(10.);
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(subtitle)
+                            .size(theme::FONT_CAPTION)
+                            .color(t.muted),
+                    )
+                    .wrap()
+                    .halign(Align::Center),
+                );
+                ui.add_space(24.);
+                if wide {
+                    start = theme::primary(ui, "Scan now", t, !self.busy());
+                }
+            });
+            return start;
+        }
+        if !wide {
+            ui.vertical_centered(|ui| self.illustrations.feature(ui, kind, art_width));
+            ui.add_space(16.);
+        }
+        ui.horizontal_top(|ui| {
+            let text_width =
+                (ui.available_width() - if wide { art_width + 28. } else { 0. }).max(180.);
+            ui.allocate_ui_with_layout(
+                Vec2::new(text_width, 0.),
+                Layout::top_down(Align::Min),
+                |ui| {
+                    ui.label(
+                        RichText::new(title)
+                            .family(theme::semibold())
+                            .size(theme::FONT_DISPLAY)
+                            .color(t.foreground),
+                    );
+                    ui.add_space(10.);
+                    theme::muted(ui, subtitle, t);
+                    ui.add_space(24.);
+                    for (index, (heading, description)) in bullets.iter().enumerate() {
+                        ui.horizontal_top(|ui| {
+                            let (rect, _) =
+                                ui.allocate_exact_size(Vec2::splat(26.), egui::Sense::hover());
+                            theme::paint_icon(
+                                ui.painter(),
+                                rect,
+                                if index == 0 {
+                                    theme::Icon::Disk
+                                } else {
+                                    theme::Icon::Optimizer
+                                },
+                                t.primary,
+                            );
+                            ui.add_space(8.);
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new(*heading)
+                                        .family(theme::semibold())
+                                        .size(theme::FONT_TITLE)
+                                        .color(t.foreground),
+                                );
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(*description)
+                                            .size(theme::FONT_CAPTION)
+                                            .color(t.muted),
+                                    )
+                                    .wrap()
+                                    .halign(Align::Min),
+                                );
+                            });
+                        });
+                        ui.add_space(20.);
+                    }
+                    if wide {
+                        start = theme::primary(
+                            ui,
+                            if kind == "duplicates" {
+                                "Start now"
+                            } else {
+                                "Scan now"
+                            },
+                            t,
+                            !self.busy(),
+                        );
+                    }
+                },
+            );
+            if wide {
+                ui.add_space(20.);
+                self.illustrations.feature(ui, kind, art_width);
+            }
+        });
+        start
+    }
     fn persist(&mut self) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         if !self.settings_readable {
             return;
         }
@@ -665,6 +902,9 @@ impl App {
         self.persist();
     }
     fn export(&mut self) {
+        if self.qa_fixture_mode() {
+            return;
+        }
         let Some(analysis) = &self.analysis else {
             return;
         };
@@ -753,7 +993,7 @@ impl App {
         ui.label(
             RichText::new("Here’s what you’ve cleaned so far")
                 .family(theme::semibold())
-                .size(12.),
+                .size(theme::FONT_CAPTION),
         );
         ui.add_space(12.);
         let saved: u64 = self.history.iter().map(|record| record.bytes).sum();
@@ -766,7 +1006,7 @@ impl App {
                     ui.label(
                         RichText::new(size(saved))
                             .family(theme::semibold())
-                            .size(14.),
+                            .size(theme::FONT_TITLE),
                     );
                     theme::muted(ui, "of space", t);
                 });
@@ -776,7 +1016,7 @@ impl App {
                     ui.label(
                         RichText::new(files.to_string())
                             .family(theme::semibold())
-                            .size(14.),
+                            .size(theme::FONT_TITLE),
                     );
                     theme::muted(ui, "items moved to Trash", t);
                 });
@@ -951,7 +1191,7 @@ impl App {
                             .painter()
                             .layout(
                                 category.description.clone(),
-                                egui::FontId::proportional(12.),
+                                egui::FontId::proportional(theme::FONT_CAPTION),
                                 t.muted,
                                 text_width,
                             )
@@ -991,7 +1231,7 @@ impl App {
                                         !busy,
                                         egui::Label::new(
                                             RichText::new(&category.description)
-                                                .size(12.)
+                                                .size(theme::FONT_CAPTION)
                                                 .color(t.muted),
                                         )
                                         .sense(egui::Sense::click()),
@@ -1033,7 +1273,7 @@ impl App {
             });
         theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);
             if let Some(analysis)=self.analysis.clone(){
-                ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(25.).family(theme::semibold()));theme::muted(ui,format!("{} files · {:.1}s elapsed{}",analysis.count(),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
+                ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(theme::FONT_DISPLAY).family(theme::semibold()));theme::muted(ui,format!("{} files · {:.1}s elapsed{}",analysis.count(),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
                 let search_width=ui.available_width();
                 theme::input(ui,&mut self.search,search_width,"Search file paths or categories…",true);ui.add_space(10.);
                 let query=self.search.to_lowercase();let busy=self.busy();
@@ -1045,11 +1285,11 @@ impl App {
                     if category.skipped>0{theme::muted(ui,format!("{} inaccessible or linked locations skipped",category.skipped),t);}
                     egui::CollapsingHeader::new(format!("View files — {}",category.name)).id_salt(&category.id).show(ui,|ui|{
                         egui::ScrollArea::vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
-                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,egui::Checkbox::without_text(&mut selected),!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(11.)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(11.));});}
+                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,egui::Checkbox::without_text(&mut selected),!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(theme::FONT_CAPTION)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(theme::FONT_CAPTION));});}
                             if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
                         });});ui.separator();
                 }
-            }else{ui.add_space(30.);ui.vertical_centered(|ui|{ui.label(RichText::new("Analyze first. Decide what to clean.").size(17.));ui.add_space(8.);theme::muted(ui,"Analysis only reads files; it does not change them.",t);});ui.add_space(35.);}
+            }else{ui.add_space(30.);ui.vertical_centered(|ui|{ui.label(RichText::new("Analyze first. Decide what to clean.").size(theme::FONT_TITLE));ui.add_space(8.);theme::muted(ui,"Analysis only reads files; it does not change them.",t);});ui.add_space(35.);}
         });
     }
     fn clean_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
@@ -1135,6 +1375,78 @@ impl App {
     #[cfg(debug_assertions)]
     pub(crate) fn qa_busy(&self) -> bool {
         self.busy() || self.app_icons.is_loading()
+    }
+    #[cfg(debug_assertions)]
+    pub(crate) fn qa_action_precondition(&self, label: &str) -> Result<(), String> {
+        let cloud = self.qa_cloud_state();
+        let valid = match (self.page, label) {
+            (Page::Cloud, "Get started") => cloud["introduced"] == false,
+            (Page::Cloud, "Cleanup history") => cloud["history"] == false,
+            (Page::Disk, "Details") => !self.qa_disk_detail_open(),
+            (Page::Disk, "Close" | "Copy path") => self.qa_disk_detail_open(),
+            (Page::Startup, "About Startup Manager") => !self.qa_startup_info_open(),
+            (Page::Startup, "Got it") => self.qa_startup_info_open(),
+            (Page::Startup, "Sort Program") => self.qa_startup_sort_state()["descending"] == false,
+            (Page::Startup, "Sort Publisher") => true,
+            (page, "Scan now" | "Start now") => self
+                .qa_intro_kind(page)
+                .is_some_and(|kind| !self.feature_seen(kind)),
+            _ => false,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(format!(
+                "Fixture action precondition is not satisfied: {label}"
+            ))
+        }
+    }
+    #[cfg(debug_assertions)]
+    pub(crate) fn qa_action_state(&self, label: &str) -> Result<serde_json::Value, String> {
+        if !self.qa_fixture_mode() {
+            return Err("UI action verification requires isolated fixture mode.".into());
+        }
+        let state = serde_json::json!({"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_info_open":self.qa_startup_info_open(),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
+        let valid = match (self.page, label) {
+            (Page::Cloud, "Get started") => state["cloud"]["introduced"] == true,
+            (Page::Cloud, "Cleanup history") => state["cloud"]["history"] == true,
+            (Page::Disk, "Details") => self.qa_disk_detail_open(),
+            (Page::Disk, "Close") => !self.qa_disk_detail_open(),
+            (Page::Disk, "Copy path") => self.qa_disk_detail_open(),
+            (Page::Startup, "About Startup Manager") => self.qa_startup_info_open(),
+            (Page::Startup, "Got it") => !self.qa_startup_info_open(),
+            (Page::Startup, "Sort Program") => {
+                state["startup_sort"]["column"] == "Program"
+                    && state["startup_sort"]["descending"] == true
+            }
+            (Page::Startup, "Sort Publisher") => {
+                state["startup_sort"]["column"] == "Publisher"
+                    && state["startup_sort"]["descending"] == false
+            }
+            (page, "Scan now" | "Start now") => self
+                .qa_intro_kind(page)
+                .is_some_and(|kind| self.feature_seen(kind)),
+            _ => false,
+        };
+        if valid {
+            Ok(state)
+        } else {
+            Err(format!(
+                "The rendered action did not produce its expected UI state: {label}"
+            ))
+        }
+    }
+    #[cfg(debug_assertions)]
+    fn qa_intro_kind(&self, page: Page) -> Option<&'static str> {
+        match page {
+            Page::Overview => Some("health"),
+            Page::Programs => Some("programs"),
+            Page::Software => Some("software"),
+            Page::Drivers => Some("drivers"),
+            Page::Optimizer => Some("optimizer"),
+            Page::Duplicates => Some("duplicates"),
+            _ => None,
+        }
     }
     pub(crate) fn paint(&mut self, root: &mut egui::Ui) {
         self.poll();
@@ -1238,7 +1550,7 @@ impl App {
                             ui.label(
                                 RichText::new("DCLEANER")
                                     .family(theme::semibold())
-                                    .size(11.)
+                                    .size(theme::FONT_CAPTION)
                                     .color(t.muted),
                             );
                         });
@@ -1264,7 +1576,9 @@ impl App {
                 theme::canvas_background(ui, self.prefs.dark);
                 egui::Panel::bottom("page-actions")
                     .resizable(false)
-                    .exact_size(74.)
+                    .default_size(74.)
+                    .min_size(74.)
+                    .max_size(200.)
                     .frame(
                         egui::Frame::new()
                             .fill(t.sidebar)
@@ -1303,14 +1617,24 @@ impl App {
                         bottom: 28,
                     })
                     .show(ui, |ui| {
-                        ui.heading(if self.page == Page::Overview && !self.health_started() {
-                            "Your scan results"
-                        } else {
-                            self.page.name()
+                        ui.horizontal(|ui| {
+                            ui.heading(
+                                if self.page == Page::Overview
+                                    && !self.health_started()
+                                    && self.feature_seen("health")
+                                {
+                                    "Your scan results"
+                                } else {
+                                    self.page.name()
+                                },
+                            );
+                            if self.page == Page::Startup {
+                                self.startup_info_button(ui);
+                            }
                         });
                         theme::muted(ui, self.page.description(), t);
                         ui.add_space(26.);
-                        egui::ScrollArea::vertical()
+                        let page_scroll = egui::ScrollArea::vertical()
                             .auto_shrink([false, false])
                             .id_salt(self.page.name())
                             .show(ui, |ui| {
@@ -1387,6 +1711,16 @@ impl App {
                                 }
                                 ui.add_space(24.);
                             });
+                        #[cfg(debug_assertions)]
+                        theme::record_scroll(
+                            &ctx,
+                            "page-body",
+                            page_scroll.inner_rect,
+                            page_scroll.content_size,
+                            page_scroll.state.offset,
+                        );
+                        #[cfg(not(debug_assertions))]
+                        let _ = page_scroll;
                     });
             });
         #[cfg(windows)]
@@ -1456,13 +1790,17 @@ fn finding_row(
                                 ui.spacing_mut().item_spacing.y = 3.;
                                 ui.add(
                                     egui::Label::new(
-                                        RichText::new(title).family(theme::semibold()).size(14.),
+                                        RichText::new(title)
+                                            .family(theme::semibold())
+                                            .size(theme::FONT_TITLE),
                                     )
                                     .truncate(),
                                 );
                                 ui.add(
                                     egui::Label::new(
-                                        RichText::new(description).color(t.muted).size(12.),
+                                        RichText::new(description)
+                                            .color(t.muted)
+                                            .size(theme::FONT_CAPTION),
                                     )
                                     .truncate(),
                                 )
@@ -1479,7 +1817,7 @@ fn finding_row(
                                 t.attention
                             })
                             .family(theme::semibold())
-                            .size(12.),
+                            .size(theme::FONT_CAPTION),
                         130.,
                         28.,
                     );

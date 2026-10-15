@@ -13,8 +13,30 @@ pub(super) enum HelpEvent {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_help_qa(&mut self, case: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Help QA fixtures require isolated fixture mode.".into());
+        }
+        if !matches!(case, "help" | "help-diagnostics") {
+            return Err(format!("Unsupported Help QA fixture: {case}"));
+        }
+        self.page = Page::Help;
+        self.help_ui = HelpUi::default();
+        if case == "help-diagnostics" {
+            self.help_ui.preview = Some(DiagnosticReport::new(
+                self.settings_readable,
+                self.history_readable,
+            ));
+        }
+        self.error = None;
+        self.notice = None;
+        self.progress.clear();
+        Ok(())
+    }
+
     fn begin_help_handoff(&mut self, destination: Destination, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.error = None;
@@ -59,11 +81,19 @@ impl App {
     }
 
     pub(super) fn help_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if self.qa_fixture_mode() {
+            theme::muted(
+                ui,
+                "QA fixture — links and export are disabled; diagnostics are synthetic and local.",
+                t,
+            );
+            ui.add_space(6.);
+        }
         ui.set_max_width(555.);
         ui.label(
             RichText::new("Visit Help Centre")
                 .family(theme::semibold())
-                .size(17.),
+                .size(theme::FONT_TITLE),
         );
         ui.add_space(8.);
         theme::muted(
@@ -72,7 +102,11 @@ impl App {
             t,
         );
         ui.add_space(16.);
-        if theme::secondary(ui, "Go to Help Centre", !self.busy()) {
+        if theme::secondary(
+            ui,
+            "Go to Help Centre",
+            !self.busy() && !self.qa_fixture_mode(),
+        ) {
             self.begin_help_handoff(Destination::HelpCentre, ctx);
         }
         ui.add_space(28.);
@@ -81,7 +115,7 @@ impl App {
         ui.label(
             RichText::new("DCleaner support")
                 .family(theme::semibold())
-                .size(17.),
+                .size(theme::FONT_TITLE),
         );
         ui.add_space(8.);
         theme::muted(
@@ -91,7 +125,11 @@ impl App {
         );
         ui.add_space(16.);
         theme::action_row(ui, |ui| {
-            if theme::secondary(ui, "Contact support", !self.busy()) {
+            if theme::secondary(
+                ui,
+                "Contact support",
+                !self.busy() && !self.qa_fixture_mode(),
+            ) {
                 self.begin_help_handoff(Destination::ContactSupport, ctx);
             }
             if theme::secondary(ui, "Review diagnostics", !self.busy()) {
@@ -116,6 +154,7 @@ impl App {
         };
         let t = theme::tokens(self.prefs.dark);
         let busy = self.busy();
+        let fixture_mode = self.qa_fixture_mode();
         let mut close = false;
         let mut save = false;
         let encoded = report.to_json().and_then(|bytes| {
@@ -149,7 +188,7 @@ impl App {
                 ui.add_space(8.);
                 theme::action_row(ui, |ui| {
                     if theme::secondary(ui, "Close", !busy) { close = true; }
-                    if theme::primary(ui, "Save report…", t, !busy && encoded.is_ok()) { save = true; }
+                    if theme::primary(ui, "Save report…", t, !busy && !fixture_mode && encoded.is_ok()) { save = true; }
                     if busy { ui.spinner(); }
                 });
             });
@@ -161,7 +200,7 @@ impl App {
     }
 
     fn begin_diagnostic_export(&mut self, report: DiagnosticReport, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         // Only reached from the user's Save action after viewing the complete report.

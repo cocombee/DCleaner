@@ -382,6 +382,62 @@ struct RowLocator {
     identity: Vec<Value>,
 }
 
+/// Return a fixed, in-memory browser profile and row for debug visual QA.
+///
+/// The locator uses a deliberately nonexistent synthetic path. This is not a
+/// browser discovery result and must only be used by the isolated UI fixture
+/// path, which disables every scan, persistence, and cleanup entry point.
+#[cfg(debug_assertions)]
+pub fn visual_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let profile = BrowserProfile {
+        id: "fixture-profile-chrome".into(),
+        browser: Browser::Chrome,
+        name: "Fixture Profile".into(),
+        root: PathBuf::from(r"C:\__DCleaner_VISUAL_FIXTURE_ONLY__\Chrome\Default"),
+    };
+    let id = Uuid::from_u128(0x4443_4c45_414e_4552_5052_4956_0000_0001);
+    let record = PrivacyRecord {
+        id,
+        browser: Browser::Chrome,
+        profile_id: profile.id.clone(),
+        profile_name: profile.name.clone(),
+        category: PrivacyCategory::History,
+        site: "example.test".into(),
+        locator: RowLocator {
+            id,
+            browser: Browser::Chrome,
+            profile_id: profile.id.clone(),
+            profile_name: profile.name.clone(),
+            profile_root: profile.root.clone(),
+            database: profile.root.join("__fixture_only__History"),
+            database_stamp: FileStamp::default(),
+            kind: TableKind::ChromiumHistory,
+            row_id: 1,
+            identity: vec![Value::Integer(1)],
+        },
+    };
+    let inventory = ProfileInventory {
+        profiles: vec![profile],
+        skipped: Vec::new(),
+        partial: false,
+    };
+    let report = PrivacyReport {
+        id: Uuid::from_u128(0x4443_4c45_414e_4552_5052_4956_0000_0002),
+        profiles_scanned: 1,
+        records: vec![record],
+        skipped: Vec::new(),
+        skipped_count: 0,
+        omitted_skip_details: 0,
+        partial: false,
+        truncated: false,
+        cancelled: false,
+        cookie_exempted: 0,
+        categories_scanned: vec![PrivacyCategory::History],
+        elapsed_ms: 12,
+    };
+    (inventory, report)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum TableKind {
