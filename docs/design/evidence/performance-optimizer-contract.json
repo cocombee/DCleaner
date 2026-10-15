@@ -2481,5 +2481,49 @@
     "service_readiness_implemented": false,
     "native_effects_implemented": false,
     "limit": "Independent DCleaner codec only; request identifiers and status messages are not effect authority, ownership or native completion proof."
+  },
+  "dcleaner_pipe_io": {
+    "source": "src/optimizer_pipe_io.rs",
+    "source_lf_sha256": "9e4f48226dc28ae4e581b83a6f41179d705f9101d0374f8576230a9545eaeced",
+    "visibility": "crate-private Windows-only; not connected to application",
+    "io_chunk_bytes": 8192,
+    "deadline": "One absolute Instant across connect/read/write; checks before submission and after completion",
+    "cancellation": "Targeted CancelIoEx followed by native completion drain before releasing borrowed buffers, boxed OVERLAPPED or manual-reset event",
+    "hard_wall_clock_bound": false,
+    "fixture_tests_passed": 11,
+    "fixture_cases": [
+      "fragmented_protocol_roundtrip_and_preconnected_accept",
+      "pending_accept_times_out_and_ends_exchange",
+      "pending_accept_completes_after_client_arrives",
+      "completed_cancel_race_drains_before_buffer_reuse",
+      "immediate_completion_after_cancel_or_deadline_is_not_success",
+      "peer_zero_byte_write_is_not_a_clean_frame_disconnect",
+      "pending_read_cancellation_drains_and_does_not_retry",
+      "deadline_is_shared_across_multiple_reads",
+      "blocked_write_times_out_without_claiming_delivery",
+      "disconnect_is_eof_and_terminal",
+      "precancelled_and_expired_exchanges_do_not_start_connect"
+    ],
+    "local_windows_full_suite": {
+      "passed": 211,
+      "failed": 0,
+      "ignored": 7
+    },
+    "private_test_log_sha256": "9bdc28ab1e5d1ec83f67f2230920a7bb0669f99e2ec015878ab41ac889b25579",
+    "production_endpoint_connected": false,
+    "peer_authentication_implemented": false,
+    "service_instance_pinning_implemented": false,
+    "service_readiness_implemented": false,
+    "native_optimizer_effects_implemented": false,
+    "limitations": [
+      "Cancellation draining may exceed the exchange deadline; moved bytes are not delivery or native-effect receipts.",
+      "Random local fixture pipes reject remote clients but use a default test-only ACL; they do not prove a production access-control policy or peer identity.",
+      "Byte-at-a-time writes do not force native read fragmentation; separate codec fixtures explicitly enforce fragmented input.",
+      "Wait-handle failure injection, malicious peer identities, installed service operation and native visual acceptance remain unverified."
+    ],
+    "sources": [
+      "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile",
+      "https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex"
+    ]
   }
 }
