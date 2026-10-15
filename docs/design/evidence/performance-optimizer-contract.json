@@ -1052,5 +1052,75 @@
       "No original program execution, host optimizer effects, app launch, visual capture or installation was performed for this evidence.",
       "Raw pseudocode, assembly, imported symbol tables and private review records remain outside the published source."
     ]
+  },
+  "service_isolated_rea_launch_attempts": {
+    "method": "Ephemeral REA MCP process with a hash-pinned in-memory direct-JVM launcher correction; Windows Job Object cleanup retained",
+    "rea_version": "6.5.0",
+    "ghidra_version": "12.1.4",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "installed_bundle_sha256": "12a70d8ab2a57de0cc71d794e38470031bfbdde855ba4a435e0ac0613f2fe82e",
+    "installed_bundle_unchanged": true,
+    "global_configuration_changed": false,
+    "target_executed": false,
+    "launcher_changes": [
+      "Select inspected direct Java command on Windows",
+      "Quote ordinary Java arguments through the existing Windows process wrapper",
+      "Use the selected executable as the expected process identity"
+    ],
+    "attempts": [
+      {
+        "disabled_analyzers": [
+          "Decompiler Switch Analysis",
+          "Stack",
+          "Windows x86 PE RTTI Analyzer",
+          "PDB Universal"
+        ],
+        "profile_digest": "16bfc18b2bf30d0a7a52251afb6201fb97b991b8705d062b4bbec02481f9d2ac",
+        "result": "execution_failure",
+        "failure_kind": "process",
+        "failure_message": "Ghidra exited before bridge startup",
+        "exit_code": 0,
+        "headless_startup_observed": true,
+        "unsupported_analyzer_option_observed": true,
+        "varnode_context_error_observed": false,
+        "stdout_bytes": 47555,
+        "stderr_bytes": 505,
+        "loaded_bundle_sha256": "8821b6c555410785ee87cc7534b520d202ec44136c0e139fe19f27d31467d4ae",
+        "private_record": "optimizer-service-rea-direct/002-function-0x140838c80.json",
+        "private_record_sha256": "8ab606ff74568df89d3df02d4656eec5306a6a25abc4273d6b9ed384f671f7b7",
+        "procedure_evidence_ids": []
+      },
+      {
+        "disabled_analyzers": [
+          "Decompiler Switch Analysis",
+          "Stack"
+        ],
+        "profile_digest": "1910da58a736badcea1d398b589b898f20ef0c8c8112d115c01605ddeee51fea",
+        "result": "provider_timeout",
+        "failure_kind": "timeout",
+        "failure_message": "Ghidra startup deadline elapsed",
+        "exit_code": null,
+        "headless_startup_observed": true,
+        "unsupported_analyzer_option_observed": false,
+        "varnode_context_error_observed": true,
+        "stdout_bytes": 47356,
+        "stderr_bytes": 505,
+        "loaded_bundle_sha256": "8821b6c555410785ee87cc7534b520d202ec44136c0e139fe19f27d31467d4ae",
+        "private_record": "optimizer-service-rea-direct-two-analyzers/002-function-0x140838c80.json",
+        "private_record_sha256": "7516b22475eff136d3edf57d96613276e762489332af961ed60360b5f5c108ce",
+        "procedure_evidence_ids": []
+      }
+    ],
+    "terminal_cleanup_observation": {
+      "recorded_analysis_process_id": 39016,
+      "result": "NoProcessFoundForGivenId",
+      "checked_outside_sandbox": true
+    },
+    "limits": [
+      "The first corrected launch reached import but its pre-script rejected an unavailable program analyzer option.",
+      "The revised profile passed that stage but exceeded its 600-second startup bound. VarnodeContext address-space errors were observed; their contribution to the timeout is unresolved.",
+      "No new service procedure dossier or REA Evidence ID was produced. Do not repeat either unchanged request or count these probes as full service analysis.",
+      "The successful standalone bounded procedure evidence and the earlier nine REA helper dossiers remain separate evidence."
+    ]
   }
 }
