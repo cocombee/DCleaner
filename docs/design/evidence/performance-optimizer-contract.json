@@ -3286,5 +3286,175 @@
     "target_executed": false,
     "package_changed": false,
     "closed_without_snapshot_export": true
+  },
+  "dcleaner_inventory": {
+    "evidence_kind": "Source wiring and fixture evidence for registered-app review and exclusions; native UI and full optimizer parity are unverified",
+    "source_sha256_lf": {
+      "src/optimizer_inventory.rs": "a8a6c62719dea743f117555e5bcbe97d23e311593dd4f9d5e51776bcb9182a4d",
+      "src/view_optimizer.rs": "5a1cad605eab96223b513f3f502abfbc8defb689e83596cb2526ce1a93c7fef6",
+      "src/programs.rs": "eb29a03337afda5ba21bbfbc298758cee4c7b2738ae2c26d09499f6eea8b2a51",
+      "src/app.rs": "b68415fe10fe4a1e1eb7fa6bba7aa5fab869fa4fe189d099366c69fa88313b4b",
+      "src/theme.rs": "388438fdbe2dad144aaa09fd2cab643ceddddf8132780b1eb2920ae5843012f1",
+      "src/lib.rs": "ce808e2b72f9f1707067c2735b31baf2cdf4fbfc22afcb87678ce6734cd22190",
+      "Cargo.toml": "166d58062a1749b071571e6b31b6720b6005bfc2d322e10cf6d4bfaf8bd443e2",
+      "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+    },
+    "data": {
+      "sources": [
+        "Installed-program registrations",
+        "Startup applications",
+        "Scheduled tasks",
+        "Windows services"
+      ],
+      "identity": "Canonical exact registration hive/view/subkey; names and directory candidates grant no effect authority",
+      "associations": "Unique registered install-root lexical containment hints; ambiguous/shared roots and malformed paths remain unassociated",
+      "native_source_bounds": {
+        "enumerated_keys_per_source": 8192,
+        "retained_text_bytes_per_source": 8388608,
+        "source_count": 4,
+        "limit_outcome": "Explicit incomplete-read error; no silent complete inventory"
+      },
+      "optimizer_bounds": {
+        "programs": 8192,
+        "program_metadata_bytes": 16777216,
+        "startup_metadata_bytes": 16777216,
+        "association_comparisons": 1000000,
+        "notes": 128
+      },
+      "cancel": "Checked before/after native calls and during bounded processing; native calls themselves have no hard interruption guarantee"
+    },
+    "preferences": {
+      "schema": 1,
+      "max_bytes": 524288,
+      "max_exclusions": 200,
+      "storage": "Bounded regular-file reads; strict schema/key/count checks; cooperating process writer lock held across exact-byte stale check, synced temporary write and atomic rename",
+      "exclusion_scope": "Registration-scoped future-optimization preference only; no native sleep/process/startup mutation",
+      "retention": "Missing registrations retain their exclusion and remain reviewable/removable",
+      "limits": [
+        "Locking is cooperative; app-local preference storage is not protected resource/lease authority.",
+        "Registration-key reuse inherits a saved exclusion; this is conservative omission, never permission to optimize.",
+        "No crash/power-loss storage guarantee is established."
+      ]
+    },
+    "ui": {
+      "section": "Performance Optimizer",
+      "available_source_paths": [
+        "Applications catalogue",
+        "Search",
+        "Application/background candidate details",
+        "Reviewed exclude/remove exclusion",
+        "Retained missing-registration details/removal",
+        "Scan again",
+        "Stop scan"
+      ],
+      "capability_gaps": [
+        "Active classification",
+        "Impact measurement",
+        "Sleeping classification",
+        "Native Sleep/Activate/Activate all",
+        "Automatic reactivation/return to sleep",
+        "Protected service lifecycle/lease ownership"
+      ],
+      "composition": "Existing shared tabs/field/table/row action/menu/modal/footer families, 44px virtualized rows, actual local artwork, fixed headers and compact-nav scrolling",
+      "rendered": false,
+      "installed": false,
+      "live_button_interaction_verified": false,
+      "visual_parity_verified": false
+    },
+    "fixtures": {
+      "optimizer_inventory": [
+        "scan_composition_observes_cancellation_from_last_source",
+        "scan_composition_stops_after_cancellation_inside_a_source",
+        "startup_source_quality_and_failures_are_visible",
+        "startup_duplicate_conflicting_and_malformed_entries_are_omitted",
+        "registration_key_uses_hive_view_and_registration_not_display_name",
+        "path_association_respects_component_boundaries_and_ambiguity",
+        "invalid_relative_unc_device_and_dot_paths_never_associate",
+        "duplicate_program_identity_makes_candidate_ambiguous",
+        "aggregate_program_limit_is_explicit_and_bounded",
+        "cancelled_scan_returns_without_starting_native_inventory",
+        "exclusion_round_trips_durably_and_keeps_history_after_uninstall",
+        "stale_or_disappeared_settings_are_rejected",
+        "cooperating_writer_lock_preserves_settings_while_another_writer_holds_it",
+        "settings_writer_lock_child_helper",
+        "corrupt_future_unknown_and_duplicate_settings_are_preserved",
+        "settings_reject_noncanonical_identity_and_count_overflow"
+      ],
+      "native_source_budget_cases": 2,
+      "child_helper_cases": 1,
+      "actual_user_inventory_read": false
+    },
+    "local_tests": {
+      "passed": 283,
+      "failed": 0,
+      "ignored": 7,
+      "suites": 15,
+      "rust": "1.98.1",
+      "formatting": "passed",
+      "private_log_sha256": "364efa50ae027e79ad8093db302c14e5e9f2370e158760f337126cd8f5d856a1"
+    },
+    "local_release": {
+      "built": true,
+      "executed": false,
+      "installed": false,
+      "sha256": "3e984b6173d1551657d262f3ee388095deb24cd2ef4c93ed28d2e319b46ac8b8",
+      "private_log_sha256": "5e64f3fc6e4112ef53977cb7938db8208259642fc7fcdc7cab367fa9f820c7fd"
+    },
+    "prior_native_ci": {
+      "tested_commit": "fe8c15b0f592d93ab4167373ae82b4d1733dce7d",
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38688086114",
+      "windows_passed": 265,
+      "macos_passed": 221,
+      "current_inventory_ui_source_covered": false
+    },
+    "acceptance": {
+      "gui_launched": false,
+      "desktop_captured": false,
+      "installed": false,
+      "native_sleep_wake_verified": false,
+      "full_optimizer_parity_verified": false,
+      "full_app_parity_verified": false
+    }
+  },
+  "db_guard_dispatch_followup": {
+    "evidence_kind": "Scope-partial static reference resolution; application destinations remain unresolved",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "private_review_sha256": "42c8305a8fccabc9a9060b1cc06da555ce2894fa6ce174041ffe1aa1802aedb7",
+    "records": [
+      {
+        "evidence_id": "ev_ee6ce34c4ce3ee466dba6d4e0c1f5be4e40439fb99de1924c79ac14026728d25",
+        "private_record_sha256": "09f8e8dcc44928f47c4c421eb300e9fbcc6cca9f430cd404c9a39deeb3574d1d"
+      },
+      {
+        "evidence_id": "ev_86aa40048492008211cb7ef56f4a85a5ca48ea3b1de74bad2e203b24af0d2f26",
+        "private_record_sha256": "d8bbdd05281d58a9f86a61a0c18a2275b33ff50ab2bf9fe7efac25dc4cb66429"
+      },
+      {
+        "evidence_id": "ev_da721d31f5a57e7bd7471de35b2731eb92eb9ceaa03b5f09d36fedfc7da9e779",
+        "private_record_sha256": "ee1121e34859c245ef128192541aafc5b1cbbc188c72ffc81f4ac63981e18a88"
+      },
+      {
+        "evidence_id": "ev_71b9bdc61a01438ea024367bb6079f82cbe73ae6607cb19ea12be8f9e6c5bdd6",
+        "private_record_sha256": "2d59a27eff9ef3df928cd06f6ac4ffae46cd88e3bc15467d64f2649b7570d7bd"
+      },
+      {
+        "evidence_id": "ev_932825157a605857adb13b48a778087ba511a60e9af2ee4e3dad7d2b63b4fae8",
+        "private_record_sha256": "00fb68fc0f2e95074a69fccc02a62c0a35d3f33b9e5b7035f95bc0b394256ed5"
+      },
+      {
+        "evidence_id": "ev_8e16ad07bf41a9dcaa469f9156037c2b0af877c8ebf99475c8bcf4758e2d7937",
+        "private_record_sha256": "9a855a1139418550aa16344fbe4634b9e8d407cd323a16a514ed6bc1e1f18665"
+      },
+      {
+        "evidence_id": "ev_fed5004bdf40aee22a6e4ce8564fa17c8ae2b3fa00ef7951fe478e76524b749d",
+        "private_record_sha256": "2e3e263e69a31182245c04ae28da1552adb9a2e8ef2477f737611ee20c272e3c"
+      }
+    ],
+    "result": "Both saved callsites resolve only to 0x14152e210 (_guard_dispatch_icall); the guarded application destination is not recovered.",
+    "scope_limit": "Caller bodies still report one byte although p-code spans 21/16 prior-bound instruction addresses. Incoming data-slot references are not callsites or argument values.",
+    "payload_grammar_recovered": false,
+    "serializer_callee_identified": false,
+    "existing_canonical_coverage_unchanged": true,
+    "target_executed": false
   }
 }

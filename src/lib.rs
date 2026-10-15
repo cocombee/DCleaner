@@ -11,6 +11,7 @@ pub mod instance;
 pub(crate) mod native_hash;
 pub mod optimizer_identity;
 pub(crate) mod optimizer_intents;
+pub mod optimizer_inventory;
 #[cfg(windows)]
 pub(crate) mod optimizer_pipe_io;
 #[cfg(windows)]

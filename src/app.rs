@@ -27,6 +27,8 @@ mod view_drivers;
 mod view_duplicates;
 #[path = "view_health.rs"]
 mod view_health;
+#[path = "view_optimizer.rs"]
+mod view_optimizer;
 #[path = "view_privacy.rs"]
 mod view_privacy;
 #[path = "view_programs.rs"]
@@ -45,6 +47,7 @@ enum Page {
     Disk,
     Duplicates,
     Programs,
+    Optimizer,
     Startup,
     Software,
     Drivers,
@@ -59,6 +62,7 @@ impl Page {
             Self::Disk => theme::Icon::Disk,
             Self::Duplicates => theme::Icon::Duplicate,
             Self::Programs => theme::Icon::Programs,
+            Self::Optimizer => theme::Icon::Optimizer,
             Self::Startup => theme::Icon::Startup,
             Self::Software => theme::Icon::Update,
             Self::Drivers => theme::Icon::Driver,
@@ -73,6 +77,9 @@ impl Page {
             Self::Disk => "Find the largest files in a folder.",
             Self::Duplicates => "Find identical files and review which copies to keep.",
             Self::Programs => "Review installed applications and their registered uninstallers.",
+            Self::Optimizer => {
+                "Review applications, background components and optimization exclusions."
+            }
             Self::Startup => "Manage the programs and services that start automatically.",
             Self::Software => "Review available application updates and their current status.",
             Self::Drivers => "Review present devices and exact driver offers from Windows Update.",
@@ -87,6 +94,7 @@ impl Page {
             Self::Disk => "Disk Analyzer",
             Self::Duplicates => "Duplicate Finder",
             Self::Programs => "Uninstaller",
+            Self::Optimizer => "Performance Optimizer",
             Self::Startup => "Startup Manager",
             Self::Software => "Software Updater",
             Self::Drivers => "Driver Updater",
@@ -95,11 +103,12 @@ impl Page {
         }
     }
 }
-const PAGES: [Page; 10] = [
+const PAGES: [Page; 11] = [
     Page::Overview,
     Page::Clean,
     Page::Programs,
     Page::Duplicates,
+    Page::Optimizer,
     Page::Startup,
     Page::Software,
     Page::Drivers,
@@ -116,6 +125,7 @@ enum Event {
     Software(view_software::SoftwareEvent),
     Duplicate(view_duplicates::DuplicateEvent),
     Programs(view_programs::ProgramsEvent),
+    Optimizer(view_optimizer::OptimizerEvent),
     Startup(view_startup::StartupEvent),
     Drivers(view_drivers::DriverEvent),
     Progress(String),
@@ -142,6 +152,7 @@ pub struct App {
     software_ui: view_software::SoftwareUi,
     duplicate_ui: view_duplicates::DuplicateUi,
     program_ui: view_programs::ProgramsUi,
+    optimizer_ui: view_optimizer::OptimizerUi,
     startup_ui: view_startup::StartupUi,
     drivers_ui: view_drivers::DriverUi,
     privacy_ui: view_privacy::PrivacyUi,
@@ -242,6 +253,7 @@ impl App {
                 Ok("browser") | Ok("recyclebin") => Page::Clean,
                 Ok("duplicates") => Page::Duplicates,
                 Ok("programs") => Page::Programs,
+                Ok("optimizer") => Page::Optimizer,
                 Ok("startup") => Page::Startup,
                 Ok("software") => Page::Software,
                 Ok("drivers") => Page::Drivers,
@@ -272,6 +284,7 @@ impl App {
             software_ui: Default::default(),
             duplicate_ui: Default::default(),
             program_ui: Default::default(),
+            optimizer_ui: Default::default(),
             startup_ui: Default::default(),
             drivers_ui: Default::default(),
             app_icons: Default::default(),
@@ -481,6 +494,7 @@ impl App {
                 Event::Software(event) => self.software_event(event),
                 Event::Duplicate(event) => self.duplicates_event(event),
                 Event::Programs(event) => self.programs_event(event),
+                Event::Optimizer(event) => self.optimizer_event(event),
                 Event::Startup(event) => self.startup_event(event),
                 Event::Drivers(event) => self.drivers_event(event),
                 Event::Health(event) => self.health_event(event),
@@ -1114,26 +1128,33 @@ impl App {
                 } else {
                     &[Page::Overview, Page::Settings]
                 };
-                for &page in rail_pages {
-                    if theme::navigation(
-                        ui,
-                        if !narrow && page == Page::Overview {
-                            "Maintenance"
-                        } else {
-                            page.name()
-                        },
-                        page.icon(),
-                        self.page == page
-                            || (!narrow && page == Page::Overview && self.page != Page::Settings),
-                        !busy,
-                        true,
-                        t,
-                    ) {
-                        self.page = page;
-                        self.search.clear();
-                    }
-                    ui.add_space(5.);
-                }
+                egui::ScrollArea::vertical()
+                    .id_salt("rail-destinations")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for &page in rail_pages {
+                            if theme::navigation(
+                                ui,
+                                if !narrow && page == Page::Overview {
+                                    "Maintenance"
+                                } else {
+                                    page.name()
+                                },
+                                page.icon(),
+                                self.page == page
+                                    || (!narrow
+                                        && page == Page::Overview
+                                        && self.page != Page::Settings),
+                                !busy,
+                                true,
+                                t,
+                            ) {
+                                self.page = page;
+                                self.search.clear();
+                            }
+                            ui.add_space(5.);
+                        }
+                    });
             });
         if !narrow {
             egui::Panel::left("section-navigation")
@@ -1201,6 +1222,7 @@ impl App {
                             Page::Clean => self.clean_footer(ui, t, &ctx),
                             Page::Duplicates => self.duplicates_footer(ui, t, &ctx),
                             Page::Programs => self.programs_footer(ui, t, &ctx),
+                            Page::Optimizer => self.optimizer_footer(ui, t, &ctx),
                             Page::Startup => self.startup_footer(ui, t, &ctx),
                             Page::Software => self.software_footer(ui, t, &ctx),
                             Page::Drivers => self.drivers_footer(ui, t, &ctx),
@@ -1267,7 +1289,7 @@ impl App {
                                         });
                                     ui.add_space(12.);
                                 }
-                                if busy && self.page != Page::Overview {
+                                if busy && !matches!(self.page, Page::Overview | Page::Optimizer) {
                                     theme::card(t).show(ui, |ui| {
                                         ui.horizontal(|ui| {
                                             ui.spinner();
@@ -1291,6 +1313,7 @@ impl App {
                                     Page::Disk => self.disk_page(ui, t, &ctx),
                                     Page::Duplicates => self.duplicates_page(ui, t, &ctx),
                                     Page::Programs => self.programs_page(ui, t, &ctx),
+                                    Page::Optimizer => self.optimizer_page(ui, t, &ctx),
                                     Page::Startup => self.startup_page(ui, t, &ctx),
                                     Page::Software => self.software_page(ui, t, &ctx),
                                     Page::Drivers => self.drivers_page(ui, t, &ctx),
@@ -1305,6 +1328,7 @@ impl App {
         theme::window_chrome(root, t);
         self.duplicates_dialog(&ctx);
         self.programs_dialog(&ctx);
+        self.optimizer_dialog(&ctx);
         self.startup_dialog(&ctx);
         self.software_dialog(&ctx);
         self.drivers_dialog(&ctx);

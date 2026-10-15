@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "evidence_kind": "Remote compiler/test evidence; not installed, visual or full functional acceptance",
-  "tested_commit": "9e8f2dc0414cb774aaa507f0063c09c7feb2b95c",
+  "tested_commit": "fe8c15b0f592d93ab4167373ae82b4d1733dce7d",
   "tested_trees": {
-    "src": "34e6d12c4685cff3ebe342f3fa66c4e8f7072ea5",
+    "src": "db7b430022bb144ea1980d848abd6fb8aec12521",
     "tests": "04eb2422b75ec32fca6bb31f902dc12ba9a398fa",
     "Cargo.toml": "a9622ac08e778db7357da350ead9c961b8906cd9",
     "Cargo.lock": "8262c88990a9e6d2282d25485d49a0ca466382de",
     ".github/workflows": "9c728c0e6a6d85c0d41af93d1ca011af908a805a",
     "scripts": "80a6f24bf388825c926183d631b4e5ab9f29903c"
   },
-  "run_id": 38686355353,
-  "url": "https://github.com/cocombee/DCleaner/actions/runs/38686355353",
+  "run_id": 38688086114,
+  "url": "https://github.com/cocombee/DCleaner/actions/runs/38688086114",
   "conclusion": "success",
   "workflow": ".github/workflows/ci.yml",
   "commands": [
@@ -22,42 +22,42 @@
   "jobs": [
     {
       "runner": "windows-2025",
-      "job_id": 116261983125,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38686355353/job/116261983125",
+      "job_id": 116267462821,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38688086114/job/116267462821",
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 259,
+        "passed": 265,
         "failed": 0,
         "ignored": 7,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "03a95d32f6c32431b15b683029fbabb8c3a84015b84fc40057e0eb7ef73f5635"
+      "private_log_sha256": "9b9fe8ff00b75d34896781e1d0a66f6882608b210c88d32b12b913930393b7f1"
     },
     {
       "runner": "macos-15",
-      "job_id": 116261983486,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38686355353/job/116261983486",
+      "job_id": 116267463023,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38688086114/job/116267463023",
       "host": "aarch64-apple-darwin",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 215,
+        "passed": 221,
         "failed": 0,
         "ignored": 0,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "6bcddcbde0049638b1d334ae62de3b2189dee7ce9ae5278e12e963f04eec0c40"
+      "private_log_sha256": "9d3798ac6e6e304149c55d88c9d930507eee6e7d6eab25bf5f328576f74a61c9"
     }
   ],
   "changes_verified": [
     "The non-Windows driver adapter implements the shared action boundary and returns NativeUpdateBoundaryUnavailable before update/restore journaling or effects.",
     "CI supplies canonical native fixture roots while preserving scanner link/redirect rejection.",
     "All eleven file-backed invocation-ledger fixtures pass on both hosts; Windows also passes the native authenticated-frame-to-ledger case. This proves transaction/API fixtures, not protected storage, owner-death proof, native lease authority, installed service/effects or visual acceptance.",
-    "Eleven file-backed native-intent journal fixtures pass on both hosts; fifteen registry transaction fixtures pass on Windows, including a seven-case durable journal-to-native commit binding test. Exact staged plans consume their committed permits into non-executable attempt metadata. These fixtures do not establish protected storage/scope provisioning, native lease authorization, safe IFEO value semantics, helper readiness, verified native recovery receipts, installed Sleep/Wake or visual parity."
+    "Seventeen file-backed intent-journal fixtures pass on both hosts; fifteen registry fixtures pass on Windows, including eighteen commit/readback cases under both registry view flags. Exact legacy migration and bounded selected-field observations preserve unknown outcomes as Uncertain. No protected resource owner, stopped-owner reconciliation, deployed helper/service, native Sleep/Wake or visual acceptance is established."
   ],
   "acceptance": {
     "gui_launched": false,

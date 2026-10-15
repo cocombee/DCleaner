@@ -722,6 +722,7 @@ pub enum Icon {
     Disk,
     Duplicate,
     Programs,
+    Optimizer,
     Browser,
     Update,
     Driver,
@@ -844,6 +845,21 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Optimizer => {
+            line(&[
+                (7., 12.),
+                (7., 8.),
+                (13., 2.),
+                (18., 2.),
+                (18., 7.),
+                (12., 13.),
+                (8., 13.),
+            ]);
+            p.circle_stroke(point(13.5, 6.5), rect.width() * 0.085, stroke);
+            line(&[(7., 8.), (3., 8.), (2., 13.), (6., 12.)]);
+            line(&[(12., 13.), (12., 17.), (7., 18.), (8., 14.)]);
+            line(&[(5., 15.), (2., 18.)]);
+        }
         Icon::Duplicate => {
             line(&[(7., 2.), (17., 2.), (17., 14.)]);
             line(&[(3., 6.), (13., 6.), (13., 18.), (3., 18.), (3., 6.)]);

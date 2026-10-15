@@ -244,6 +244,92 @@ pub struct RawProgramRegistration {
     pub no_remove: bool,
 }
 
+// Bound the native producer before it accumulates a source Vec. Consumers may
+// impose smaller limits; their limits cannot bound an already materialized Vec.
+#[cfg(any(windows, test))]
+#[derive(Default)]
+struct NativeSourceBudget {
+    visited: usize,
+    retained_bytes: usize,
+}
+#[cfg(any(windows, test))]
+impl NativeSourceBudget {
+    const MAX_KEYS: usize = 8192;
+    const MAX_BYTES: usize = 8 * 1024 * 1024;
+    fn begin_entry(&mut self) -> bool {
+        if self.visited >= Self::MAX_KEYS {
+            return false;
+        }
+        self.visited += 1;
+        true
+    }
+    fn retain(&mut self, bytes: usize) -> bool {
+        if bytes > Self::MAX_BYTES.saturating_sub(self.retained_bytes) {
+            return false;
+        }
+        self.retained_bytes += bytes;
+        true
+    }
+    fn registration_bytes(registration: &RawProgramRegistration) -> usize {
+        [
+            Some(registration.key_name.as_str()),
+            registration.display_name.as_deref(),
+            registration.display_icon.as_deref(),
+            registration.publisher.as_deref(),
+            registration.display_version.as_deref(),
+            registration.install_location.as_deref(),
+            registration.install_date.as_deref(),
+            registration.uninstall_string.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .fold(0usize, |sum, value| sum.saturating_add(value.len()))
+    }
+}
+
+#[cfg(test)]
+mod native_source_budget_tests {
+    use super::*;
+    #[test]
+    fn native_source_budget_bounds_empty_keys_errors_and_all_metadata_fields() {
+        let mut budget = NativeSourceBudget::default();
+        for _ in 0..NativeSourceBudget::MAX_KEYS {
+            assert!(budget.begin_entry());
+        }
+        assert!(!budget.begin_entry());
+        let mut registration = RawProgramRegistration {
+            key_name: "key".into(),
+            ..Default::default()
+        };
+        registration.uninstall_string = Some("x".repeat(NativeSourceBudget::MAX_BYTES));
+        assert!(
+            !NativeSourceBudget::default()
+                .retain(NativeSourceBudget::registration_bytes(&registration))
+        );
+        registration.uninstall_string = None;
+        for field in [
+            &mut registration.display_name,
+            &mut registration.display_icon,
+            &mut registration.publisher,
+            &mut registration.display_version,
+            &mut registration.install_location,
+            &mut registration.install_date,
+        ] {
+            *field = Some("123".into());
+        }
+        assert_eq!(NativeSourceBudget::registration_bytes(&registration), 21);
+    }
+    #[test]
+    fn native_source_byte_budget_rejects_overflow_without_replacing_prior_data() {
+        let mut budget = NativeSourceBudget::default();
+        assert!(budget.retain(NativeSourceBudget::MAX_BYTES - 1));
+        assert!(!budget.retain(usize::MAX));
+        assert_eq!(budget.retained_bytes, NativeSourceBudget::MAX_BYTES - 1);
+        assert!(budget.retain(1));
+        assert!(!budget.retain(1));
+    }
+}
+
 /// Read-only registry boundary, injectable so parsing and stale-registration
 /// behavior can be tested without accessing the user's registry.
 pub trait RegistryPort {
@@ -833,7 +919,12 @@ mod windows_registry {
         };
         let mut result = RegistrySourceRead::default();
         let mut index = 0u32;
+        let mut budget = NativeSourceBudget::default();
         loop {
+            if !budget.begin_entry() {
+                result.errors.push(RegistryEntryError {key_name:None,message:"Installed-program enumeration reached its source key limit; later registrations were not examined.".into()});
+                break;
+            }
             let mut name = vec![0u16; 512];
             let mut length = name.len() as u32;
             let status = unsafe {
@@ -886,12 +977,24 @@ mod windows_registry {
 
             let key_name = String::from_utf16_lossy(&name[..length as usize]);
             match read_key(root.0, source_access(source), &key_name) {
-                Ok(Some(registration)) => result.registrations.push(registration),
+                Ok(Some(registration)) => {
+                    if !budget.retain(NativeSourceBudget::registration_bytes(&registration)) {
+                        result.errors.push(RegistryEntryError {key_name:None,message:"Installed-program enumeration reached its metadata byte limit; this and later registrations were omitted.".into()});
+                        break;
+                    }
+                    result.registrations.push(registration);
+                }
                 Ok(None) => {}
-                Err(message) => result.errors.push(RegistryEntryError {
-                    key_name: Some(key_name),
-                    message,
-                }),
+                Err(message) => {
+                    if !budget.retain(key_name.len().saturating_add(message.len())) {
+                        result.errors.push(RegistryEntryError {key_name:None,message:"Installed-program enumeration reached its error-detail byte limit; later registrations were not examined.".into()});
+                        break;
+                    }
+                    result.errors.push(RegistryEntryError {
+                        key_name: Some(key_name),
+                        message,
+                    });
+                }
             }
             index = index.saturating_add(1);
             if index == u32::MAX {
