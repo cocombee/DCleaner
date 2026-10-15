@@ -1119,8 +1119,8 @@
     "limits": [
       "The first corrected launch reached import but its pre-script rejected an unavailable program analyzer option.",
       "The revised profile passed that stage but exceeded its 600-second startup bound. VarnodeContext address-space errors were observed; their contribution to the timeout is unresolved.",
-      "No new service procedure dossier or REA Evidence ID was produced. Do not repeat either unchanged request or count these probes as full service analysis.",
-      "The successful standalone bounded procedure evidence and the earlier nine REA helper dossiers remain separate evidence."
+      "These two earlier profiles produced no service dossier or Evidence ID. Do not repeat either unchanged request; separate targeted-profile results are in service_targeted_rea_evidence.",
+      "The standalone bounded records and earlier nine REA helper dossiers remain separate; later populated service dossiers have explicit seed/profile and coverage limits."
     ]
   },
   "dcleaner_image_identity": {
@@ -1197,7 +1197,7 @@
           "target": "0x14085c1d0"
         }
       ],
-      "limit": "The dispatcher dynamic receiver is not yet proved to be this CProgramManager instance; these are conditional targets."
+      "limit": "Initial type candidate is now statically linked for the selected construction path by constructor_path_receiver; runtime/later rebinding and other paths remain unverified."
     },
     "functions": [
       {
@@ -1224,13 +1224,459 @@
       "The bounded +0x38 prelude tests one byte, saves another, clears two byte fields, and tail-transfers to 0x140842ef0 with derived flags. Its followed tail body lies outside the selected range and is unreviewed."
     ],
     "next_bounded_targets": [
-      "0x14085c3c0",
-      "0x140842ef0"
+      "0x1408594d0",
+      "0x14085b4a0"
     ],
     "limits": [
       "No native component mutations, association/impact classifier, re-sleep or recovery behavior established.",
       "A decompiler completion flag is not full function or service semantic coverage.",
-      "Resolve dispatcher receiver initialization separately before equating conditional candidates with actual request targets."
+      "Selected constructor-path receiver provenance is established statically; other paths, later rebinding and runtime effects remain unverified."
+    ],
+    "bounded_followups": [
+      {
+        "label": "provider-deps",
+        "private_record_sha256": "4771d068f68fe0e5bc36faab26cf31f3f3998ed9d5d90557ba29edc62b7c3ddb",
+        "private_review_sha256": "c1a7ad2d45a36c07ad5a2a74f9505bba818e193dd2f62b106abe232b96ead272",
+        "functions": [
+          {
+            "entry": "0x14085c3c0",
+            "end_exclusive": "0x14085d990",
+            "decoded_instructions": 923,
+            "pcode_instruction_addresses": 622,
+            "pcode_outside_requested_range_count": 0
+          },
+          {
+            "entry": "0x140842ef0",
+            "end_exclusive": "0x1408435d0",
+            "decoded_instructions": 403,
+            "pcode_instruction_addresses": 230,
+            "pcode_outside_requested_range_count": 0
+          }
+        ]
+      },
+      {
+        "label": "receiver",
+        "private_record_sha256": "73039d0f025338238771234039c52106e9c5ab9aae7d456a258eb82c4ea380d4",
+        "private_review_sha256": "117e051fc2f92f4a68bcc8dcfae06103034fe6adef0fb215234ffe4ce0e99766",
+        "functions": [
+          {
+            "entry": "0x140826f80",
+            "end_exclusive": "0x14082751e",
+            "decoded_instructions": 311,
+            "pcode_instruction_addresses": 194,
+            "pcode_outside_requested_range_count": 1
+          },
+          {
+            "entry": "0x1408378f0",
+            "end_exclusive": "0x1408379d5",
+            "decoded_instructions": 51,
+            "pcode_instruction_addresses": 54,
+            "pcode_outside_requested_range_count": 19
+          }
+        ]
+      },
+      {
+        "label": "receiver-setup",
+        "private_record_sha256": "12788e38163fb9db358ac34d2198821da424395db43457b4111b58288967e373",
+        "private_review_sha256": "fdb3d0348aa2bd1438cb5ba05ca72b55fdb6f94daf6a773415583a3d29a8c8de",
+        "functions": [
+          {
+            "entry": "0x140837ea0",
+            "end_exclusive": "0x140837ffa",
+            "decoded_instructions": 87,
+            "pcode_instruction_addresses": 46,
+            "pcode_outside_requested_range_count": 0
+          }
+        ]
+      },
+      {
+        "label": "receiver-pair",
+        "private_record_sha256": "88d30d1ad10b02cfea11e39509bd3ccd9afd7f5357e6b1eaae5e53901800f855",
+        "private_review_sha256": "ba3b402714f7e78f6d4aa40d7a07174b1ccf84f98820fc330a33406a4ba645a8",
+        "functions": [
+          {
+            "entry": "0x14071a4f0",
+            "end_exclusive": "0x14071a565",
+            "decoded_instructions": 35,
+            "pcode_instruction_addresses": 18,
+            "pcode_outside_requested_range_count": 0
+          }
+        ]
+      }
+    ],
+    "constructor_path_receiver": {
+      "state": "Statically linked for the selected construction path; runtime execution/later rebinding/other paths not established",
+      "manager_constructor": "0x14083f8e0",
+      "outer_constructor": "0x140826f80",
+      "worker_primary_offset": "0x40",
+      "setup": "0x140837ea0",
+      "pair_transfer": "0x14071a4f0",
+      "primary_pair_offsets": [
+        "0x90",
+        "0x98"
+      ],
+      "secondary_this_offset": "0x8",
+      "secondary_load_offsets": [
+        "0x88",
+        "0x90"
+      ],
+      "worker": "0x140838000",
+      "primary_this_normalization": "0x140838246",
+      "dispatcher_call": "0x140838aaa",
+      "dispatcher": "0x140838c80",
+      "proof": "The constructor supplies its CProgramManager pointer/owner pair to setup; the reviewed transfer helper installs both words at worker primary+0x90/+0x98. The virtual worker reads those fields through secondary-this+0x88/+0x90, then subtracts eight before the dispatcher handoff.",
+      "private_pair_review_sha256": "ba3b402714f7e78f6d4aa40d7a07174b1ccf84f98820fc330a33406a4ba645a8",
+      "limit": "The transfer helper does not validate type; type provenance comes from the selected constructor and RTTI path. Constructor/destructor decompiler addresses outside requested ranges remain unreviewed."
+    },
+    "transition_review": {
+      "private_bounded_review_sha256": "c1a7ad2d45a36c07ad5a2a74f9505bba818e193dd2f62b106abe232b96ead272",
+      "private_abi_review_sha256": "64318db07bc9d05390645a6af5c0b522e9a9b9ae67b57b96d0403a4c1e4c5fd1",
+      "private_canonical_review_sha256": "cc07dc762d8708d3684887ccc13e45ac5e355e89b0ef3cc059f06d001b8ba374",
+      "private_deactivation_review_sha256": "843c00d11da7e4d5708a3cb25d933a5152a0bcebd3526cb789f7551575a97385",
+      "findings": [
+        "State routing rereads actual state but does not generally verify that it equals the request. Numeric state names and final return/AL meaning are not assigned.",
+        "The selected outer caller supplies a null optional initial-state output; caller-side AL branching does not establish a verified component post-state.",
+        "The deactivation-route helper selects lookup branches and delegates through a guarded virtual slot and further helpers. It contains no component-enumeration loop, and its subordinate return values do not prove native component effects."
+      ],
+      "next_semantic_targets": [
+        "0x1408594d0",
+        "0x14085b4a0"
+      ]
+    }
+  },
+  "service_targeted_rea_evidence": {
+    "method": "REA MCP function dossiers with supported declared function/code seeds and only Subroutine References kept enabled, plus hash-pinned isolated direct-JVM launcher correction",
+    "rea_version": "6.5.0",
+    "ghidra_version": "12.1.4",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "target_executed": false,
+    "installed_bundle_sha256": "12a70d8ab2a57de0cc71d794e38470031bfbdde855ba4a435e0ac0613f2fe82e",
+    "installed_bundle_unchanged": true,
+    "global_configuration_edited": false,
+    "stock_launcher_verified": false,
+    "cfg_end_convention": "Exclusive; confirmed in installed REA ReaGhidraBridge.basicBlocksJson",
+    "analyzer_inventory": {
+      "applicable": 31,
+      "default_enabled": 25,
+      "private_record_sha256": "12788e38163fb9db358ac34d2198821da424395db43457b4111b58288967e373"
+    },
+    "populated_unique_service_procedures": 4,
+    "profiles": [
+      {
+        "label": "code-seeded",
+        "analysis_profile_digest": "cb97cab6a6722bdea6bcad9a00b4530c640674c9515dbe8001da390f48bd2a02",
+        "disabled_analyzers": 30,
+        "kept_enabled_analyzers": [
+          "Subroutine References"
+        ],
+        "declared_function_entries": [
+          "0x140837ea0",
+          "0x14085c3c0"
+        ],
+        "declared_code_entries": [
+          "0x140837ea0",
+          "0x14085c3c0",
+          "0x14085c1d0",
+          "0x140826f80"
+        ],
+        "seed_sha256": "0984f5bfb13f09a73ffd67900f69497c44557ff9bb6adf9b0d92b35d102d5106",
+        "seed_outcome": {
+          "function_created": 0,
+          "function_existing": 2,
+          "function_failed": 0,
+          "code_decoded": 4,
+          "code_failed": 0,
+          "unmapped": 0
+        },
+        "session_closed": true,
+        "private_summary_sha256": "f5101fb0cae764a89c797292810bb81f099d44c0bb739b3fcdcd4a4ee3ae9e59",
+        "private_snapshot_sha256": "55399797ee6ce81c499fbeb563f6c49bb94f983b948723fb14c090f4dc8905fc",
+        "snapshot_evidence_records": 2,
+        "functions": [
+          {
+            "entry": "0x140837ea0",
+            "evidence_id": "ev_5d24cfa52a201e7d2daeb7611a2c0ef561bd7306b5b4d4d8b5c1783ae75c43ce",
+            "private_record_sha256": "f824fa277bde3d7712a79f936c15e5500779f6ad0343694da43437ec163fdd99",
+            "pe_end_exclusive": "0x140837ffa",
+            "body": {
+              "available": true,
+              "provenance": "ghidra-function-body-address-set",
+              "ranges": [
+                {
+                  "start": "0x140837ea0",
+                  "end": "0x140837ff8"
+                }
+              ],
+              "total_bytes": 345,
+              "span_bytes": 345,
+              "non_contiguous": false,
+              "contains_entry": true
+            },
+            "assembly_lines": 86,
+            "cfg_blocks": 11,
+            "unresolved_calls": 0,
+            "native_value_flow": {
+              "available": true,
+              "retained_operations": 107,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0,
+              "retained_operations_outside_selected_pe_scope": 0
+            },
+            "assembly_outside_selected_pe_scope": 0,
+            "cfg_outside_selected_pe_scope": 0,
+            "usable_populated_body": true,
+            "limit": "Selected registered body and retained facets only; not a full service or runtime-effect proof"
+          },
+          {
+            "entry": "0x14085c3c0",
+            "evidence_id": "ev_9bf663b9101417d326fd4b555dfe8133660af91c7132c9c90469b45018d670da",
+            "private_record_sha256": "e37c125ae1859d26a8e18757e688df3e0af3084c56b4221f6e95dec926d6a287",
+            "pe_end_exclusive": "0x14085d990",
+            "body": {
+              "available": true,
+              "provenance": "ghidra-function-body-address-set",
+              "ranges": [
+                {
+                  "start": "0x14085c3c0",
+                  "end": "0x14085cf45"
+                },
+                {
+                  "start": "0x14085cf94",
+                  "end": "0x14085d682"
+                },
+                {
+                  "start": "0x14085d693",
+                  "end": "0x14085d965"
+                }
+              ],
+              "total_bytes": 5448,
+              "span_bytes": 5542,
+              "non_contiguous": true,
+              "contains_entry": true
+            },
+            "assembly_lines": 1086,
+            "cfg_blocks": 167,
+            "unresolved_calls": 8,
+            "native_value_flow": {
+              "available": true,
+              "retained_operations": 3000,
+              "truncated": true,
+              "omitted_operations_lower_bound": 1,
+              "retained_operations_outside_selected_pe_scope": 0
+            },
+            "assembly_outside_selected_pe_scope": 0,
+            "cfg_outside_selected_pe_scope": 0,
+            "usable_populated_body": true,
+            "limit": "Selected registered body and retained facets only; not a full service or runtime-effect proof"
+          }
+        ]
+      },
+      {
+        "label": "component",
+        "analysis_profile_digest": "a787c7c7241d6add37b3cf89216fb2ec55f75021eff39b9038d92e9e1d64ee0d",
+        "disabled_analyzers": 30,
+        "kept_enabled_analyzers": [
+          "Subroutine References"
+        ],
+        "declared_function_entries": [
+          "0x14085bb50",
+          "0x14071a4f0"
+        ],
+        "declared_code_entries": [
+          "0x14085bb50",
+          "0x14071a4f0",
+          "0x14085c3c0",
+          "0x140837ea0"
+        ],
+        "seed_sha256": "3be4f3512aed4cbee8bf3cf7cb2014f57ed5f5cc40eb8f489814fd7316712232",
+        "seed_outcome": {
+          "function_created": 0,
+          "function_existing": 2,
+          "function_failed": 0,
+          "code_decoded": 4,
+          "code_failed": 0,
+          "unmapped": 0
+        },
+        "session_closed": true,
+        "private_summary_sha256": "d905ee05f074ccf9d9adf35e524f6ecc162a55cb434178be5e4b259b149accf9",
+        "private_snapshot_sha256": "7e456a58d960382cd471e2e55914cdd223eb4adfa3d9cbdc6009ac0d28ec1109",
+        "snapshot_evidence_records": 2,
+        "functions": [
+          {
+            "entry": "0x14085bb50",
+            "evidence_id": "ev_5d90d97f24bf6d6040ab8de2c8cc59b4b2bbe67145b044b90a21b17641b241fd",
+            "private_record_sha256": "6c635e7ab97d4342de3aa35e25f5b35542c70470495a366831006fe29cadd8a6",
+            "pe_end_exclusive": "0x14085bc85",
+            "body": {
+              "available": true,
+              "provenance": "ghidra-function-body-address-set",
+              "ranges": [
+                {
+                  "start": "0x14085bb50",
+                  "end": "0x14085bb50"
+                }
+              ],
+              "total_bytes": 1,
+              "span_bytes": 1,
+              "non_contiguous": false,
+              "contains_entry": true
+            },
+            "assembly_lines": 1,
+            "cfg_blocks": 1,
+            "unresolved_calls": 0,
+            "native_value_flow": {
+              "available": true,
+              "retained_operations": 102,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0,
+              "retained_operations_outside_selected_pe_scope": 0
+            },
+            "assembly_outside_selected_pe_scope": 0,
+            "cfg_outside_selected_pe_scope": 0,
+            "usable_populated_body": false,
+            "limit": "One-byte placeholder despite decoding; excluded from populated-body count and semantic claims"
+          },
+          {
+            "entry": "0x14071a4f0",
+            "evidence_id": "ev_e60f5c8abc331aa83bf84be0605478f6c01bc662eb78ae630c45ed7c61bf547f",
+            "private_record_sha256": "7c3fb20f86b1d690bfa4db0e5d99e1dbb57f7f17181266630a55a84c085acee0",
+            "pe_end_exclusive": "0x14071a565",
+            "body": {
+              "available": true,
+              "provenance": "ghidra-function-body-address-set",
+              "ranges": [
+                {
+                  "start": "0x14071a4f0",
+                  "end": "0x14071a564"
+                }
+              ],
+              "total_bytes": 117,
+              "span_bytes": 117,
+              "non_contiguous": false,
+              "contains_entry": true
+            },
+            "assembly_lines": 35,
+            "cfg_blocks": 5,
+            "unresolved_calls": 0,
+            "native_value_flow": {
+              "available": true,
+              "retained_operations": 25,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0,
+              "retained_operations_outside_selected_pe_scope": 0
+            },
+            "assembly_outside_selected_pe_scope": 0,
+            "cfg_outside_selected_pe_scope": 0,
+            "usable_populated_body": true,
+            "limit": "Selected registered body and retained facets only; not a full service or runtime-effect proof"
+          }
+        ]
+      },
+      {
+        "label": "deactivate",
+        "analysis_profile_digest": "6edb2e5ce5e501888623935929f9f3408eddfa725ee8cb17c598c66c0a6aeb19",
+        "disabled_analyzers": 30,
+        "kept_enabled_analyzers": [
+          "Subroutine References"
+        ],
+        "declared_function_entries": [
+          "0x14085bb50"
+        ],
+        "declared_code_entries": [
+          "0x14085bb50",
+          "0x14085cce6",
+          "0x14085cd94"
+        ],
+        "seed_sha256": "e191becafe6246531d992cc5f85c0e385b7a2c3c3bc818092553aaae8d7c9cb0",
+        "seed_outcome": {
+          "function_created": 0,
+          "function_existing": 1,
+          "function_failed": 0,
+          "code_decoded": 3,
+          "code_failed": 0,
+          "unmapped": 0
+        },
+        "session_closed": true,
+        "private_summary_sha256": "11446130621da296aafaa78057acb4064c9761f1f790c1e624b252cf6862a385",
+        "private_snapshot_sha256": "74a9cdfa6ca0a9540020ba3b31ea4be7b0102fbfa5270cecbd7ca2ebbbf7bcd8",
+        "snapshot_evidence_records": 1,
+        "functions": [
+          {
+            "entry": "0x14085bb50",
+            "evidence_id": "ev_3548d60e94fd4c8411a583e1968dcaddbdc891153c0864c8ac2680e40468c5f5",
+            "private_record_sha256": "1dcdca34c7af10fbf3a861a8d90f7195db4d94e494b5ec6dda08ce55d45af44d",
+            "pe_end_exclusive": "0x14085bc85",
+            "body": {
+              "available": true,
+              "provenance": "ghidra-function-body-address-set",
+              "ranges": [
+                {
+                  "start": "0x14085bb50",
+                  "end": "0x14085bc84"
+                }
+              ],
+              "total_bytes": 309,
+              "span_bytes": 309,
+              "non_contiguous": false,
+              "contains_entry": true
+            },
+            "assembly_lines": 91,
+            "cfg_blocks": 12,
+            "unresolved_calls": 0,
+            "native_value_flow": {
+              "available": true,
+              "retained_operations": 102,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0,
+              "retained_operations_outside_selected_pe_scope": 0
+            },
+            "assembly_outside_selected_pe_scope": 0,
+            "cfg_outside_selected_pe_scope": 0,
+            "usable_populated_body": true,
+            "limit": "Selected registered body and retained facets only; not a full service or runtime-effect proof"
+          }
+        ]
+      }
+    ],
+    "excluded_all_disabled_probe": {
+      "disabled_analyzers": 31,
+      "function_seeds": 2,
+      "code_seeds": 0,
+      "private_summary_sha256": "d4de1f976810ff587432e7e58b26d5ad7bb9cfc44f1307a07660dd174b79086a",
+      "functions": [
+        {
+          "entry": "0x140837ea0",
+          "evidence_id": "ev_6f4ac5822b9bee6edbb390bc0f6dc114ea87b92a2de877ecfbf3461fa87a5c4a",
+          "body_bytes": 1,
+          "assembly_lines": 0,
+          "cfg_blocks": 0,
+          "private_record_sha256": "be4c918b1bbb128f856fa85d9458363872558a17f344921347c4503d7e673f72"
+        },
+        {
+          "entry": "0x14085c3c0",
+          "evidence_id": "ev_7e5bb6ac9a38a7283f914be221f93328c5b4e5b23b867714477c70d6d50f31a4",
+          "body_bytes": 1,
+          "assembly_lines": 0,
+          "cfg_blocks": 0,
+          "private_record_sha256": "eea5622b03fe6b07569ac382e90268ff95dbf7ba11ccf7319f592265739ab9c8"
+        }
+      ],
+      "reason": "The server returned Evidence IDs, but function bodies stayed one byte and assembly/CFG were empty. Available-facet and complete-relationship flags are not full-function coverage."
+    },
+    "interpretation": [
+      "Explicit code seeds must include actual direct-call sites when caller-entry decoding does not reach those blocks. Function-only seeds do not expand existing one-byte PE placeholders.",
+      "Subroutine References repairs decoded one-byte placeholders at called locations; seed entries remain caller assertions rather than automatic discoveries.",
+      "The transition routine has 1086 assembly lines/167 CFG blocks and retains all 923 earlier bounded instruction starts plus 163 additional starts. Its value-flow facet is capped/truncated, not complete."
+    ],
+    "references": [
+      "https://raw.githubusercontent.com/NationalSecurityAgency/ghidra/Ghidra_12.1.4_build/Ghidra/Features/Base/src/main/java/ghidra/app/plugin/core/function/FunctionAnalyzer.java"
+    ],
+    "limits": [
+      "Targeted profiles are not stock default/full-program analysis or complete caller/callee discovery.",
+      "The installed Windows launcher remains unchanged; the per-process workaround and exact analysis/seed commitments are required to reproduce these runs.",
+      "Four populated dossiers do not establish full service semantics. Direct callees, indirect targets, component mutation, association, impact, re-sleep, recovery and runtime verification remain open.",
+      "Native flow/truncation fields and unresolved-call counts must be retained when interpreting each dossier.",
+      "No app UI, installer, Sleep/Wake operation or native visual acceptance was exercised."
     ]
   }
 }
