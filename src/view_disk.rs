@@ -1,0 +1,210 @@
+use super::*;
+
+#[derive(Default)]
+pub(super) struct DiskUi {
+    details: Option<Uuid>,
+}
+
+impl App {
+    pub(super) fn disk_page(&mut self, ui: &mut egui::Ui, t: Tokens, _ctx: &egui::Context) {
+        theme::card(t).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+
+            if let Some(report) = self.disk.clone() {
+                ui.label(RichText::new("Largest files").family(theme::semibold()));
+                ui.add_space(6.);
+
+                let root = report.root.display().to_string();
+                ui.add(egui::Label::new(root.clone()).truncate())
+                    .on_hover_text(root);
+                ui.add_space(8.);
+
+                let summary = format!(
+                    "{} · {} files scanned · {} skipped{}",
+                    size(report.bytes),
+                    report.count,
+                    report.skipped,
+                    if report.partial { " · partial results" } else { "" }
+                );
+                ui.label(summary);
+                if report.partial {
+                    theme::muted(
+                        ui,
+                        "Some entries could not be fully read. The totals and list describe only the files this scan observed.",
+                        t,
+                    );
+                }
+                if report.files.len() < report.count {
+                    theme::muted(
+                        ui,
+                        format!("Showing the largest {} files.", report.files.len()),
+                        t,
+                    );
+                }
+
+                ui.add_space(10.);
+                let size_width = 100.0;
+                let actions_width = 82.0;
+                let gap = ui.spacing().item_spacing.x;
+                let path_width = (ui.available_width()
+                    - ui.spacing().scroll.allocated_width()
+                    - size_width
+                    - actions_width
+                    - gap * 2.)
+                    .max(52.);
+
+                ui.horizontal(|ui| {
+                    theme::table_cell(
+                        ui,
+                        RichText::new("Path").family(theme::semibold()),
+                        path_width,
+                        32.,
+                    );
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(size_width, 32.),
+                        Layout::right_to_left(Align::Center),
+                        |ui| {
+                            ui.label(RichText::new("Size").family(theme::semibold()));
+                        },
+                    );
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(actions_width, 32.),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            ui.label(RichText::new("Details").family(theme::semibold()));
+                        },
+                    );
+                });
+                ui.separator();
+
+                ui.scope(|ui| {
+                    ui.spacing_mut().item_spacing.y = 0.;
+                    egui::ScrollArea::vertical()
+                    .id_salt("disk-results-table")
+                    .max_height(440.)
+                    .auto_shrink([false, false])
+                    .show_rows(ui, 44., report.files.len(), |ui, range| {
+                        for index in range {
+                            let file = &report.files[index];
+                            let path = file.path.display().to_string();
+                            ui.push_id(file.id, |ui| {
+                                let row = ui.horizontal(|ui| {
+                                    theme::table_cell(
+                                        ui,
+                                        path.clone(),
+                                        path_width,
+                                        44.,
+                                    )
+                                    .on_hover_text(path);
+                                    ui.allocate_ui_with_layout(
+                                        Vec2::new(size_width, 44.),
+                                        Layout::right_to_left(Align::Center),
+                                        |ui| {
+                                            ui.label(size(file.size));
+                                        },
+                                    );
+                                    ui.allocate_ui_with_layout(
+                                        Vec2::new(actions_width, 44.),
+                                        Layout::left_to_right(Align::Center),
+                                        |ui| {
+                                            if theme::row_action(ui, "Details", true).clicked() {
+                                                self.disk_ui.details = Some(file.id);
+                                            }
+                                        },
+                                    );
+                                });
+                                let rect = row.response.rect;
+                                ui.painter().line_segment(
+                                    [rect.left_bottom(), rect.right_bottom()],
+                                    egui::Stroke::new(1., t.border),
+                                );
+                            });
+                        }
+                    });
+                });
+
+                if report.files.is_empty() {
+                    ui.add_space(20.);
+                    theme::muted(ui, "No files were returned by this scan.", t);
+                }
+            } else {
+                ui.add_space(28.);
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("See where your space goes").size(18.));
+                    ui.add_space(8.);
+                    theme::muted(
+                        ui,
+                        "Choose a folder for a read-only size analysis. DCleaner will not change the files.",
+                        t,
+                    );
+                });
+                ui.add_space(28.);
+            }
+        });
+    }
+
+    pub(super) fn disk_dialog(&mut self, ctx: &egui::Context) {
+        let Some(selected_id) = self.disk_ui.details else {
+            return;
+        };
+        let Some(file) = self
+            .disk
+            .as_ref()
+            .and_then(|report| report.files.iter().find(|file| file.id == selected_id))
+            .cloned()
+        else {
+            self.disk_ui.details = None;
+            return;
+        };
+
+        let t = theme::tokens(self.prefs.dark);
+        let path = file.path.display().to_string();
+        let mut close = false;
+        let mut copy_path = false;
+        let response = egui::Modal::new(egui::Id::new("disk-file-details"))
+            .frame(theme::dialog_frame(t))
+            .show(ctx, |ui| {
+                ui.set_width((ctx.content_rect().width() - 80.).clamp(300., 560.));
+                ui.heading("File details");
+                ui.add_space(12.);
+                ui.label(
+                    RichText::new(
+                        file.path
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .unwrap_or("File name unavailable"),
+                    )
+                    .family(theme::semibold()),
+                );
+                ui.add_space(10.);
+                ui.horizontal_wrapped(|ui| {
+                    theme::muted(ui, "Size", t);
+                    ui.label(size(file.size));
+                });
+                ui.add_space(8.);
+                theme::muted(ui, "Full path", t);
+                egui::ScrollArea::vertical()
+                    .id_salt("disk-details-path")
+                    .max_height(150.)
+                    .show(ui, |ui| {
+                        ui.add(egui::Label::new(path.clone()).wrap());
+                    });
+                ui.add_space(16.);
+                theme::action_row(ui, |ui| {
+                    if theme::secondary(ui, "Close", true) {
+                        close = true;
+                    }
+                    if theme::primary(ui, "Copy path", t, true) {
+                        copy_path = true;
+                    }
+                });
+            });
+
+        if close || response.should_close() {
+            self.disk_ui.details = None;
+        }
+        if copy_path {
+            ctx.copy_text(path);
+        }
+    }
+}

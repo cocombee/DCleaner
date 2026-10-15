@@ -23,6 +23,8 @@ use uuid::Uuid;
 mod view_clean_settings;
 #[path = "view_cloud.rs"]
 mod view_cloud;
+#[path = "view_disk.rs"]
+mod view_disk;
 #[path = "view_drivers.rs"]
 mod view_drivers;
 #[path = "view_duplicates.rs"]
@@ -185,6 +187,7 @@ pub struct App {
     selected: HashSet<Uuid>,
     history: Vec<CleanupResult>,
     disk: Option<DiskReport>,
+    disk_ui: view_disk::DiskUi,
     data_dir: PathBuf,
     worker: Option<Receiver<Event>>,
     cancel: Arc<AtomicBool>,
@@ -332,6 +335,7 @@ impl App {
             selected: HashSet::new(),
             history,
             disk: None,
+            disk_ui: Default::default(),
             data_dir,
             worker: None,
             cancel: Arc::new(AtomicBool::new(false)),
@@ -1039,45 +1043,6 @@ impl App {
                 }
         })
     }
-    fn disk_page(&mut self, ui: &mut egui::Ui, t: Tokens, _ctx: &egui::Context) {
-        theme::card(t).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            if let Some(report) = &self.disk {
-                ui.label(RichText::new("Largest files").family(theme::semibold()));
-                theme::muted(ui, report.root.to_string_lossy(), t);
-                ui.add_space(10.);
-                ui.label(format!(
-                    "{} in {} files · {} skipped{}",
-                    size(report.bytes),
-                    report.count,
-                    report.skipped,
-                    if report.partial {
-                        " · partial scan"
-                    } else {
-                        ""
-                    }
-                ));
-                ui.separator();
-                for f in &report.files {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::Label::new(f.path.to_string_lossy()).truncate())
-                            .on_hover_text(f.path.to_string_lossy());
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            ui.label(size(f.size));
-                        });
-                    });
-                }
-            } else {
-                ui.add_space(50.);
-                ui.vertical_centered(|ui| {
-                    ui.label(RichText::new("See where your space goes").size(18.));
-                    ui.add_space(8.);
-                    theme::muted(ui, "Choose a folder for a read-only size analysis.", t);
-                });
-                ui.add_space(50.);
-            }
-        });
-    }
     fn history_page(&self, ui: &mut egui::Ui, t: Tokens) {
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1366,6 +1331,7 @@ impl App {
         #[cfg(windows)]
         theme::window_chrome(root, t);
         self.duplicates_dialog(&ctx);
+        self.disk_dialog(&ctx);
         self.programs_dialog(&ctx);
         self.optimizer_dialog(&ctx);
         self.startup_dialog(&ctx);
