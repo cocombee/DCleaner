@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "evidence_kind": "Remote compiler/test evidence; not installed, visual or full functional acceptance",
-  "tested_commit": "4a700daa79635df2fc263ed4860c20c762ce967b",
+  "tested_commit": "47cb949c819a8cf43c2af66c490e61e2681c19bb",
   "tested_trees": {
-    "src": "d73f7dde87c72efd7240abbf6249474026e4b9a1",
+    "src": "c397a60a41aa5090d0e1ff912f0234ad32bda4ba",
     "tests": "04eb2422b75ec32fca6bb31f902dc12ba9a398fa",
     "Cargo.toml": "46b36c8f565f24479529401fb4a472c14de6f244",
     "Cargo.lock": "8262c88990a9e6d2282d25485d49a0ca466382de",
     ".github/workflows": "9c728c0e6a6d85c0d41af93d1ca011af908a805a",
     "scripts": "80a6f24bf388825c926183d631b4e5ab9f29903c"
   },
-  "run_id": 38667424179,
-  "url": "https://github.com/cocombee/DCleaner/actions/runs/38667424179",
+  "run_id": 38675828110,
+  "url": "https://github.com/cocombee/DCleaner/actions/runs/38675828110",
   "conclusion": "success",
   "workflow": ".github/workflows/ci.yml",
   "commands": [
@@ -22,41 +22,42 @@
   "jobs": [
     {
       "runner": "windows-2025",
-      "job_id": 116202439792,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38667424179/job/116202439792",
+      "job_id": 116229083735,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38675828110/job/116229083735",
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 193,
+        "passed": 200,
         "failed": 0,
         "ignored": 7,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "0909c605a9ae69abaf6f5fc3cf56b05ff7c386ab012b0becbc0f10f959361fcc"
+      "private_log_sha256": "e5afad8a65d1d471ef53cebb0cf3639d2bd92766c938040261a169e4de3c9ae2"
     },
     {
       "runner": "macos-15",
-      "job_id": 116202440157,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38667424179/job/116202440157",
+      "job_id": 116229083548,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38675828110/job/116229083548",
       "host": "aarch64-apple-darwin",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 186,
+        "passed": 193,
         "failed": 0,
         "ignored": 0,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "fe7c9c240a542db838874ab294bf3ce9bcbf7202379eb0b9810372140e02f211"
+      "private_log_sha256": "115284f9e2944d5b7be3d8ee7821dd5edd840d5be1a63f7895540caecd5ae762"
     }
   ],
   "changes_verified": [
     "The non-Windows driver adapter implements the shared action boundary and returns NativeUpdateBoundaryUnavailable before update/restore journaling or effects.",
     "CI supplies canonical native fixture roots while preserving scanner link/redirect rejection.",
-    "Bounded Windows image-identity observations and shared BCrypt hashing pass their fixture/known-vector tests; non-Windows identity reads explicitly report unsupported."
+    "Bounded Windows image-identity observations and shared BCrypt hashing pass their fixture/known-vector tests; non-Windows identity reads explicitly report unsupported.",
+    "Seven optimizer protocol fixtures pass on both native hosts, covering bounded framing/schema, fragmented/truncated input, exchange/variant/invocation correlation and partial writes. IPC, peer authentication, service readiness and native effects remain unimplemented."
   ],
   "acceptance": {
     "gui_launched": false,
