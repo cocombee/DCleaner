@@ -1,0 +1,263 @@
+{
+  "schema": 1,
+  "evidence_kind": "Focused inert REA, hashed manual source review and independent read-only backend fixtures; Cloud workflow and visual acceptance remain open",
+  "captured_utc": "2026-10-15T06:55:35.327Z",
+  "reference": {
+    "product": "CCleaner Windows 7.12.1526",
+    "gui_inventory_sha256": "ab7c068440e5afbae365ada04a8b2c79446fdf546515a42d6aca6188019fdcb4",
+    "source_files": [
+      {
+        "path": "chunks/CloudDriveCleaner.js",
+        "bytes": 17751,
+        "sha256": "f2d23451ff0a1e743decc076efeebf18c85f0f17eca7bbbfb5f085d8c6d26766"
+      },
+      {
+        "path": "chunks/webview.js",
+        "bytes": 2676,
+        "sha256": "7adef99d34ef6da70fe79f108cce4af9306441dbd27d324e1491aa4dc14b0350"
+      },
+      {
+        "path": "chunks/analytics.js",
+        "bytes": 381834,
+        "sha256": "5f6b15cdb29f94d3fbc4c431c28153c8c6caa60e21cec537c5e145fe8055778a"
+      },
+      {
+        "path": "chunks/feature_info.js",
+        "bytes": 615,
+        "sha256": "3c3eef4b7c55a5ff4baa933514bc73c429b2c45bbe7d546bf1903b6f5e7bd7ca"
+      }
+    ],
+    "rea": {
+      "summary_evidence_id": "ev_a71ed3bec16196796b9a734edc64245de245b63c3a48d27c6e400ea34805dbdc",
+      "parent_evidence_id": "ev_367b0108858842456beb30e1af149120c7106d35aaf3f3d88a7056b4dc9fc706",
+      "selected": {
+        "requested_paths": [
+          "chunks/CloudDriveCleaner.js",
+          "chunks/feature_info.js",
+          "chunks/webview.js"
+        ],
+        "unselected_files": 235
+      },
+      "statistics": {
+        "relevant_files": 238,
+        "nested_asar_containers": 0,
+        "text_bytes_read": 21042,
+        "invalid_utf8_files": 0,
+        "parsed_javascript_files": 3,
+        "visited_ast_nodes": 3529,
+        "findings": 99,
+        "modules": 0,
+        "parse_failures": 0
+      },
+      "application_coverage": {
+        "status": "partial",
+        "truncated": false,
+        "omitted_count": null,
+        "limits": []
+      },
+      "semantic_coverage": "partial",
+      "semantic_truncated": false,
+      "application_unknowns": 235,
+      "semantic_unknowns": 3509,
+      "private_summary": {
+        "path": "reference/rea/cloud-focused-rea-summary.json",
+        "bytes": 13756,
+        "sha256": "03437c235fe422eb7ee998657b514583f3a8dda18307772352ea907fac3b3225"
+      }
+    },
+    "manual_review": {
+      "path": "reference/rea/cloud-drive-cleaner-static-review.json",
+      "bytes": 4595,
+      "sha256": "c14876dda87ecd6e7fb10cb82bf8bb30b9fed1d2ecc29ce61b9f33c1892e948a"
+    },
+    "contract": {
+      "native_request": "Vendor service JWT creation with page-local request ID.",
+      "response": "Correlated id/status: success token, no_license_found or generic_error.",
+      "gate": "cloud_drive_cleaner.manage: available/beta starts; upsell/expired upgrade or renew; other states disable.",
+      "correlation": "Three-second reply acceptance, no page-level pending/timeout state, disconnected send not checked by the page.",
+      "handoff": "Successful nonempty token goes to vendor external cloud flow via open-browser; no native browser/page-load acknowledgement.",
+      "provider_choices": "Original saved screenshots show Google Drive, OneDrive, Dropbox and Google Mail.",
+      "limits": "External service account/results/effects and native JWT service execution not inspected. Vendor tokens, credentials, analytics and support services are not reused."
+    },
+    "source_layout_refs": [
+      {
+        "name": "native cloud introduction",
+        "sha256": "1ac45616d34905bc85ed3bd3ac027d380681f6d80ac84bd002bfe6f79779cff0"
+      },
+      {
+        "name": "external provider choice",
+        "sha256": "264ab10d87fe37e0422fa02f974b9b88e07fae9a20082510286f5858f0d195a1"
+      }
+    ]
+  },
+  "primary_sources": [
+    {
+      "url": "https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list",
+      "use": "Fixed files.list query, pagination, requested fields and incompleteSearch."
+    },
+    {
+      "url": "https://developers.google.com/workspace/drive/api/reference/rest/v3/files",
+      "use": "Optional size, version, MIME, trash and provider checksum metadata; content hashes do not cover every file type."
+    },
+    {
+      "url": "https://developers.google.com/workspace/drive/api/reference/rest/v3/User",
+      "use": "permissionId from about.user identifies the observed Drive user; no email/photo requested."
+    },
+    {
+      "url": "https://docs.rs/reqwest/latest/reqwest/blocking/struct.ClientBuilder.html",
+      "use": "Builder documentation checked alongside the locally pinned 0.13.5 source; redirects/retries/proxies/compression disabled and request timeouts set."
+    },
+    {
+      "url": "https://developers.google.com/identity/protocols/oauth2/native-app",
+      "use": "Future DCleaner-owned native client registration and authorization; no authorization was attempted."
+    }
+  ],
+  "dcleaner": {
+    "baseline_commit": "781e4c28889043f35b97595707f98e79c460230f",
+    "changed_source_overlay": [
+      {
+        "path": "src/cloud_inventory.rs",
+        "sha256": "5937d296125843c8d0534e90ffc5356018c81c8c83ba712ec12c95cc8c0ebfe2"
+      },
+      {
+        "path": "src/cloud_drive.rs",
+        "sha256": "da65a93cc4c931db81ff63bbf0d8304c92ed3e86e4847542199afa9a4bb30f86"
+      },
+      {
+        "path": "src/lib.rs",
+        "sha256": "63671cfe31455a97c28f3960508a41c61fe961ef2b2c0be963f9ff4c87aa59fa"
+      },
+      {
+        "path": "Cargo.toml",
+        "sha256": "a2c727a545052a0d8a296652722c6f2d31fb9baab6085f04ff20eadcec75feda"
+      },
+      {
+        "path": "Cargo.lock",
+        "sha256": "2ef6e78ab1711cabb204a3ec668b7852315f875885ff586583c7cccb19fc4391"
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "sha256": "13a04461bb832b9da2f1ee2d3395d286eb612e259c24e4e0096a9a00f5c809be"
+      },
+      {
+        "path": "scripts/build.ps1",
+        "sha256": "22fb727c9b63c365c9c779dbe32b4302eccb8ae88079b3e54ca319705dd86bb4"
+      }
+    ],
+    "inventory": {
+      "providers": [
+        "GoogleDrive",
+        "Gmail",
+        "OneDrive",
+        "Dropbox"
+      ],
+      "note": "Provider type is not a provider integration.",
+      "scope": "Immutable provider/subject/storage identity; cursors bind to it; current scope checked before/after each page.",
+      "bounds": {
+        "pages": 512,
+        "rows_seen": 50000,
+        "retained_rows": 50000,
+        "retained_metadata_payload_bytes": 67108864,
+        "page_rows": 1000,
+        "cursor_bytes": 2048,
+        "issues": 64,
+        "default_soft_scan_seconds": 300
+      },
+      "failures": "Typed source/limit/malformed/duplicate-id/cursor/scope/deadline/cancel issues retain known partial rows; no failed empty success. Deadline cannot interrupt a blocked adapter call.",
+      "classification": "Observed large size with exact/estimate provenance; same-namespace hash review candidates; contradictory exact sizes are conflicts. No content equality, unused/safety score, quota saving, effect authority or deletion plan."
+    },
+    "google_drive": {
+      "implemented": "Real independent read-only adapter, not connected to an account or UI in this slice.",
+      "requests": [
+        "GET https://www.googleapis.com/drive/v3/about?fields=user(permissionId)",
+        "GET https://www.googleapis.com/drive/v3/files with fixed corpora=user,spaces=drive,trashed=false,shared-drive support,fields and pageSize=1000; encoded opaque pageToken only"
+      ],
+      "visibility": "Only items visible to the granted token and exact query. Complete pagination is neither entire-account coverage nor an atomic remote snapshot.",
+      "transport": "Native TLS validation, HTTPS only, no redirects/retries/proxies/compression or arbitrary URLs; 10-second connect and 30-second request timeout with additional deadline/body checks.",
+      "response_bytes": 8388608,
+      "token": "No Debug/Serialize/accessor or persistence; owned input buffer zeroized on drop. Transport-internal copies are not claimed scrubbed; OAuth/expiry/refresh owner still absent.",
+      "native_calls_in_tests": false,
+      "remote_effects": "No upload, download, Trash/delete or recovery API."
+    },
+    "verification": {
+      "tests": {
+        "passed": 317,
+        "failed": 0,
+        "ignored": 7,
+        "suites": 15,
+        "fixtures": {
+          "cloud_inventory": [
+            "pages_are_scope_checked_before_and_after_each_call",
+            "empty_success_is_complete_but_provider_error_is_not_empty_success",
+            "provider_failure_after_rows_preserves_them_as_partial",
+            "provider_failure_classes_survive_without_raw_error_text",
+            "deadline_before_scan_or_after_scope_call_stops_without_listing",
+            "deadline_during_row_processing_does_not_retain_late_row",
+            "late_page_is_discarded_while_predeadline_rows_remain_partial",
+            "account_change_before_or_during_a_page_never_mixes_scopes",
+            "page_scope_mismatch_and_incomplete_search_are_explicit",
+            "repeated_cursor_stops_with_partial_snapshot_and_keeps_valid_page",
+            "duplicate_provider_ids_omit_all_ambiguous_copies",
+            "malformed_rows_are_omitted_and_never_make_an_empty_success",
+            "exact_zero_unknown_and_estimated_sizes_remain_distinct",
+            "duplicate_candidates_require_same_provider_algorithm_kind_and_digest",
+            "contradictory_exact_sizes_are_reported_as_hash_conflicts_not_groups",
+            "equal_sizes_never_create_duplicate_groups_and_hash_provider_mismatch_is_rejected",
+            "bounds_preserve_rows_but_mark_the_snapshot_partial",
+            "cancellation_before_provider_calls_and_during_rows_is_explicit",
+            "opaque_scope_cursor_and_hash_do_not_debug_raw_identifiers"
+          ],
+          "cloud_drive": [
+            "continuation_data_cannot_change_host_path_query_policy_or_method",
+            "invalid_tokens_and_control_bearing_or_oversized_cursors_are_rejected",
+            "response_body_limit_is_enforced_even_without_content_length",
+            "cancellation_after_blocking_read_discards_its_bytes",
+            "expired_or_precancelled_body_does_not_invoke_the_reader",
+            "read_failures_do_not_expose_input_errors_or_partial_success",
+            "malformed_duplicate_and_excess_rows_never_become_empty_success",
+            "drive_pages_retain_real_field_semantics_and_provider_incomplete_search",
+            "adapter_rejects_changed_account_and_foreign_cursor_before_listing",
+            "unknown_sizes_and_missing_trash_stay_unknown_and_invalid_values_fail"
+          ]
+        },
+        "log": {
+          "path": "reference/rea/cloud-full-test.log",
+          "bytes": 33119,
+          "sha256": "dc095aca18835557f106c3637069841a9d49dba8b078e1370ec0eeeaaab9c79e"
+        }
+      },
+      "formatting": "passed",
+      "release": {
+        "result": "passed",
+        "installed": false,
+        "bytes": 15054848,
+        "sha256": "286b18d2c08d862dd774488d2f434f513bf449cbd2b0f08cdce8de0c46ccc2dc",
+        "log": {
+          "path": "reference/rea/cloud-release.log",
+          "bytes": 3256,
+          "sha256": "7d79b85982d595ed9bb759715e17ef206f8fd4fed935df57c255d8e6d3c3d113"
+        }
+      },
+      "source_snapshot": {
+        "path": "reference/rea/cloud-tested-source.json",
+        "bytes": 1136,
+        "sha256": "399eecc7b44e48ccb049c52b180b4460d89dbf2a804f8a5cecc4883dc8d591d0"
+      },
+      "installed_binary_sha256_unchanged": "8def17865f859f2b1119c6c52d1bdf5bdd8d2d6f7d71f86dddb40cce3509b9bf"
+    },
+    "design": {
+      "inspection": "Only supplied saved screenshots viewed. No Cloud UI, renderer, browser or app window was launched.",
+      "authority": "CCleaner screenshots define functional layout; accepted navy/blue screenshot family governs future DCleaner design.",
+      "acceptance": "No new Cloud native page or visual acceptance established."
+    },
+    "remaining": [
+      "DCleaner-owned OAuth registrations, PKCE/consent/refresh and OS credential storage",
+      "Exact granted-scope binding and account switching/disconnect",
+      "Gmail/OneDrive/Dropbox metadata integrations",
+      "Configurable/resumable large-account traversal and live provider validation",
+      "Current item/capability/revision preflight and provider-specific atomicity, remote Trash/recovery with durable intent/outcome and uncertain recovery",
+      "Complete native Cloud provider/account/results/row-action/review/progress/error/restore states",
+      "All current native visual/accessibility acceptance and full application parity"
+    ]
+  }
+}
