@@ -36,20 +36,8 @@ enum ProgramTab {
 enum ProgramSort {
     #[default]
     Name,
-    Publisher,
-    Version,
     InstallDate,
     Size,
-}
-
-impl ProgramSort {
-    const ALL: [Self; 5] = [
-        Self::Name,
-        Self::Publisher,
-        Self::Version,
-        Self::InstallDate,
-        Self::Size,
-    ];
 }
 
 #[derive(Clone, Debug)]
@@ -142,6 +130,95 @@ impl App {
         Ok(())
     }
 
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_programs_precondition(&self, action: &str) -> Result<(), String> {
+        let action = match action {
+            "Row details" => "Details",
+            "Row uninstall" => "Uninstall",
+            other => other,
+        };
+        if !self.qa_fixture_mode() {
+            return Err("Programs visual actions require isolated fixture mode.".into());
+        }
+        let has_program = self
+            .program_ui
+            .inventory
+            .as_ref()
+            .is_some_and(|inventory| !inventory.programs.is_empty());
+        let selected = self.selected_program();
+        match action {
+            "Installed" | "Disabled · unavailable" => Ok(()),
+            "Sort Program" | "Sort Installed" | "Sort Size" if has_program => Ok(()),
+            "Details" if has_program && self.program_ui.dialog.is_none() => Ok(()),
+            "Uninstall"
+                if self.program_ui.dialog.is_none()
+                    && selected.is_some_and(InstalledProgram::can_uninstall) =>
+            {
+                Ok(())
+            }
+            "Close" | "Escape"
+                if matches!(self.program_ui.dialog, Some(ProgramsDialog::Details(_))) =>
+            {
+                Ok(())
+            }
+            "Close dialog" if self.program_ui.dialog.is_some() => Ok(()),
+            "Cancel"
+                if matches!(
+                    self.program_ui.dialog,
+                    Some(ProgramsDialog::UninstallReview(_))
+                ) =>
+            {
+                Ok(())
+            }
+            _ => Err(format!(
+                "Programs action is not available in the current safe fixture state: {action}"
+            )),
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_programs_action_state(
+        &self,
+        action: &str,
+    ) -> Result<serde_json::Value, String> {
+        let action = match action {
+            "Row details" => "Details",
+            "Row uninstall" => "Uninstall",
+            other => other,
+        };
+        if !self.qa_fixture_mode() {
+            return Err("Programs visual actions require isolated fixture mode.".into());
+        }
+        let dialog = match self.program_ui.dialog.as_ref() {
+            Some(ProgramsDialog::Details(_)) => "details",
+            Some(ProgramsDialog::UninstallReview(_)) => "uninstall_review",
+            None => "closed",
+        };
+        let state = serde_json::json!({
+            "tab": program_tab_label(self.program_ui.tab),
+            "sort": program_sort_label(self.program_ui.sort),
+            "descending": self.program_ui.descending,
+            "dialog": dialog,
+            "programs": self.program_ui.inventory.as_ref().map(|inventory| inventory.programs.len()),
+        });
+        let valid = match action {
+            "Installed" | "Disabled · unavailable" => state["tab"] == action,
+            "Sort Program" => state["sort"] == "Program",
+            "Sort Installed" => state["sort"] == "Installed",
+            "Sort Size" => state["sort"] == "Size",
+            "Details" => state["dialog"] == "details",
+            "Uninstall" => state["dialog"] == "uninstall_review",
+            "Close" | "Escape" | "Cancel" | "Close dialog" => state["dialog"] == "closed",
+            _ => false,
+        };
+        if !valid {
+            return Err(format!(
+                "Programs action did not reach its expected safe state: {action}"
+            ));
+        }
+        Ok(serde_json::json!({ "action": action, "state": state }))
+    }
+
     pub(super) fn programs_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         if self.programs_intro_active() {
             if self.feature_intro(
@@ -187,13 +264,13 @@ impl App {
                     ui,
                     &mut self.program_ui.tab,
                     ProgramTab::Installed,
-                    "Installed",
+                    program_tab_label(ProgramTab::Installed),
                 );
                 theme::tab_value(
                     ui,
                     &mut self.program_ui.tab,
                     ProgramTab::Disabled,
-                    "Disabled  ·  unavailable",
+                    program_tab_label(ProgramTab::Disabled),
                 );
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -223,7 +300,17 @@ impl App {
         }
 
         ui.add_space(14.);
-        self.program_operation_history(ui, t);
+        if self.program_ui.journal_error.is_some() {
+            self.program_operation_history(ui, t);
+        } else {
+            egui::CollapsingHeader::new(format!(
+                "Uninstall history ({})",
+                self.program_ui.journal.len()
+            ))
+            .id_salt("program-uninstall-history")
+            .default_open(false)
+            .show(ui, |ui| self.program_operation_history(ui, t));
+        }
         ui.add_space(12.);
         egui::CollapsingHeader::new("Feature availability")
             .default_open(false)
@@ -316,14 +403,39 @@ impl App {
         let body_height = dialog_body_max_height(ctx);
         let can_dismiss = matches!(&dialog, ProgramsDialog::Details(_)) || !self.busy();
         let heading = match &dialog {
-            ProgramsDialog::Details(_) => "Installed program details",
-            ProgramsDialog::UninstallReview(_) => "Review native uninstall handoff",
+            ProgramsDialog::Details(identity) => self
+                .program_by_identity(identity)
+                .map(|program| program.display_name.clone())
+                .unwrap_or_else(|| "Application details".into()),
+            ProgramsDialog::UninstallReview(_) => "Review uninstall".into(),
+        };
+        let details_icon = if !self.qa_fixture_mode() {
+            match &dialog {
+                ProgramsDialog::Details(identity) => self
+                    .program_by_identity(identity)
+                    .and_then(InstalledProgram::icon_resource)
+                    .map(|resource| resource.into_owned()),
+                _ => None,
+            }
+        } else {
+            None
         };
         let response = egui::Modal::new(egui::Id::new("programs-dialog"))
             .frame(theme::dialog_frame(t))
             .show(ctx, |ui| {
                 ui.set_width(modal_width);
-                ui.heading(heading);
+                ui.horizontal(|ui| {
+                    let title_width = (ui.available_width() - 36.).max(1.);
+                    ui.allocate_ui_with_layout(Vec2::new(title_width, 32.), Layout::left_to_right(Align::Center), |title| {
+                        title.set_max_width(title_width);
+                            title.set_min_width(title_width);
+                        if matches!(dialog, ProgramsDialog::Details(_)) {
+                            self.app_icons.show(title, details_icon.as_deref(), 22.);
+                        }
+                        title.add(egui::Label::new(RichText::new(&heading).size(theme::FONT_DISPLAY).family(theme::semibold())).truncate()).on_hover_text(&heading);
+                    });
+                    close |= theme::close_button(ui, "Close dialog", can_dismiss);
+                });
                 ui.add_space(8.);
                 egui::ScrollArea::vertical()
                     .max_height(body_height)
@@ -331,60 +443,64 @@ impl App {
                     .show(ui, |body| match &dialog {
                         ProgramsDialog::Details(identity) => {
                             if let Some(program) = self.program_by_identity(identity).cloned() {
-                                body.add(
-                                    egui::Label::new(
-                                        RichText::new(&program.display_name)
-                                            .family(theme::semibold()),
-                                    )
-                                    .wrap(),
-                                );
-                                body.add_space(12.);
-                                detail_row(body, "Publisher", optional(&program.publisher), t);
+                                body.add_space(4.);
                                 detail_row(body, "Version", optional(&program.version), t);
+                                detail_row(body, "Publisher", optional(&program.publisher), t);
                                 detail_row(
                                     body,
-                                    "Install location",
-                                    program
-                                        .install_location
-                                        .as_ref()
-                                        .map(|path| path.display().to_string())
-                                        .unwrap_or_else(|| "Not registered".into()),
-                                    t,
-                                );
-                                detail_row(
-                                    body,
-                                    "Install date",
+                                    "Installed date",
                                     program
                                         .install_date
                                         .as_deref()
                                         .map(format_install_date)
-                                        .unwrap_or_else(|| "Not registered".into()),
+                                        .unwrap_or_else(|| "Unknown".into()),
                                     t,
                                 );
                                 detail_row(
                                     body,
-                                    "Estimated size",
-                                    program
-                                        .estimated_size_bytes
-                                        .map(format_size)
-                                        .unwrap_or_else(|| "Not registered".into()),
+                                    "Last time used",
+                                    "Unknown",
                                     t,
                                 );
-                                detail_row(body, "Registration", source_label(program.source), t);
-                                detail_row(body, "Stable identity", program.identity.stable_id(), t);
-                                body.add_space(10.);
-                                body.label(
-                                    RichText::new("Registered uninstall command (preview only)")
-                                        .family(theme::semibold()),
+                                detail_row(
+                                    body,
+                                    "Size",
+                                    program
+                                        .estimated_size_bytes
+                                        .map(|size| format!("≈ {}", format_size(size)))
+                                        .unwrap_or_else(|| "Unknown".into()),
+                                    t,
                                 );
-                                body.add_space(6.);
-                                command_preview(body, &program, t);
-                                if !program.removal_block_reasons().is_empty() {
-                                    body.add_space(8.);
-                                    for reason in program.removal_block_reasons() {
-                                        body.colored_label(t.attention, reason.to_string());
-                                    }
-                                }
+                                egui::CollapsingHeader::new("Advanced details")
+                                    .id_salt("program-details-advanced")
+                                    .default_open(false)
+                                    .show(body, |advanced| {
+                                        detail_row(
+                                            advanced,
+                                            "Install location",
+                                            program
+                                                .install_location
+                                                .as_ref()
+                                                .map(|path| path.display().to_string())
+                                                .unwrap_or_else(|| "Not registered".into()),
+                                            t,
+                                        );
+                                        detail_row(advanced, "Registration", source_label(program.source), t);
+                                        detail_row(advanced, "Stable identity", program.identity.stable_id(), t);
+                                        advanced.add_space(8.);
+                                        advanced.label(
+                                            RichText::new("Registered uninstall command (preview only)")
+                                                .family(theme::semibold()),
+                                        );
+                                        advanced.add_space(6.);
+                                        command_preview(advanced, &program, t);
+                                        if !program.removal_block_reasons().is_empty() {
+                                            advanced.add_space(8.);
+                                            for reason in program.removal_block_reasons() {
+                                                advanced.colored_label(t.attention, reason.to_string());
+                                            }
+                                        }
+                                    });
                             } else {
                                 theme::muted(
                                     body,
@@ -553,9 +669,8 @@ impl App {
     }
 
     fn program_inventory_panel(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        let sort_choices = ProgramSort::ALL.map(ProgramSort::label);
         theme::control_row(ui, |ui| {
-            let search_width = theme::search_width(ui, &sort_choices);
+            let search_width = (ui.available_width() - 58.).clamp(150., 480.);
             ui.label(RichText::new("Search").color(t.muted));
             theme::input(
                 ui,
@@ -564,23 +679,8 @@ impl App {
                 "Name, publisher, version, location or registration…",
                 true,
             );
-            ui.add_space(8.);
-            ui.label(RichText::new("Sort by").color(t.muted));
-            theme::selector(
-                ui,
-                "program-sort",
-                self.program_ui.sort.label(),
-                &sort_choices,
-                |ui| {
-                    for sort in ProgramSort::ALL {
-                        ui.selectable_value(&mut self.program_ui.sort, sort, sort.label());
-                    }
-                },
-            );
-            ui.add_space(8.);
-            theme::checkbox(ui, &mut self.program_ui.descending, "Descending", true);
         });
-        ui.add_space(10.);
+        ui.add_space(6.);
 
         if self.program_ui.loading && self.program_ui.inventory.is_none() {
             ui.horizontal(|ui| {
@@ -617,24 +717,66 @@ impl App {
                 });
             });
             ui.add_space(6.);
-            let table_width = ui.available_width().max(0.0);
+            let table_width = (ui.available_width() - 16.0).max(1.0);
+            let compact_layout = table_width < 760.0;
+            let installed_width = if compact_layout { 98.0 } else { 124.0 };
+            let usage_width = if compact_layout { 72.0 } else { 92.0 };
+            let size_width = if compact_layout { 78.0 } else { 96.0 };
             let action_width = 152.0;
-            let version_width = 84.0;
-            let show_publisher = table_width >= 900.0;
-            let publisher_width = if show_publisher { 150.0 } else { 0.0 };
-            let column_gaps = if show_publisher { 24.0 } else { 16.0 };
-            let name_width =
-                (table_width - action_width - version_width - publisher_width - column_gaps)
-                    .max(110.0);
+            let column_gaps = 32.0;
+            let name_width = (table_width
+                - installed_width
+                - usage_width
+                - size_width
+                - action_width
+                - column_gaps)
+                .max(1.0);
             let previous_y_spacing = ui.spacing().item_spacing.y;
             ui.spacing_mut().item_spacing.y = 0.;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
-                table_heading(ui, "Program", name_width, t);
-                if show_publisher {
-                    table_heading(ui, "Publisher", publisher_width, t);
+                for (sort, label, width) in [
+                    (ProgramSort::Name, "Program", name_width),
+                    (ProgramSort::InstallDate, "Installed", installed_width),
+                ] {
+                    let accessible = format!("Sort {label}");
+                    if program_sort_header(
+                        ui,
+                        label,
+                        &accessible,
+                        width,
+                        self.program_ui.sort == sort,
+                        self.program_ui.descending,
+                        t,
+                    )
+                    .clicked()
+                    {
+                        if self.program_ui.sort == sort {
+                            self.program_ui.descending = !self.program_ui.descending;
+                        } else {
+                            self.program_ui.sort = sort;
+                            self.program_ui.descending = false;
+                        }
+                    }
                 }
-                table_heading(ui, "Version", version_width, t);
+                table_heading(ui, "Usage", usage_width, t);
+                let size_header = program_sort_header(
+                    ui,
+                    "Size",
+                    "Sort Size",
+                    size_width,
+                    self.program_ui.sort == ProgramSort::Size,
+                    self.program_ui.descending,
+                    t,
+                );
+                if size_header.clicked() {
+                    if self.program_ui.sort == ProgramSort::Size {
+                        self.program_ui.descending = !self.program_ui.descending;
+                    } else {
+                        self.program_ui.sort = ProgramSort::Size;
+                        self.program_ui.descending = false;
+                    }
+                }
                 table_heading(ui, "Actions", action_width, t);
             });
             ui.add_space(3.);
@@ -658,6 +800,9 @@ impl App {
                             row.spacing_mut().item_spacing.y = previous_y_spacing;
                             let is_selected =
                                 self.program_ui.selected.as_ref() == Some(&program.identity);
+                            if is_selected {
+                                row.painter().rect_filled(egui::Rect::from_min_size(row.cursor().min, [table_width, 44.].into()), 0., t.tint);
+                            }
                             let icon = if qa_fixture_mode {
                                 None
                             } else {
@@ -679,7 +824,7 @@ impl App {
                                             cell.add_sized(
                                                 [(name_width - 30.).clamp(60., name_width), 40.],
                                         egui::Button::selectable(
-                                            is_selected,
+                                            false,
                                             (
                                                 RichText::new(&program.display_name)
                                                     .family(theme::semibold())
@@ -687,6 +832,7 @@ impl App {
                                                 egui::Atom::grow(),
                                             ),
                                         )
+                                        .frame(false)
                                         .truncate(),
                                     )
                                         })
@@ -698,18 +844,32 @@ impl App {
                                 self.program_ui.selected = Some(program.identity.clone());
                             }
                             name.on_hover_text(&program.display_name);
-                            if show_publisher {
-                                theme::table_cell(
-                                    row,
-                                    RichText::new(optional(&program.publisher)).color(t.muted),
-                                    publisher_width,
-                                    40.,
-                                );
-                            }
                             theme::table_cell(
                                 row,
-                                RichText::new(optional(&program.version)).color(t.muted),
-                                version_width,
+                                RichText::new(
+                                    program.install_date.as_deref()
+                                        .map(format_install_date)
+                                        .unwrap_or_else(|| "Unknown".into()),
+                                )
+                                .color(t.muted),
+                                installed_width,
+                                40.,
+                            );
+                            theme::table_cell(
+                                row,
+                                RichText::new("Unknown").color(t.muted),
+                                usage_width,
+                                40.,
+                            );
+                            theme::table_cell(
+                                row,
+                                RichText::new(
+                                    program.estimated_size_bytes
+                                        .map(|size| format!("≈ {}", format_size(size)))
+                                        .unwrap_or_else(|| "Unknown".into()),
+                                )
+                                .color(t.muted),
+                                size_width,
                                 40.,
                             );
                             row.allocate_ui_with_layout(
@@ -717,17 +877,21 @@ impl App {
                                 Layout::left_to_right(Align::Center),
                                 |actions| {
                                     actions.spacing_mut().item_spacing.x = 5.0;
-                                    if theme::row_action(actions, "Details", true).clicked() {
+                                    let details = theme::row_action(actions, "Details", true);
+                                    #[cfg(debug_assertions)]
+                                    theme::record_fixture_control(actions, "Row details", &details);
+                                    if details.clicked() {
                                         row_details = Some(program.identity.clone());
                                     }
                                     let reasons = program.removal_block_reasons();
                                     if reasons.is_empty() {
-                                        if theme::row_action(actions, "Uninstall", !busy)
+                                        let uninstall = theme::row_action(actions, "Uninstall", !busy)
                                             .on_hover_text(
                                                 "Review the exact registered uninstaller before it starts.",
-                                            )
-                                            .clicked()
-                                        {
+                                            );
+                                        #[cfg(debug_assertions)]
+                                        theme::record_fixture_control(actions, "Row uninstall", &uninstall);
+                                        if uninstall.clicked() {
                                             row_uninstall_review =
                                                 Some(program.identity.clone());
                                         }
@@ -1025,8 +1189,16 @@ fn programs_qa_program(name: &str, key_name: &str, version: &str) -> InstalledPr
             r"C:\Fixture\{}",
             key_name
         ))),
-        install_date: Some("20250115".into()),
-        estimated_size_bytes: Some(12_582_912),
+        install_date: match key_name {
+            "fixture-runtime" => None,
+            "fixture-utility" => Some("20231009".into()),
+            _ => Some("20250115".into()),
+        },
+        estimated_size_bytes: match key_name {
+            "fixture-runtime" => None,
+            "fixture-utility" => Some(4_194_304),
+            _ => Some(12_582_912),
+        },
         registered_uninstall_command: Some(registered.clone()),
         uninstall_command: Some(programs::UninstallCommand {
             registered,
@@ -1051,6 +1223,58 @@ fn table_heading(ui: &mut egui::Ui, label: &str, width: f32, t: Tokens) {
     );
 }
 
+fn program_sort_header(
+    ui: &mut egui::Ui,
+    label: &str,
+    accessible_label: &str,
+    width: f32,
+    selected: bool,
+    descending: bool,
+    t: Tokens,
+) -> egui::Response {
+    let text = if selected {
+        format!("{label} {}", if descending { "↓" } else { "↑" })
+    } else {
+        label.to_owned()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 22.), egui::Sense::click());
+    ui.painter().text(
+        rect.left_center(),
+        egui::Align2::LEFT_CENTER,
+        text,
+        egui::FontId::new(theme::FONT_CAPTION, theme::semibold()),
+        if selected || response.hovered() {
+            t.foreground
+        } else {
+            t.muted
+        },
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, accessible_label)
+    });
+    #[cfg(debug_assertions)]
+    theme::record_fixture_control(ui, accessible_label, &response);
+    response.on_hover_text(format!(
+        "{accessible_label} in ascending or descending order"
+    ))
+}
+
+fn program_tab_label(tab: ProgramTab) -> &'static str {
+    match tab {
+        ProgramTab::Installed => "Installed",
+        ProgramTab::Disabled => "Disabled · unavailable",
+    }
+}
+
+#[cfg(any(test, debug_assertions))]
+fn program_sort_label(sort: ProgramSort) -> &'static str {
+    match sort {
+        ProgramSort::Name => "Program",
+        ProgramSort::InstallDate => "Installed",
+        ProgramSort::Size => "Size",
+    }
+}
+
 fn dialog_body_max_height(ctx: &egui::Context) -> f32 {
     // Keep the 24px dialog padding, pinned title, pinned action footer, and layout gaps visible.
     (ctx.content_rect().height() - 48.0 - 40.0 - 56.0 - 24.0).max(80.0)
@@ -1070,9 +1294,37 @@ fn unavailable_card(ui: &mut egui::Ui, t: Tokens, heading: &str, message: &str) 
 }
 
 fn detail_row(ui: &mut egui::Ui, label: &str, value: impl Into<String>, t: Tokens) {
-    theme::muted(ui, label, t);
-    ui.add(egui::Label::new(value.into()).wrap());
-    ui.add_space(5.);
+    let label_width = 132.;
+    let value_width = (ui.available_width() - label_width - 12.).max(1.);
+    let value = value.into();
+    ui.horizontal_top(|row| {
+        row.spacing_mut().item_spacing.x = 12.;
+        row.allocate_ui_with_layout(
+            Vec2::new(label_width, 24.),
+            Layout::top_down(Align::Min),
+            |cell| {
+                cell.set_max_width(label_width);
+                cell.set_min_size(Vec2::new(label_width, 24.));
+                cell.add(
+                    egui::Label::new(
+                        RichText::new(label)
+                            .size(theme::FONT_CAPTION)
+                            .color(t.muted),
+                    )
+                    .wrap(),
+                );
+            },
+        );
+        row.allocate_ui_with_layout(
+            Vec2::new(value_width, 24.),
+            Layout::top_down(Align::Min),
+            |cell| {
+                cell.set_max_width(value_width);
+                cell.set_min_size(Vec2::new(value_width, 24.));
+                cell.add(egui::Label::new(value).wrap());
+            },
+        );
+    });
 }
 
 fn command_preview(ui: &mut egui::Ui, program: &InstalledProgram, t: Tokens) {
@@ -1128,17 +1380,6 @@ fn sort_programs(programs: &mut [&InstalledProgram], sort: ProgramSort, descendi
                 .display_name
                 .to_lowercase()
                 .cmp(&right.display_name.to_lowercase()),
-            ProgramSort::Publisher => left
-                .publisher
-                .as_deref()
-                .unwrap_or("")
-                .to_lowercase()
-                .cmp(&right.publisher.as_deref().unwrap_or("").to_lowercase()),
-            ProgramSort::Version => left
-                .version
-                .as_deref()
-                .unwrap_or("")
-                .cmp(right.version.as_deref().unwrap_or("")),
             ProgramSort::InstallDate => left
                 .install_date
                 .as_deref()
@@ -1153,18 +1394,6 @@ fn sort_programs(programs: &mut [&InstalledProgram], sort: ProgramSort, descendi
         };
         ordering.then_with(|| left.identity.stable_id().cmp(&right.identity.stable_id()))
     });
-}
-
-impl ProgramSort {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Name => "Name",
-            Self::Publisher => "Publisher",
-            Self::Version => "Version",
-            Self::InstallDate => "Install date",
-            Self::Size => "Estimated size",
-        }
-    }
 }
 
 fn source_label(source: RegistrySource) -> String {

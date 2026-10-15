@@ -231,7 +231,7 @@ fn skipped_steps_advance_in_shipped_order_and_finish_at_summary() {
 }
 
 #[test]
-fn issue_step_keeps_missing_services_and_classifier_visible() {
+fn issue_step_matches_the_two_original_category_owners_and_keeps_classifier_limit_visible() {
     let startup = StartupInventory {
         section: crate::startup::StartupSection::StartupApps,
         quality: InventoryQuality::Complete,
@@ -244,14 +244,17 @@ fn issue_step_keeps_missing_services_and_classifier_visible() {
         category.category == HealthCategory::StartupAppsForReview
             && matches!(&category.coverage, HealthCoverage::NeedsReview { .. })
     }));
-    assert!(report.categories.iter().any(|category| {
-        category.category == HealthCategory::DriverUpdates
-            && matches!(&category.coverage, HealthCoverage::Unsupported { .. })
-    }));
-    assert!(report.categories.iter().any(|category| {
-        category.category == HealthCategory::BackgroundApps
-            && matches!(&category.coverage, HealthCoverage::Unsupported { .. })
-    }));
+    assert_eq!(report.categories.len(), 2);
+    assert!(
+        report
+            .categories
+            .iter()
+            .any(|category| category.category == HealthCategory::OutdatedApplications)
+    );
+    assert!(!report.categories.iter().any(|category| matches!(
+        category.category,
+        HealthCategory::DriverUpdates | HealthCategory::BackgroundApps
+    )));
 }
 
 #[test]

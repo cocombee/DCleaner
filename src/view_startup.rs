@@ -1,14 +1,20 @@
 use super::*;
 use crate::theme;
-#[cfg(debug_assertions)]
-use dcleaner::startup::SourceOutcome;
+use dcleaner::startup::RegistryValueSnapshot;
+#[cfg(any(test, debug_assertions))]
+use dcleaner::startup::{CHANGE_SCHEMA_VERSION, RegistryView, SourceOutcome};
 use dcleaner::{
     effects::{self, EffectHistory, EffectJournal},
     startup::{
-        CHANGE_SCHEMA_VERSION, ChangeIntent, ChangeOutcome, ChangeReceipt, EnabledState,
-        EntryIdentity, FieldValue, InventoryQuality, NativeState, ObservedState, SourceState,
-        StartupEntry, StartupId, StartupInventory, StartupManager, StartupPlatform, StartupSection,
-        WindowsStartupPlatform,
+        ChangeIntent, ChangeOutcome, ChangeReceipt, EnabledState, EntryIdentity, FieldValue,
+        InventoryQuality, NativeState, ObservedState, SourceState, StartupEntry, StartupId,
+        StartupInventory, StartupManager, StartupPlatform, StartupSection, WindowsStartupPlatform,
+    },
+    startup_removal::{
+        RemovalIntent, RemovalOutcome, RemovalReceipt, RemovalRestoreIntent, RemovalRestoreOutcome,
+        RemovalRestoreReceipt, RunValueRemovalManager, RunValueSlots,
+        WindowsRunValueRemovalPlatform, valid_removal_intent, valid_removal_receipt,
+        valid_restore_intent, valid_restore_receipt,
     },
 };
 use std::{collections::HashMap, path::Path};
@@ -18,27 +24,23 @@ enum SortColumn {
     Program,
     Publisher,
     FilePath,
-    Identity,
     Enabled,
 }
 
-impl SortColumn {
-    const ALL: [Self; 5] = [
-        Self::Program,
-        Self::Publisher,
-        Self::FilePath,
-        Self::Identity,
-        Self::Enabled,
-    ];
+fn startup_section_icon(section: StartupSection) -> theme::Icon {
+    match section {
+        StartupSection::StartupApps => theme::Icon::Startup,
+        StartupSection::ScheduledTasks => theme::Icon::History,
+        StartupSection::ContextMenu => theme::Icon::Programs,
+        StartupSection::WindowsServices => theme::Icon::Optimizer,
+    }
+}
 
-    fn label(self) -> &'static str {
-        match self {
-            Self::Program => "Program",
-            Self::Publisher => "Publisher",
-            Self::FilePath => "File path",
-            Self::Identity => "Native identity",
-            Self::Enabled => "State",
-        }
+fn startup_cached_tab_count(inventory: Option<&StartupInventory>) -> Option<usize> {
+    let inventory = inventory?;
+    match inventory.quality {
+        InventoryQuality::Complete => Some(inventory.entries.len()),
+        InventoryQuality::Partial | InventoryQuality::Unavailable => None,
     }
 }
 
@@ -59,6 +61,9 @@ pub(super) struct StartupUi {
     background_read: Option<Receiver<StartupInventory>>,
     selected_history: Option<Uuid>,
     review: Option<ReviewAction>,
+    removal_review: Option<RemovalReview>,
+    #[cfg(debug_assertions)]
+    qa_more_open: bool,
 }
 
 impl Default for StartupUi {
@@ -80,6 +85,9 @@ impl Default for StartupUi {
             background_read: None,
             selected_history: None,
             review: None,
+            removal_review: None,
+            #[cfg(debug_assertions)]
+            qa_more_open: false,
         }
     }
 }
@@ -95,6 +103,28 @@ pub(super) enum StartupEvent {
         result: Result<ChangeIntent, String>,
     },
     Changed(Result<ChangeReceipt, String>),
+    RemovalPrepared {
+        id: StartupId,
+        result: Result<RemovalIntent, String>,
+    },
+    RemovalRestorePrepared {
+        source_operation_id: Uuid,
+        result: Result<RemovalRestoreIntent, String>,
+    },
+    Removed(Result<RemovalReceipt, String>),
+    RemovalRestored(Result<RemovalRestoreReceipt, String>),
+}
+
+#[derive(Clone)]
+enum RemovalReview {
+    Remove(RemovalIntent),
+    Restore(RemovalRestoreIntent),
+}
+
+#[derive(Clone)]
+enum RemovalHistorySource {
+    Intent(RemovalIntent),
+    Receipt(RemovalReceipt),
 }
 
 #[derive(Clone)]
@@ -335,6 +365,108 @@ impl App {
                     }
                 }
             }
+            StartupEvent::RemovalPrepared { id, result } => {
+                self.worker = None;
+                match result {
+                    Ok(intent) if intent.id == id && valid_removal_intent(&intent) => {
+                        self.error = None;
+                        self.startup_ui.removal_review = Some(RemovalReview::Remove(intent));
+                    }
+                    Ok(_) => {
+                        self.error = Some(
+                            "The selected Run registration changed during removal review. No action was taken.".into(),
+                        );
+                    }
+                    Err(error) => {
+                        self.error = Some(format!(
+                            "The selected Run registration could not be prepared for removal: {error}"
+                        ));
+                    }
+                }
+            }
+            StartupEvent::RemovalRestorePrepared {
+                source_operation_id,
+                result,
+            } => {
+                self.worker = None;
+                match result {
+                    Ok(intent)
+                        if intent.source_operation_id == source_operation_id
+                            && valid_restore_intent(&intent) =>
+                    {
+                        self.error = None;
+                        self.startup_ui.removal_review = Some(RemovalReview::Restore(intent));
+                    }
+                    Ok(_) => {
+                        self.error = Some(
+                            "The saved removal identity changed during restore review. No action was taken.".into(),
+                        );
+                    }
+                    Err(error) => {
+                        self.error = Some(format!(
+                            "The saved Run registration could not be prepared for restoration: {error}"
+                        ));
+                    }
+                }
+            }
+            StartupEvent::Removed(result) => {
+                self.worker = None;
+                self.startup_ui.removal_review = None;
+                self.startup_ui.loaded = false;
+                match result {
+                    Ok(receipt) => match receipt.outcome {
+                        RemovalOutcome::Removed => {
+                            self.error = None;
+                            self.notice = Some(
+                                "The exact current-user Run value was removed transactionally and verified. A restore receipt was saved.".into(),
+                            );
+                        }
+                        RemovalOutcome::NoChange => {
+                            self.error = Some(
+                                "No startup value was removed. The reviewed state changed or Windows rejected the transactional operation; review the saved history before trying again.".into(),
+                            );
+                        }
+                        RemovalOutcome::Uncertain => {
+                            self.error = Some(
+                                "The removal outcome is uncertain. Review the saved operation and current registry state before taking another action.".into(),
+                            );
+                        }
+                    },
+                    Err(error) => self.error = Some(error),
+                }
+            }
+            StartupEvent::RemovalRestored(result) => {
+                self.worker = None;
+                self.startup_ui.removal_review = None;
+                self.startup_ui.loaded = false;
+                match result {
+                    Ok(receipt) => match receipt.outcome {
+                        RemovalRestoreOutcome::Restored => {
+                            self.error = None;
+                            self.notice = Some(
+                                "The exact saved Run value and marker bytes were restored transactionally and verified.".into(),
+                            );
+                        }
+                        RemovalRestoreOutcome::AlreadyRestored => {
+                            self.error = None;
+                            self.notice = Some(
+                                "The original Run registration was already present. No registry write was made.".into(),
+                            );
+                        }
+                        RemovalRestoreOutcome::NoChange => {
+                            self.error = Some(
+                                "No registry value was restored. Review the current state and saved history before trying again.".into(),
+                            );
+                        }
+                        RemovalRestoreOutcome::Uncertain => {
+                            self.error = Some(
+                                "The restore outcome is uncertain. Review the current registry state and saved operation before taking another action.".into(),
+                            );
+                        }
+                    },
+                    Err(error) => self.error = Some(error),
+                }
+            }
         }
     }
 
@@ -401,7 +533,137 @@ impl App {
     }
     #[cfg(debug_assertions)]
     pub(super) fn qa_startup_sort_state(&self) -> serde_json::Value {
-        serde_json::json!({"column":self.startup_ui.sort.label(),"descending":self.startup_ui.descending})
+        serde_json::json!({"column":match self.startup_ui.sort {SortColumn::Program => "Program", SortColumn::Publisher => "Publisher", SortColumn::FilePath => "File path", SortColumn::Enabled => state_header_label(self.startup_ui.section)},"descending":self.startup_ui.descending})
+    }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn qa_startup_state(&self) -> serde_json::Value {
+        let inventory = self.startup_ui.inventories.get(&self.startup_ui.section);
+        let selected = self.selected_entry();
+        let review_kind = match &self.startup_ui.review {
+            Some(ReviewAction::Apply(_)) => Some("change"),
+            Some(ReviewAction::Restore(_)) => Some("restore"),
+            Some(ReviewAction::RecoverIntent(_) | ReviewAction::RecoverReceipt(_)) => {
+                Some("recovery")
+            }
+            None => None,
+        };
+        let removal_review_kind = match &self.startup_ui.removal_review {
+            Some(RemovalReview::Remove(_)) => Some("remove"),
+            Some(RemovalReview::Restore(_)) => Some("restore"),
+            None => None,
+        };
+        let enabled = selected.map(|entry| match &entry.enabled {
+            EnabledState::Enabled => "enabled",
+            EnabledState::Disabled => "disabled",
+            EnabledState::Unknown { .. } => "unknown",
+        });
+
+        serde_json::json!({
+            "section": self.startup_ui.section.label(),
+            "loaded": self.startup_ui.loaded,
+            "quality": inventory.map(|inventory| match inventory.quality {
+                InventoryQuality::Complete => "complete",
+                InventoryQuality::Partial => "partial",
+                InventoryQuality::Unavailable => "unavailable",
+            }),
+            "entry_count": inventory.map_or(0, |inventory| inventory.entries.len()),
+            "selected": selected.is_some(),
+            "selected_enabled": enabled,
+            "selected_can_toggle": selected.is_some_and(|entry| {
+                entry.can_change_enabled && known_enabled_value(&entry.enabled).is_some()
+            }),
+            "selected_remove_supported": selected.is_some_and(|entry| {
+                dcleaner::startup_removal::supports_run_value_removal(&entry.identity)
+            }),
+            "details_open": self.startup_ui.details_open,
+            "info_open": self.startup_ui.info_open,
+            "more_open": self.startup_ui.qa_more_open,
+            "review_kind": review_kind,
+            "removal_review_kind": removal_review_kind,
+            "worker_active": self.worker.is_some() || self.startup_ui.background_read.is_some(),
+            "busy": self.busy(),
+            "error_present": self.error.is_some(),
+            "notice_present": self.notice.is_some(),
+            "synthetic_notice": self.notice.as_deref().is_some_and(|notice| notice.starts_with("Synthetic ")),
+        })
+    }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn qa_startup_action_precondition(&self, label: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Startup UI action checks require isolated fixture mode.".into());
+        }
+        let entries = self
+            .startup_ui
+            .inventories
+            .get(&self.startup_ui.section)
+            .map(|inventory| inventory.entries.as_slice())
+            .unwrap_or_default();
+        let valid = match label {
+            "Enable startup item" => entries.iter().any(|entry| {
+                entry.can_change_enabled
+                    && matches!(&entry.enabled, EnabledState::Disabled)
+                    && !self.busy()
+            }),
+            "Disable startup item" => entries.iter().any(|entry| {
+                entry.can_change_enabled
+                    && matches!(&entry.enabled, EnabledState::Enabled)
+                    && !self.busy()
+            }),
+            "More" => !entries.is_empty() && !self.startup_ui.qa_more_open && !self.busy(),
+            "Show details" => self.startup_ui.qa_more_open && !entries.is_empty() && !self.busy(),
+            "Remove" => {
+                self.startup_ui.qa_more_open
+                    && !self.busy()
+                    && entries.iter().any(|entry| {
+                        dcleaner::startup_removal::supports_run_value_removal(&entry.identity)
+                    })
+            }
+            "Cancel" => {
+                self.startup_ui.review.is_some() || self.startup_ui.removal_review.is_some()
+            }
+            "Confirm fixture review" => {
+                self.qa_fixture_mode()
+                    && (self.startup_ui.review.is_some()
+                        || self.startup_ui.removal_review.is_some())
+                    && !self.busy()
+            }
+            _ => false,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(format!(
+                "Startup action precondition is not satisfied: {label}"
+            ))
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn qa_startup_action_state(&self, label: &str) -> Result<serde_json::Value, String> {
+        let state = self.qa_startup_state();
+        let valid = match label {
+            "Enable startup item" | "Disable startup item" => state["review_kind"] == "change",
+            "More" => state["more_open"] == true,
+            "Show details" => state["details_open"] == true,
+            "Remove" => state["removal_review_kind"] == "remove",
+            "Cancel" => state["review_kind"].is_null() && state["removal_review_kind"].is_null(),
+            "Confirm fixture review" => {
+                state["review_kind"].is_null()
+                    && state["removal_review_kind"].is_null()
+                    && state["synthetic_notice"] == true
+                    && state["worker_active"] == false
+            }
+            _ => false,
+        };
+        if valid {
+            Ok(state)
+        } else {
+            Err(format!(
+                "Startup action did not reach its expected state: {label}"
+            ))
+        }
     }
 
     pub(super) fn startup_refresh_external_state(&mut self, ctx: &egui::Context) {
@@ -418,7 +680,6 @@ impl App {
                 }
                 Err(mpsc::TryRecvError::Empty) => self.startup_ui.background_read = Some(receiver),
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    self.startup_ui.last_refresh = Some(std::time::Instant::now());
                     self.error = Some("Startup refresh stopped before returning a result. The previous inventory is still shown.".into());
                 }
             }
@@ -469,8 +730,11 @@ impl App {
         let history_action = selected_history
             .as_ref()
             .and_then(|record| history_review_action(record, &self.startup_ui.history));
+        let removal_history_source = selected_history
+            .as_ref()
+            .and_then(|record| history_removal_source(record, &self.startup_ui.history));
         let section = self.startup_ui.section;
-        let inventory_summary = self
+        let mut inventory_summary = self
             .startup_ui
             .inventories
             .get(&section)
@@ -483,6 +747,24 @@ impl App {
                 )
             })
             .unwrap_or_else(|| format!("{} · not loaded", section.label()));
+        let reading_state = self.startup_ui.background_read.is_some()
+            || self.progress.starts_with("Reading native startup")
+            || self
+                .progress
+                .starts_with("Re-reading the selected native item")
+            || self.progress.starts_with("Re-reading the exact Run value")
+            || self
+                .progress
+                .starts_with("Re-reading the selected Run slots");
+        let changing_state = self.busy() && self.startup_ui.loaded && !reading_state;
+        if let Some(freshness) = startup_freshness_label(
+            reading_state,
+            changing_state,
+            self.startup_ui.last_refresh.map(|time| time.elapsed()),
+        ) {
+            inventory_summary.push_str(" · ");
+            inventory_summary.push_str(freshness);
+        }
         let mut should_refresh = false;
         let mut should_export = false;
         let mut open_history_review = false;
@@ -500,7 +782,7 @@ impl App {
             ) {
                 should_export = true;
             }
-            if history_action.is_some()
+            if (history_action.is_some() || removal_history_source.is_some())
                 && theme::secondary(
                     ui,
                     if selected_history
@@ -526,7 +808,11 @@ impl App {
             self.export_startup_inventory();
         }
         if open_history_review {
-            self.startup_ui.review = history_action;
+            if let Some(action) = history_action {
+                self.startup_ui.review = Some(action);
+            } else if let Some(source) = removal_history_source {
+                self.begin_startup_removal_restore_review(source, ctx);
+            }
         }
     }
 
@@ -552,6 +838,10 @@ impl App {
             if close || modal.should_close() {
                 self.startup_ui.details_open = false;
             }
+            return;
+        }
+        if self.startup_ui.removal_review.is_some() {
+            self.startup_removal_dialog(ctx);
             return;
         }
         let Some(action) = self.startup_ui.review.clone() else {
@@ -592,7 +882,14 @@ impl App {
                         t,
                     );
                     review_detail(ui, "Requested state", &state_summary(to), t);
-                    if action.is_recovery() {
+                    if self.qa_fixture_mode() {
+                        ui.add_space(8.);
+                        theme::muted(
+                            ui,
+                            "Synthetic fixture review only. Confirming closes this review; it does not change a Windows item or write a journal.",
+                            t,
+                        );
+                    } else if action.is_recovery() {
                         ui.add_space(8.);
                         ui.label(
                             RichText::new(
@@ -614,7 +911,12 @@ impl App {
                 if theme::secondary(ui, "Cancel", true) {
                     cancel = true;
                 }
-                if theme::primary(ui, action.label(), t, !self.busy()) {
+                let confirm_label = if self.qa_fixture_mode() {
+                    "Confirm fixture review"
+                } else {
+                    action.label()
+                };
+                if theme::primary(ui, confirm_label, t, !self.busy()) {
                     accept = true;
                 }
             });
@@ -629,7 +931,13 @@ impl App {
             self.startup_ui.review = None;
         } else if accept && !self.busy() {
             self.startup_ui.review = None;
-            self.begin_startup_action(action, ctx);
+            if self.qa_fixture_mode() {
+                self.notice = Some(
+                    "Synthetic review accepted. No Windows startup setting was changed.".into(),
+                );
+            } else {
+                self.begin_startup_action(action, ctx);
+            }
         }
     }
 
@@ -727,6 +1035,113 @@ impl App {
         }
     }
 
+    fn startup_removal_dialog(&mut self, ctx: &egui::Context) {
+        let Some(action) = self.startup_ui.removal_review.clone() else {
+            return;
+        };
+        let t = theme::tokens(self.prefs.dark);
+        let mut accept = false;
+        let mut cancel = false;
+        let identity = match &action {
+            RemovalReview::Remove(intent) => identity_summary(&intent.identity),
+            RemovalReview::Restore(intent) => identity_summary(&intent.identity),
+        };
+        let reviewed_slots = match &action {
+            RemovalReview::Remove(intent) => &intent.before,
+            RemovalReview::Restore(intent) => &intent.before,
+        };
+        let command = registry_command_summary(reviewed_slots);
+        let (current_summary, requested_summary, title, confirm_label): (String, String, &str, &str) = match &action {
+            RemovalReview::Remove(intent) => (
+                removal_slots_summary(&intent.before),
+                if intent.before.approval.is_some() {
+                    "Remove this exact Run value and its same-name StartupApproved marker.".into()
+                } else {
+                    "Remove this exact Run value. No StartupApproved marker was present in the reviewed snapshot.".into()
+                },
+                "Review startup entry removal",
+                "Remove this entry",
+            ),
+            RemovalReview::Restore(intent) => (
+                removal_slots_summary(&intent.expected_current),
+                "Restore the saved raw Run value and marker bytes only where the exact slots are absent. Existing different bytes will be preserved and cause refusal.".into(),
+                "Review startup entry restoration",
+                "Restore exact values",
+            ),
+        };
+
+        let modal = egui::Modal::new(egui::Id::new("startup-reviewed-removal"))
+            .frame(theme::dialog_frame(t))
+            .show(ctx, |ui| {
+                ui.set_width((ctx.content_rect().width() - 100.).clamp(300., 560.));
+                let max_body_height = (ctx.content_rect().height() - 210.).clamp(150., 500.);
+                egui::ScrollArea::vertical()
+                    .max_height(max_body_height)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.heading(title);
+                        ui.add_space(8.);
+                        theme::muted(ui, "Nothing changes until you confirm here.", t);
+                        ui.add_space(10.);
+                        review_detail(ui, "Exact registry identity", &identity, t);
+                        review_detail(ui, "Command represented by saved Run bytes", &command, t);
+                        review_detail(ui, "Current raw slots", &current_summary, t);
+                        review_detail(ui, "Requested operation", &requested_summary, t);
+                        if self.qa_fixture_mode() {
+                            ui.add_space(8.);
+                            theme::muted(
+                                ui,
+                                "Synthetic fixture only. Confirming closes this review; it does not write the operation journal or touch Windows registry state.",
+                                t,
+                            );
+                        } else {
+                            ui.add_space(8.);
+                            theme::muted(
+                                ui,
+                                "The intent is saved before a transactional registry operation. A lost commit acknowledgement remains uncertain and is never retried automatically.",
+                                t,
+                            );
+                        }
+                    });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if theme::secondary(ui, "Cancel", true) {
+                        cancel = true;
+                    }
+                    let confirm = if self.qa_fixture_mode() {
+                        "Confirm fixture review"
+                    } else {
+                        confirm_label
+                    };
+                    if theme::primary(ui, confirm, t, !self.busy()) {
+                        accept = true;
+                    }
+                });
+            });
+        if !self.busy() && ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            // Escape is the only keyboard dismissal. Enter never confirms a registry action.
+            self.startup_ui.removal_review = None;
+            return;
+        }
+        if !self.busy() && modal.should_close() {
+            self.startup_ui.removal_review = None;
+            return;
+        }
+        if cancel {
+            self.startup_ui.removal_review = None;
+        } else if accept && !self.busy() {
+            self.startup_ui.removal_review = None;
+            if self.qa_fixture_mode() {
+                self.notice = Some(
+                    "Synthetic removal review accepted. No registry state or journal was changed."
+                        .into(),
+                );
+            } else {
+                self.begin_startup_removal_action(action, ctx);
+            }
+        }
+    }
+
     fn begin_startup_load(&mut self, ctx: &egui::Context) {
         if self.busy() || self.qa_fixture_mode() {
             return;
@@ -754,7 +1169,26 @@ impl App {
     }
 
     fn begin_startup_prepare(&mut self, id: StartupId, target_enabled: bool, ctx: &egui::Context) {
-        if self.busy() || self.qa_fixture_mode() {
+        if self.busy() {
+            return;
+        }
+        if self.qa_fixture_mode() {
+            self.error = None;
+            self.startup_ui.review = None;
+            self.startup_ui.selected = Some(id.clone());
+            #[cfg(debug_assertions)]
+            {
+                if let Some(intent) = self
+                    .entry_for_id(&id)
+                    .and_then(|entry| startup_qa_intent(entry, target_enabled))
+                {
+                    self.startup_ui.review = Some(ReviewAction::Apply(intent));
+                } else {
+                    self.error = Some(
+                        "The synthetic startup row does not have a known changeable state.".into(),
+                    );
+                }
+            }
             return;
         }
         self.startup_ui.background_read = None;
@@ -777,6 +1211,124 @@ impl App {
                 result,
             }));
             ctx.request_repaint();
+        });
+    }
+
+    fn begin_startup_removal_prepare(&mut self, id: StartupId, ctx: &egui::Context) {
+        if self.busy() {
+            return;
+        }
+        if self.qa_fixture_mode() {
+            #[cfg(debug_assertions)]
+            {
+                let intent = self.entry_for_id(&id).and_then(startup_qa_removal_intent);
+                if let Some(intent) = intent {
+                    self.startup_ui.removal_review = Some(RemovalReview::Remove(intent));
+                    self.error = None;
+                } else {
+                    self.error = Some(
+                        "This synthetic row does not represent a supported Run-value registration."
+                            .into(),
+                    );
+                }
+            }
+            return;
+        }
+        self.error = None;
+        self.startup_ui.removal_review = None;
+        self.startup_ui.selected = Some(id.clone());
+        self.progress = "Re-reading the exact Run value and marker for removal review…".into();
+        self.cancel = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = mpsc::channel();
+        self.worker = Some(rx);
+        let context = ctx.clone();
+        thread::spawn(move || {
+            let mut manager = RunValueRemovalManager::new(WindowsRunValueRemovalPlatform::new());
+            let result = manager.prepare_removal(&id).map_err(|error| error.message);
+            let _ = tx.send(Event::Startup(StartupEvent::RemovalPrepared { id, result }));
+            context.request_repaint();
+        });
+    }
+
+    fn begin_startup_removal_restore_review(
+        &mut self,
+        source: RemovalHistorySource,
+        ctx: &egui::Context,
+    ) {
+        if self.busy() || self.qa_fixture_mode() {
+            return;
+        }
+        let source_operation_id = match &source {
+            RemovalHistorySource::Intent(intent) => intent.operation_id,
+            RemovalHistorySource::Receipt(receipt) => receipt.operation_id,
+        };
+        self.error = None;
+        self.startup_ui.removal_review = None;
+        self.progress = "Re-reading the selected Run slots for a guarded restore review…".into();
+        self.cancel = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = mpsc::channel();
+        self.worker = Some(rx);
+        let context = ctx.clone();
+        thread::spawn(move || {
+            let mut manager = RunValueRemovalManager::new(WindowsRunValueRemovalPlatform::new());
+            let result = match source {
+                RemovalHistorySource::Intent(intent) => {
+                    manager.prepare_restore_from_intent(&intent)
+                }
+                RemovalHistorySource::Receipt(receipt) => {
+                    manager.prepare_restore_from_receipt(&receipt)
+                }
+            }
+            .map_err(|error| error.message);
+            let _ = tx.send(Event::Startup(StartupEvent::RemovalRestorePrepared {
+                source_operation_id,
+                result,
+            }));
+            context.request_repaint();
+        });
+    }
+
+    fn begin_startup_removal_action(&mut self, action: RemovalReview, ctx: &egui::Context) {
+        if self.busy() || self.qa_fixture_mode() {
+            return;
+        }
+        self.error = None;
+        self.progress = match &action {
+            RemovalReview::Remove(_) => {
+                "Saving the startup removal intent before the transactional registry call…".into()
+            }
+            RemovalReview::Restore(_) => {
+                "Saving the startup restore intent before the transactional registry call…".into()
+            }
+        };
+        self.cancel = Arc::new(AtomicBool::new(false));
+        let cancel = self.cancel.clone();
+        let root = self.data_dir.clone();
+        let context = ctx.clone();
+        let (tx, rx) = mpsc::channel();
+        self.worker = Some(rx);
+        thread::spawn(move || {
+            match action {
+                RemovalReview::Remove(intent) => {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        apply_startup_removal(&root, &intent, &cancel)
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err("The removal worker stopped unexpectedly. Its saved intent remains for manual review; no automatic retry was made.".into())
+                    });
+                    let _ = tx.send(Event::Startup(StartupEvent::Removed(result)));
+                }
+                RemovalReview::Restore(intent) => {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        restore_startup_removal(&root, &intent, &cancel)
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err("The restore worker stopped unexpectedly. Review its saved intent and current registry state before another action.".into())
+                    });
+                    let _ = tx.send(Event::Startup(StartupEvent::RemovalRestored(result)));
+                }
+            }
+            context.request_repaint();
         });
     }
 
@@ -817,44 +1369,48 @@ impl App {
     fn startup_tabs(&mut self, ui: &mut egui::Ui) {
         theme::tabs(ui, |ui| {
             for section in StartupSection::ALL {
-                if theme::tab(ui, self.startup_ui.section == section, section.label()).clicked() {
+                let inventory = self.startup_ui.inventories.get(&section);
+                let response = theme::tab_with_icon_count(
+                    ui,
+                    self.startup_ui.section == section,
+                    startup_section_icon(section),
+                    section.label(),
+                    startup_cached_tab_count(inventory),
+                    theme::tokens(self.prefs.dark),
+                );
+                let response = match inventory.map(|inventory| &inventory.quality) {
+                    Some(InventoryQuality::Partial) => response.on_hover_text(
+                        "The count is omitted because some startup sources could not be read.",
+                    ),
+                    Some(InventoryQuality::Unavailable) => response.on_hover_text(
+                        "The count is unavailable because Windows did not return a complete inventory.",
+                    ),
+                    Some(InventoryQuality::Complete) | None => response,
+                };
+                if response.clicked() {
                     self.startup_ui.section = section;
                     self.startup_ui.selected = None;
+                    #[cfg(debug_assertions)]
+                    {
+                        self.startup_ui.qa_more_open = false;
+                    }
                 }
             }
         });
     }
 
     fn startup_search_and_sort(&mut self, ui: &mut egui::Ui) {
-        let choices: Vec<_> = SortColumn::ALL.iter().map(|sort| sort.label()).collect();
-        let width = theme::search_width(ui, &choices);
-        let t = theme::tokens(self.prefs.dark);
+        let has_query = !self.startup_ui.query.is_empty();
+        let width = (ui.available_width() - if has_query { 60. } else { 0. }).clamp(140., 560.);
         theme::control_row(ui, |ui| {
-            ui.label(RichText::new("Search").color(t.muted))
-                .on_hover_text("Search uses only details Windows returned.");
             theme::input(
                 ui,
                 &mut self.startup_ui.query,
                 width,
-                "Name, publisher, path or identity",
+                "Search name, publisher, path or identity",
                 true,
             );
-            ui.add_space(8.);
-            ui.label(RichText::new("Sort by").color(t.muted));
-            theme::selector(
-                ui,
-                "startup-sort",
-                self.startup_ui.sort.label(),
-                &choices,
-                |ui| {
-                    for sort in SortColumn::ALL {
-                        ui.selectable_value(&mut self.startup_ui.sort, sort, sort.label());
-                    }
-                },
-            );
-            ui.add_space(8.);
-            theme::checkbox(ui, &mut self.startup_ui.descending, "Descending", true);
-            if !self.startup_ui.query.is_empty() && theme::field_action(ui, "Clear", true) {
+            if has_query && theme::field_action(ui, "Clear", true) {
                 self.startup_ui.query.clear();
             }
         });
@@ -954,31 +1510,20 @@ impl App {
         let mut open_location = None;
         let mut detail_selection = None;
         let mut save_text = false;
+        let mut removal_selection = None;
         let busy = self.busy();
+        let checking_state = self.startup_ui.background_read.is_some();
         egui::Frame::NONE.show(ui, |ui| {
             ui.set_width(ui.available_width());
             let available = ui.available_width().max(320.);
-            let show_publisher = available >= 800.;
-            let show_path = available >= 900.;
-            let action_width = if available >= 700. {
-                130.
-            } else if available >= 520. {
-                116.
-            } else {
-                106.
-            };
-            let state_width = if available >= 700. {
-                96.
-            } else if available >= 520. {
-                82.
-            } else {
-                72.
-            };
-            let publisher_width = if show_publisher { 120. } else { 0. };
-            let path_width = if show_path { 200. } else { 0. };
-            let columns = 3 + (show_publisher as usize) + (show_path as usize);
-            let column_spacing = ui.spacing().item_spacing.x * (columns.saturating_sub(1) as f32);
-            let program_min_width = if available >= 700. { 180. } else { 140. };
+            let wide = available >= 900.;
+            let action_width = 34.;
+            let state_width = if wide { 120. } else { 96. };
+            let publisher_width = if wide { 180. } else { 110. };
+            let path_width = if wide { 260. } else { 160. };
+            let columns = 5;
+            let column_spacing = ui.spacing().item_spacing.x * (columns - 1) as f32;
+            let program_min_width = 180.;
             let program_width = (available
                 - action_width
                 - state_width
@@ -987,26 +1532,62 @@ impl App {
                 - column_spacing
                 - 8.)
                 .max(program_min_width);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 8.;
-                for (column, width, visible) in [(SortColumn::Program,program_width,true), (SortColumn::Publisher,publisher_width,show_publisher), (SortColumn::FilePath,path_width,show_path), (SortColumn::Enabled,state_width,true)] {
-                    if visible && sortable_header(ui,width,column.label(),self.startup_ui.sort==column,self.startup_ui.descending,t) {
-                        if self.startup_ui.sort == column {
-                            self.startup_ui.descending = !self.startup_ui.descending;
-                        } else {
-                            self.startup_ui.sort = column;
-                            self.startup_ui.descending = false;
+            let table_min_width = program_width
+                + publisher_width
+                + path_width
+                + state_width
+                + action_width
+                + column_spacing
+                + 8.;
+            egui::ScrollArea::horizontal()
+                .id_salt(("startup-table-horizontal", inventory.section.label()))
+                .auto_shrink([false, true])
+                .show(ui, |table_ui| {
+                    table_ui.set_min_width(table_min_width);
+                    table_ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.;
+                        for (column, width, label) in [
+                            (SortColumn::Program, program_width, "Program"),
+                            (SortColumn::Publisher, publisher_width, "Publisher"),
+                            (SortColumn::FilePath, path_width, "File path"),
+                            (
+                                SortColumn::Enabled,
+                                state_width,
+                                state_header_label(inventory.section),
+                            ),
+                        ] {
+                            if sortable_header(
+                                ui,
+                                width,
+                                label,
+                                self.startup_ui.sort == column,
+                                self.startup_ui.descending,
+                                t,
+                            ) {
+                                if self.startup_ui.sort == column {
+                                    self.startup_ui.descending = !self.startup_ui.descending;
+                                } else {
+                                    self.startup_ui.sort = column;
+                                    self.startup_ui.descending = false;
+                                }
+                            }
                         }
-                    }
-                }
-                table_header(ui, action_width, "Actions");
-            });
-            ui.separator();
-            let body_height = (ui.ctx().content_rect().bottom() - ui.cursor().top() - 74. - 28. - 80.).max(120.);
-            let previous_y_spacing = ui.spacing().item_spacing.y;
-            ui.spacing_mut().item_spacing.y = 0.;
-            egui::ScrollArea::vertical().id_salt(("startup-table-body", inventory.section.label()))
-                .max_height(body_height).auto_shrink([false, true]).show_rows(ui, 44., entries.len(), |ui, range| {
+                        ui.allocate_space([action_width, 24.].into());
+                    });
+                    table_ui.separator();
+                    let body_height = (table_ui.ctx().content_rect().bottom()
+                        - table_ui.cursor().top()
+                        - 74.
+                        - 28.
+                        - 80.)
+                        .max(120.);
+                    let previous_y_spacing = table_ui.spacing().item_spacing.y;
+                    table_ui.spacing_mut().item_spacing.y = 0.;
+                    egui::ScrollArea::vertical()
+                        .id_salt(("startup-table-body", inventory.section.label()))
+                        .max_height(body_height)
+                        .auto_shrink([false, true])
+                        .show_rows(table_ui, 44., entries.len(), |ui, range| {
                 egui::Grid::new(("startup-inventory-grid", inventory.section.label()))
                 .num_columns(columns)
                 .striped(false)
@@ -1049,65 +1630,118 @@ impl App {
                         }
                         response.on_hover_text(&program);
 
-                        if show_publisher {
-                            field_cell(ui, publisher_width, &entry.publisher);
-                        }
-                        if show_path {
-                            field_cell(ui, path_width, &entry.file_path);
-                        }
+                        field_cell(ui, publisher_width, &entry.publisher);
+                        field_cell(ui, path_width, &entry.file_path);
 
-                        let state = enabled_label(&entry.enabled);
-                        theme::table_cell(ui, state.clone(), state_width, 36.)
-                        .on_hover_text(enabled_tooltip(&entry.enabled));
+                        let state_value = known_enabled_value(&entry.enabled);
+                        let state_text = enabled_label(&entry.enabled);
+                        let can_toggle =
+                            entry.can_change_enabled && state_value.is_some() && !busy && !checking_state;
+                        ui.allocate_ui_with_layout([state_width, 36.].into(), Layout::left_to_right(Align::Center), |ui| {
+                            ui.set_min_size([state_width, 36.].into());
+                            ui.spacing_mut().item_spacing.x = 4.;
+                            let switch = startup_enabled_switch(
+                                ui,
+                                &entry.id,
+                                inventory.section,
+                                state_value,
+                                can_toggle,
+                                t,
+                            );
+                            if let Some(current) = state_value {
+                                if switch.clicked() {
+                                    prepare_change = Some((entry.id.clone(), !current));
+                                }
+                            }
+                            let reason = entry
+                                .change_limitation
+                                .as_deref()
+                                .or_else(|| match &entry.enabled {
+                                    EnabledState::Unknown { reason } => Some(reason.as_str()),
+                                    _ => None,
+                                });
+                            switch.on_hover_text(reason.map(str::to_owned).unwrap_or_else(|| enabled_tooltip(&entry.enabled)));
+                            ui.add_sized(
+                                [ui.available_width(), 36.],
+                                egui::Label::new(RichText::new(state_text).size(theme::FONT_BODY)).truncate(),
+                            )
+                            .on_hover_text(enabled_tooltip(&entry.enabled));
+                        });
                         ui.allocate_ui_with_layout([action_width, 36.].into(), Layout::left_to_right(Align::Center), |ui| {
                             ui.set_min_size([action_width, 36.].into());
-                            ui.spacing_mut().item_spacing.x = 4.;
-                            if entry.can_change_enabled {
-                                let target = matches!(&entry.enabled, EnabledState::Disabled);
-                                let label = if target { "Enable" } else { "Disable" };
-                                if theme::row_action(ui, label, !busy)
-                                    .on_hover_text(
-                                        "Review the exact native identity and current state before applying.",
-                                    )
-                                    .clicked()
-                                {
-                                    prepare_change = Some((entry.id.clone(), target));
-                                }
-                            } else {
-                                let reason = entry
-                                    .change_limitation
-                                    .as_deref()
-                                    .or_else(|| match &entry.enabled {
-                                        EnabledState::Unknown { reason } => Some(reason),
-                                        _ => None,
-                                    })
-                                    .unwrap_or(
-                                        "This item has no supported reversible change path.",
-                                    );
-                                theme::row_action(ui, "Read only", false)
-                                .on_hover_text(reason);
-                            }
+                            ui.spacing_mut().item_spacing.x = 0.;
                             let more = theme::row_more(ui, !busy);
+                            #[cfg(debug_assertions)]
+                            {
+                                theme::record_fixture_control(ui, "More", &more);
+                                if more.clicked() {
+                                    self.startup_ui.qa_more_open = !self.startup_ui.qa_more_open;
+                                }
+                            }
                             egui::Popup::menu(&more).show(|ui| {
-                                if ui.button("Show details").clicked() {
+                                let details = ui.button("Show details");
+                                #[cfg(debug_assertions)]
+                                theme::record_fixture_control(ui, "Show details", &details);
+                                if details.clicked() {
                                     detail_selection = Some(entry.id.clone());
+                                    #[cfg(debug_assertions)]
+                                    {
+                                        self.startup_ui.qa_more_open = false;
+                                    }
                                     ui.close();
                                 }
-                                if ui
-                                    .add_enabled(
-                                        !busy && !self.qa_fixture_mode(),
-                                        egui::Button::new("Save to text file"),
-                                    )
-                                    .clicked()
-                                {
+                                let remove_supported =
+                                    dcleaner::startup_removal::supports_run_value_removal(
+                                        &entry.identity,
+                                    );
+                                let remove = ui.add_enabled(
+                                    remove_supported && !busy && !checking_state,
+                                    egui::Button::new("Remove"),
+                                );
+                                #[cfg(debug_assertions)]
+                                theme::record_fixture_control(ui, "Remove", &remove);
+                                if remove_supported {
+                                    if remove
+                                        .on_hover_text(
+                                            "Remove this exact current-user Run registration after reviewing its raw values. The operation is journaled and transactional; other startup sources remain read-only.",
+                                        )
+                                        .clicked()
+                                    {
+                                        removal_selection = Some(entry.id.clone());
+                                        #[cfg(debug_assertions)]
+                                        {
+                                            self.startup_ui.qa_more_open = false;
+                                        }
+                                        ui.close();
+                                    }
+                                } else {
+                                    remove.on_hover_text(
+                                        "Removal is supported only for exact current-user Run values with a known 32-bit or 64-bit registry view.",
+                                    );
+                                }
+                                let save_to_text = ui.add_enabled(
+                                    !busy
+                                        && !checking_state
+                                        && inventory.quality != InventoryQuality::Unavailable,
+                                    egui::Button::new("Save to text file"),
+                                );
+                                #[cfg(debug_assertions)]
+                                theme::record_fixture_control(
+                                    ui,
+                                    "Save to text file",
+                                    &save_to_text,
+                                );
+                                if save_to_text.clicked() {
                                     save_text = true;
                                     ui.close();
                                 }
+                                ui.add_enabled(false, egui::Button::new("Open in RegEdit"))
+                                    .on_hover_text("A safe Registry Editor handoff is not implemented for startup entries.");
                                 if let FieldValue::Known { value } = &entry.file_path {
                                     if !value.is_empty()
                                         && ui
                                             .add_enabled(
-                                                !self.qa_fixture_mode(),
+                                                !busy && !self.qa_fixture_mode(),
                                                 egui::Button::new("Open in folder"),
                                             )
                                             .clicked()
@@ -1124,14 +1758,18 @@ impl App {
                     }
                 });
             });
-            ui.spacing_mut().item_spacing.y = previous_y_spacing;
+                    table_ui.spacing_mut().item_spacing.y = previous_y_spacing;
+                });
         });
-        if save_text && !self.qa_fixture_mode() {
+        if save_text {
             self.export_startup_text(inventory);
         }
         if let Some(id) = detail_selection {
             self.startup_ui.selected = Some(id);
             self.startup_ui.details_open = true;
+        }
+        if let Some(id) = removal_selection {
+            self.begin_startup_removal_prepare(id, ctx);
         }
         if let Some(path) = open_location {
             match open_in_explorer(&path) {
@@ -1191,6 +1829,7 @@ impl App {
                 }
                 for record in &history {
                     let action = history_review_action(record, &history);
+                    let removal_action = history_removal_source(record, &history);
                     let summary = history_record_summary(record);
                     let label = format!(
                         "{} · {} · {}",
@@ -1215,15 +1854,22 @@ impl App {
                     if record.state == "uncertain" {
                         theme::muted(
                             ui,
-                            if action.is_some() {
+                            if action.is_some() || removal_action.is_some() {
                                 "Pending / uncertain. No action was replayed automatically; choose Review recovery in the footer."
                             } else {
                                 "Pending / uncertain. The saved payload is not a supported startup intent, so no recovery action is offered."
                             },
                             t,
                         );
-                    } else if record.state == "applied" && action.is_none() {
-                        theme::muted(ui, "This change is already restored or has no safe receipt.", t);
+                    } else if record.state == "applied"
+                        && action.is_none()
+                        && removal_action.is_none()
+                    {
+                        theme::muted(
+                            ui,
+                            "This change is already restored or has no supported safe receipt.",
+                            t,
+                        );
                     }
                 }
             });
@@ -1281,9 +1927,6 @@ impl App {
     }
 
     fn export_startup_text(&mut self, inventory: &StartupInventory) {
-        if self.qa_fixture_mode() {
-            return;
-        }
         if matches!(&inventory.quality, InventoryQuality::Unavailable) {
             self.error = Some(
                 "This tab has no usable inventory to export. Refresh the native sources first."
@@ -1291,15 +1934,6 @@ impl App {
             );
             return;
         }
-        let Some(path) = rfd::FileDialog::new()
-            .set_title("Save Startup Manager entries")
-            .set_file_name("startup.txt")
-            .add_filter("Text files", &["txt"])
-            .save_file()
-        else {
-            return;
-        };
-
         let contents = inventory
             .entries
             .iter()
@@ -1314,6 +1948,21 @@ impl App {
             })
             .collect::<Vec<_>>()
             .join("\r\n");
+        if self.qa_fixture_mode() {
+            self.notice = Some(format!(
+                "Synthetic TSV preview prepared ({} bytes); no file was written.",
+                contents.len()
+            ));
+            return;
+        }
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("Save Startup Manager entries")
+            .set_file_name("startup.txt")
+            .add_filter("Text files", &["txt"])
+            .save_file()
+        else {
+            return;
+        };
         match std::fs::write(path, contents) {
             Ok(()) => {
                 self.notice = Some(if matches!(&inventory.quality, InventoryQuality::Partial) {
@@ -1336,6 +1985,7 @@ fn startup_qa_entry(section: StartupSection, enabled: EnabledState) -> StartupEn
     let identity = match section {
         StartupSection::StartupApps => EntryIdentity::StartupRunValue {
             hive: dcleaner::startup::RegistryHive::CurrentUser,
+            view: RegistryView::process_default(),
             key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
             value_name: "FixtureExample".into(),
             approval_hive: dcleaner::startup::RegistryHive::CurrentUser,
@@ -1416,6 +2066,70 @@ fn startup_qa_entry(section: StartupSection, enabled: EnabledState) -> StartupEn
         can_change_enabled,
         change_limitation,
     }
+}
+
+#[cfg(debug_assertions)]
+fn startup_qa_intent(entry: &StartupEntry, target_enabled: bool) -> Option<ChangeIntent> {
+    let current_enabled = known_enabled_value(&entry.enabled)?;
+    if !entry.can_change_enabled || current_enabled == target_enabled {
+        return None;
+    }
+    let before = ObservedState {
+        id: entry.id.clone(),
+        identity: entry.identity.clone(),
+        enabled: entry.enabled.clone(),
+        native: NativeState::ReadOnly,
+    };
+    let expected_after = ObservedState {
+        id: entry.id.clone(),
+        identity: entry.identity.clone(),
+        enabled: if target_enabled {
+            EnabledState::Enabled
+        } else {
+            EnabledState::Disabled
+        },
+        native: NativeState::ReadOnly,
+    };
+    let intent = ChangeIntent {
+        schema_version: CHANGE_SCHEMA_VERSION,
+        intent_id: Uuid::new_v4(),
+        id: entry.id.clone(),
+        target_enabled,
+        before,
+        expected_after,
+    };
+    valid_change_intent(&intent).then_some(intent)
+}
+
+#[cfg(debug_assertions)]
+fn startup_qa_removal_intent(entry: &StartupEntry) -> Option<RemovalIntent> {
+    if !dcleaner::startup_removal::supports_run_value_removal(&entry.identity) {
+        return None;
+    }
+    let command = match &entry.command {
+        FieldValue::Known { value } => value,
+        FieldValue::Unknown { .. } | FieldValue::NotApplicable => return None,
+    };
+    let data = command
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    let before = RunValueSlots {
+        run: Some(RegistryValueSnapshot {
+            value_type: 1,
+            data,
+        }),
+        approval: None,
+    };
+    let intent = RemovalIntent {
+        schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+        operation_id: Uuid::new_v4(),
+        id: entry.id.clone(),
+        identity: entry.identity.clone(),
+        before,
+    };
+    valid_removal_intent(&intent).then_some(intent)
 }
 
 fn startup_gauge_icon(ui: &mut egui::Ui, t: Tokens) {
@@ -1565,6 +2279,139 @@ fn apply_startup_change(
     }
 }
 
+fn apply_startup_removal(
+    root: &Path,
+    intent: &RemovalIntent,
+    cancel: &AtomicBool,
+) -> Result<RemovalReceipt, String> {
+    if !valid_removal_intent(intent) {
+        return Err(
+            "The saved Run-value removal intent is invalid; no registry call was made.".into(),
+        );
+    }
+    let mut journal =
+        EffectJournal::create(root, "startup", intent.operation_id, intent).map_err(|error| {
+            format!("The startup removal intent could not be saved; no change was made: {error}")
+        })?;
+    if cancel.load(Ordering::Relaxed) {
+        journal
+            .finish(
+                "failed",
+                &serde_json::json!({"outcome":"cancelled_before_native_change"}),
+            )
+            .map_err(|error| {
+                format!("Removal was cancelled before the Windows call, but its journal could not be finalized: {error}")
+            })?;
+        return Err(
+            "Removal was cancelled before the transactional registry call. No change was made."
+                .into(),
+        );
+    }
+
+    let mut manager = RunValueRemovalManager::new(WindowsRunValueRemovalPlatform::new());
+    match manager.apply_removal(intent) {
+        Err(error) => {
+            journal.finish("failed", &error).map_err(|journal_error| {
+                format!(
+                    "The removal was refused before commit, but its failure receipt could not be saved ({journal_error}); the intent remains pending."
+                )
+            })?;
+            Err(format!("No startup value was removed: {}", error.message))
+        }
+        Ok(receipt) => {
+            if !valid_removal_receipt(&receipt) {
+                journal
+                    .finish("uncertain", &serde_json::json!({"outcome":"invalid_receipt"}))
+                    .map_err(|error| {
+                        format!("The removal result was invalid and its uncertainty could not be recorded: {error}")
+                    })?;
+                return Err(
+                    "The removal result could not be validated. Review the pending journal before another action.".into(),
+                );
+            }
+            let state = match receipt.outcome {
+                RemovalOutcome::Removed => "applied",
+                RemovalOutcome::NoChange => "failed",
+                RemovalOutcome::Uncertain => "uncertain",
+            };
+            journal.finish(state, &receipt).map_err(|error| {
+                format!(
+                    "The removal outcome is {:?}, but its final receipt could not be saved: {error}. The original intent remains pending for review.",
+                    receipt.outcome
+                )
+            })?;
+            Ok(receipt)
+        }
+    }
+}
+
+fn restore_startup_removal(
+    root: &Path,
+    intent: &RemovalRestoreIntent,
+    cancel: &AtomicBool,
+) -> Result<RemovalRestoreReceipt, String> {
+    if !valid_restore_intent(intent) {
+        return Err(
+            "The saved Run-value restore intent is invalid; no registry call was made.".into(),
+        );
+    }
+    let mut journal =
+        EffectJournal::create(root, "startup", intent.restore_id, intent).map_err(|error| {
+            format!("The startup restore intent could not be saved; no change was made: {error}")
+        })?;
+    if cancel.load(Ordering::Relaxed) {
+        journal
+            .finish(
+                "failed",
+                &serde_json::json!({"outcome":"cancelled_before_native_change"}),
+            )
+            .map_err(|error| {
+                format!("Restore was cancelled before the Windows call, but its journal could not be finalized: {error}")
+            })?;
+        return Err(
+            "Restore was cancelled before the transactional registry call. No change was made."
+                .into(),
+        );
+    }
+
+    let mut manager = RunValueRemovalManager::new(WindowsRunValueRemovalPlatform::new());
+    match manager.apply_restore(intent) {
+        Err(error) => {
+            journal.finish("failed", &error).map_err(|journal_error| {
+                format!(
+                    "Restore was refused before commit, but its failure receipt could not be saved ({journal_error}); the intent remains pending."
+                )
+            })?;
+            Err(format!("No startup value was restored: {}", error.message))
+        }
+        Ok(receipt) => {
+            if !valid_restore_receipt(&receipt) {
+                journal
+                    .finish("uncertain", &serde_json::json!({"outcome":"invalid_receipt"}))
+                    .map_err(|error| {
+                        format!("The restore result was invalid and its uncertainty could not be recorded: {error}")
+                    })?;
+                return Err(
+                    "The restore result could not be validated. Review the pending journal before another action.".into(),
+                );
+            }
+            let state = match receipt.outcome {
+                RemovalRestoreOutcome::Restored => "restored",
+                RemovalRestoreOutcome::AlreadyRestored => "verified",
+                RemovalRestoreOutcome::NoChange => "failed",
+                RemovalRestoreOutcome::Uncertain => "uncertain",
+            };
+            journal.finish(state, &receipt).map_err(|error| {
+                format!(
+                    "The restore outcome is {:?}, but its final receipt could not be saved: {error}. The original intent remains pending for review.",
+                    receipt.outcome
+                )
+            })?;
+            Ok(receipt)
+        }
+    }
+}
+
 fn finish_apply_journal(
     journal: &mut EffectJournal,
     receipt: ChangeReceipt,
@@ -1697,7 +2544,7 @@ fn open_in_explorer(path: &str) -> Result<(), String> {
 }
 
 fn valid_change_intent(intent: &ChangeIntent) -> bool {
-    intent.schema_version == CHANGE_SCHEMA_VERSION
+    dcleaner::startup::change_schema_is_supported(intent.schema_version, &intent.before.identity)
         && intent.id == intent.before.id
         && intent.id == intent.expected_after.id
         && intent.before.identity == intent.expected_after.identity
@@ -1715,7 +2562,7 @@ fn valid_change_intent(intent: &ChangeIntent) -> bool {
 }
 
 fn valid_change_receipt(receipt: &ChangeReceipt) -> bool {
-    receipt.schema_version == CHANGE_SCHEMA_VERSION
+    dcleaner::startup::change_schema_is_supported(receipt.schema_version, &receipt.before.identity)
         && receipt.id == receipt.before.id
         && receipt.id == receipt.after.id
         && receipt.before.identity == receipt.after.identity
@@ -1789,6 +2636,230 @@ fn history_review_action(
     }
 }
 
+fn history_removal_source(
+    record: &EffectHistory,
+    history: &[EffectHistory],
+) -> Option<RemovalHistorySource> {
+    if record.feature != "startup" {
+        return None;
+    }
+    let source = match record.state.as_str() {
+        "applied" => {
+            let intent = removal_intent_from_history(record)?;
+            let receipt = removal_receipt_from_history(record)?;
+            if !removal_receipt_matches_intent(&receipt, &intent)
+                || receipt.outcome != RemovalOutcome::Removed
+            {
+                return None;
+            }
+            RemovalHistorySource::Receipt(receipt)
+        }
+        "uncertain" => {
+            if let Some(intent) = exact_history_payload::<RemovalIntent>(&record.intent) {
+                if !valid_removal_intent(&intent) || intent.operation_id != record.id {
+                    return None;
+                }
+                if !uncertain_removal_receipt_matches(record, &intent) {
+                    return None;
+                }
+                RemovalHistorySource::Intent(intent)
+            } else {
+                let restore = removal_restore_intent_from_history(record)?;
+                if !uncertain_restore_receipt_matches(record, &restore)
+                    || !removal_source_matches_history(
+                        restore.source_operation_id,
+                        &restore.id,
+                        &restore.identity,
+                        &restore.before,
+                        history,
+                    )
+                {
+                    return None;
+                }
+                let intent = RemovalIntent {
+                    schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+                    operation_id: restore.source_operation_id,
+                    id: restore.id,
+                    identity: restore.identity,
+                    before: restore.before,
+                };
+                if !valid_removal_intent(&intent) {
+                    return None;
+                }
+                RemovalHistorySource::Intent(intent)
+            }
+        }
+        _ => return None,
+    };
+    let operation_id = match &source {
+        RemovalHistorySource::Intent(intent) => intent.operation_id,
+        RemovalHistorySource::Receipt(receipt) => receipt.operation_id,
+    };
+    if removal_has_confirmed_restore(operation_id, history) {
+        return None;
+    }
+    Some(source)
+}
+
+fn removal_has_confirmed_restore(operation_id: Uuid, history: &[EffectHistory]) -> bool {
+    history.iter().any(|record| {
+        if !record.feature.eq("startup")
+            || !matches!(record.state.as_str(), "restored" | "verified")
+        {
+            return false;
+        }
+        let Some(intent) = removal_restore_intent_from_history(record) else {
+            return false;
+        };
+        let Some(receipt) = removal_restore_receipt_from_history(record) else {
+            return false;
+        };
+        intent.source_operation_id == operation_id
+            && restore_receipt_matches_intent(&receipt, &intent)
+            && matches!(
+                receipt.outcome,
+                RemovalRestoreOutcome::Restored | RemovalRestoreOutcome::AlreadyRestored
+            )
+            && removal_source_matches_history(
+                intent.source_operation_id,
+                &intent.id,
+                &intent.identity,
+                &intent.before,
+                history,
+            )
+    })
+}
+
+fn exact_history_payload<T>(value: &serde_json::Value) -> Option<T>
+where
+    T: serde::de::DeserializeOwned + serde::Serialize,
+{
+    let payload: T = serde_json::from_value(value.clone()).ok()?;
+    (serde_json::to_value(&payload).ok()?.eq(value)).then_some(payload)
+}
+
+fn removal_intent_from_history(record: &EffectHistory) -> Option<RemovalIntent> {
+    let intent = exact_history_payload::<RemovalIntent>(&record.intent)?;
+    (record.feature == "startup"
+        && intent.operation_id == record.id
+        && valid_removal_intent(&intent))
+    .then_some(intent)
+}
+
+fn removal_receipt_from_history(record: &EffectHistory) -> Option<RemovalReceipt> {
+    let receipt = exact_history_payload::<RemovalReceipt>(record.receipt.as_ref()?)?;
+    (record.feature == "startup"
+        && receipt.operation_id == record.id
+        && valid_removal_receipt(&receipt))
+    .then_some(receipt)
+}
+
+fn removal_receipt_matches_intent(receipt: &RemovalReceipt, intent: &RemovalIntent) -> bool {
+    valid_removal_receipt(receipt)
+        && valid_removal_intent(intent)
+        && receipt.operation_id == intent.operation_id
+        && receipt.id == intent.id
+        && receipt.identity == intent.identity
+        && receipt.before == intent.before
+}
+
+fn removal_restore_intent_from_history(record: &EffectHistory) -> Option<RemovalRestoreIntent> {
+    let intent = exact_history_payload::<RemovalRestoreIntent>(&record.intent)?;
+    (record.feature == "startup" && intent.restore_id == record.id && valid_restore_intent(&intent))
+        .then_some(intent)
+}
+
+fn removal_restore_receipt_from_history(record: &EffectHistory) -> Option<RemovalRestoreReceipt> {
+    let receipt = exact_history_payload::<RemovalRestoreReceipt>(record.receipt.as_ref()?)?;
+    (record.feature == "startup"
+        && receipt.restore_id == record.id
+        && valid_restore_receipt(&receipt))
+    .then_some(receipt)
+}
+
+fn restore_receipt_matches_intent(
+    receipt: &RemovalRestoreReceipt,
+    intent: &RemovalRestoreIntent,
+) -> bool {
+    valid_restore_receipt(receipt)
+        && valid_restore_intent(intent)
+        && receipt.restore_id == intent.restore_id
+        && receipt.source_operation_id == intent.source_operation_id
+        && receipt.id == intent.id
+        && receipt.identity == intent.identity
+        && receipt.before == intent.before
+        && receipt.expected_current == intent.expected_current
+}
+
+fn uncertain_removal_receipt_matches(record: &EffectHistory, intent: &RemovalIntent) -> bool {
+    let Some(value) = record.receipt.as_ref() else {
+        return true;
+    };
+    if value == &serde_json::json!({"outcome":"invalid_receipt"}) {
+        return true;
+    }
+    let Some(receipt) = exact_history_payload::<RemovalReceipt>(value) else {
+        return false;
+    };
+    removal_receipt_matches_intent(&receipt, intent) && receipt.outcome == RemovalOutcome::Uncertain
+}
+
+fn uncertain_restore_receipt_matches(
+    record: &EffectHistory,
+    intent: &RemovalRestoreIntent,
+) -> bool {
+    let Some(value) = record.receipt.as_ref() else {
+        return true;
+    };
+    if value == &serde_json::json!({"outcome":"invalid_receipt"}) {
+        return true;
+    }
+    let Some(receipt) = exact_history_payload::<RemovalRestoreReceipt>(value) else {
+        return false;
+    };
+    restore_receipt_matches_intent(&receipt, intent)
+        && receipt.outcome == RemovalRestoreOutcome::Uncertain
+}
+
+fn removal_source_matches_history(
+    operation_id: Uuid,
+    id: &StartupId,
+    identity: &EntryIdentity,
+    before: &RunValueSlots,
+    history: &[EffectHistory],
+) -> bool {
+    history.iter().any(|record| {
+        if record.id != operation_id || record.feature != "startup" {
+            return false;
+        }
+        match record.state.as_str() {
+            "applied" => {
+                let Some(intent) = removal_intent_from_history(record) else {
+                    return false;
+                };
+                let Some(receipt) = removal_receipt_from_history(record) else {
+                    return false;
+                };
+                removal_receipt_matches_intent(&receipt, &intent)
+                    && receipt.outcome == RemovalOutcome::Removed
+                    && intent.id == *id
+                    && intent.identity == *identity
+                    && intent.before == *before
+            }
+            "uncertain" => {
+                let Some(intent) = removal_intent_from_history(record) else {
+                    return false;
+                };
+                intent.id == *id
+                    && intent.identity == *identity
+                    && intent.before == *before
+                    && uncertain_removal_receipt_matches(record, &intent)
+            }
+            _ => false,
+        }
+    })
+}
+
 fn history_record_summary(record: &EffectHistory) -> String {
     if let Ok(intent) = serde_json::from_value::<ChangeIntent>(record.intent.clone()) {
         format!(
@@ -1804,14 +2875,140 @@ fn history_record_summary(record: &EffectHistory) -> String {
             enabled_label(&receipt.before.enabled),
             enabled_label(&receipt.after.enabled)
         )
+    } else if let Ok(intent) = serde_json::from_value::<RemovalIntent>(record.intent.clone()) {
+        format!(
+            "Remove {} · {}",
+            identity_summary(&intent.identity),
+            removal_slots_summary(&intent.before)
+        )
+    } else if let Some(receipt) = record
+        .receipt
+        .as_ref()
+        .and_then(|value| serde_json::from_value::<RemovalReceipt>(value.clone()).ok())
+    {
+        format!(
+            "Remove {} · {}",
+            identity_summary(&receipt.identity),
+            removal_slots_summary(&receipt.before)
+        )
+    } else if let Ok(intent) = serde_json::from_value::<RemovalRestoreIntent>(record.intent.clone())
+    {
+        format!(
+            "Restore {} · current {}",
+            identity_summary(&intent.identity),
+            removal_slots_summary(&intent.expected_current)
+        )
+    } else if let Some(receipt) = record
+        .receipt
+        .as_ref()
+        .and_then(|value| serde_json::from_value::<RemovalRestoreReceipt>(value.clone()).ok())
+    {
+        let state = receipt
+            .after
+            .as_ref()
+            .map(removal_slots_summary)
+            .unwrap_or_else(|| "current slots could not be reread".into());
+        format!(
+            "Restore {} · {}",
+            identity_summary(&receipt.identity),
+            state
+        )
     } else {
         "Unsupported saved payload · no action available".into()
     }
 }
 
+fn removal_slots_summary(slots: &RunValueSlots) -> String {
+    let run = registry_snapshot_summary(slots.run.as_ref());
+    let approval = registry_snapshot_summary(slots.approval.as_ref());
+    format!("Run value: {run}; StartupApproved marker: {approval}")
+}
+
+fn registry_command_summary(slots: &RunValueSlots) -> String {
+    let Some(value) = &slots.run else {
+        return "The Run value is absent.".into();
+    };
+    if !matches!(value.value_type, 1 | 2) {
+        return format!(
+            "Not decoded: {} has {} raw bytes.",
+            registry_type_label(value.value_type),
+            value.data.len()
+        );
+    }
+    if value.data.len() % 2 != 0 {
+        return "Not decoded: the registry string has an odd byte length.".into();
+    }
+    let mut units = value
+        .data
+        .chunks_exact(2)
+        .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+        .collect::<Vec<_>>();
+    while units.last() == Some(&0) {
+        units.pop();
+    }
+    let Ok(text) = String::from_utf16(&units) else {
+        return "Not decoded: the registry string contains invalid UTF-16.".into();
+    };
+    let mut safe = String::with_capacity(text.len().min(2048));
+    for (index, character) in text.chars().enumerate() {
+        if index == 512 {
+            safe.push('…');
+            break;
+        }
+        match character {
+            '\0' => safe.push_str("\\0"),
+            '\r' => safe.push_str("\\r"),
+            '\n' => safe.push_str("\\n"),
+            '\t' => safe.push_str("\\t"),
+            character if character.is_control() => safe.push('�'),
+            character => safe.push(character),
+        }
+    }
+    format!("{}: {safe}", registry_type_label(value.value_type))
+}
+
+fn registry_snapshot_summary(value: Option<&RegistryValueSnapshot>) -> String {
+    value
+        .map(|value| {
+            format!(
+                "{} · {} bytes",
+                registry_type_label(value.value_type),
+                value.data.len()
+            )
+        })
+        .unwrap_or_else(|| "absent".into())
+}
+
+fn registry_type_label(value_type: u32) -> &'static str {
+    match value_type {
+        0 => "REG_NONE",
+        1 => "REG_SZ",
+        2 => "REG_EXPAND_SZ",
+        3 => "REG_BINARY",
+        4 => "REG_DWORD",
+        5 => "REG_DWORD_BIG_ENDIAN",
+        6 => "REG_LINK",
+        7 => "REG_MULTI_SZ",
+        8 => "REG_RESOURCE_LIST",
+        9 => "REG_FULL_RESOURCE_DESCRIPTOR",
+        10 => "REG_RESOURCE_REQUIREMENTS_LIST",
+        11 => "REG_QWORD",
+        _ => "Unknown registry type",
+    }
+}
+
 fn history_state_label(record: &EffectHistory) -> &'static str {
     match record.state.as_str() {
+        "applied"
+            if serde_json::from_value::<RemovalIntent>(record.intent.clone()).is_ok()
+                || record.receipt.as_ref().is_some_and(|value| {
+                    serde_json::from_value::<RemovalReceipt>(value.clone()).is_ok()
+                }) =>
+        {
+            "Removed · verified"
+        }
         "applied" => "Applied · verified",
+        "removed" => "Removed · verified",
         "restored" => "Restored · verified",
         "verified" => "Verified · no write needed",
         "failed" => "Failed · no change confirmed",
@@ -1825,7 +3022,6 @@ fn sort_key(entry: &StartupEntry, sort: SortColumn) -> String {
         SortColumn::Program => field_text(&entry.program),
         SortColumn::Publisher => field_text(&entry.publisher),
         SortColumn::FilePath => field_text(&entry.file_path),
-        SortColumn::Identity => identity_summary(&entry.identity),
         SortColumn::Enabled => enabled_label(&entry.enabled),
     }
     .to_lowercase()
@@ -1850,17 +3046,6 @@ fn field_cell(ui: &mut egui::Ui, width: f32, field: &FieldValue<String>) {
     } else if let FieldValue::Known { value } = field {
         response.on_hover_text(value);
     }
-}
-
-fn table_header(ui: &mut egui::Ui, width: f32, label: &str) {
-    theme::table_cell(
-        ui,
-        RichText::new(label)
-            .size(theme::FONT_CAPTION)
-            .color(ui.visuals().weak_text_color()),
-        width,
-        24.,
-    );
 }
 
 fn sortable_header(
@@ -1894,6 +3079,90 @@ fn sortable_header(
     response.on_hover_text(format!("Sort by {label}")).clicked()
 }
 
+fn state_header_label(section: StartupSection) -> &'static str {
+    if section == StartupSection::ScheduledTasks {
+        "Enable"
+    } else {
+        "Start up"
+    }
+}
+
+fn startup_freshness_label(
+    checking: bool,
+    changing: bool,
+    age: Option<Duration>,
+) -> Option<&'static str> {
+    if checking {
+        Some("checking current state")
+    } else if changing {
+        Some("change in progress; shown state not refreshed")
+    } else if age.is_some_and(|age| age >= Duration::from_secs(10)) {
+        Some("state may be stale")
+    } else {
+        None
+    }
+}
+
+fn startup_enabled_switch(
+    ui: &mut egui::Ui,
+    id: &StartupId,
+    section: StartupSection,
+    current: Option<bool>,
+    interactive: bool,
+    t: Tokens,
+) -> egui::Response {
+    let response = ui
+        .push_id(("startup-state-switch", section, id), |ui| {
+            ui.add_enabled_ui(interactive && current.is_some(), |ui| {
+                ui.allocate_response(Vec2::new(36., 20.), egui::Sense::click())
+            })
+            .inner
+        })
+        .inner;
+
+    let (track, knob_x, label) = match current {
+        Some(true) => (
+            t.primary,
+            response.rect.right() - 10.,
+            "Disable startup item",
+        ),
+        Some(false) => (t.border, response.rect.left() + 10., "Enable startup item"),
+        None => (
+            t.canvas,
+            response.rect.center().x,
+            "Startup item state unavailable",
+        ),
+    };
+    let painter = ui.painter();
+    painter.rect_filled(response.rect, 10., track);
+    painter.rect_stroke(
+        response.rect,
+        10.,
+        egui::Stroke::new(
+            1.,
+            if current.is_some() {
+                t.primary
+            } else {
+                t.muted
+            },
+        ),
+        egui::StrokeKind::Inside,
+    );
+    let knob_center = egui::pos2(knob_x, response.rect.center().y);
+    painter.circle_filled(knob_center, 7., t.card);
+    painter.circle_stroke(knob_center, 7., egui::Stroke::new(1., t.border));
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Checkbox,
+            interactive && current.is_some(),
+            label,
+        )
+    });
+    #[cfg(debug_assertions)]
+    theme::record_fixture_control(ui, label, &response);
+    response
+}
+
 fn field_text(field: &FieldValue<String>) -> String {
     match field {
         FieldValue::Known { value } if value.is_empty() => "(empty)".into(),
@@ -1918,6 +3187,14 @@ fn enabled_label(state: &EnabledState) -> String {
     }
 }
 
+fn known_enabled_value(state: &EnabledState) -> Option<bool> {
+    match state {
+        EnabledState::Enabled => Some(true),
+        EnabledState::Disabled => Some(false),
+        EnabledState::Unknown { .. } => None,
+    }
+}
+
 fn enabled_tooltip(state: &EnabledState) -> String {
     match state {
         EnabledState::Unknown { reason } => reason.clone(),
@@ -1929,10 +3206,17 @@ fn identity_summary(identity: &EntryIdentity) -> String {
     match identity {
         EntryIdentity::StartupRunValue {
             hive,
+            view,
             key,
             value_name,
             ..
-        } => format!("{}\\{} · {}", hive_label(*hive), key, value_name),
+        } => format!(
+            "{}[{}]\\{} · {}",
+            hive_label(*hive),
+            view.tag(),
+            key,
+            value_name
+        ),
         EntryIdentity::StartupFolderItem { path } => path.clone(),
         EntryIdentity::ContextMenuRegistration {
             hive,
@@ -2032,6 +3316,496 @@ fn review_detail(ui: &mut egui::Ui, label: &str, value: &str, t: Tokens) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_tabs_only_show_exact_counts_from_complete_cached_inventories() {
+        let complete = StartupInventory {
+            section: StartupSection::StartupApps,
+            quality: InventoryQuality::Complete,
+            entries: Vec::new(),
+            sources: Vec::new(),
+        };
+        let partial_with_rows = StartupInventory {
+            section: StartupSection::ScheduledTasks,
+            quality: InventoryQuality::Partial,
+            entries: vec![startup_qa_entry(
+                StartupSection::ScheduledTasks,
+                EnabledState::Enabled,
+            )],
+            sources: Vec::new(),
+        };
+        let partial_empty = StartupInventory {
+            section: StartupSection::ContextMenu,
+            quality: InventoryQuality::Partial,
+            entries: Vec::new(),
+            sources: Vec::new(),
+        };
+        let unavailable = StartupInventory {
+            section: StartupSection::WindowsServices,
+            quality: InventoryQuality::Unavailable,
+            entries: Vec::new(),
+            sources: Vec::new(),
+        };
+
+        assert_eq!(startup_cached_tab_count(None), None);
+        assert_eq!(startup_cached_tab_count(Some(&complete)), Some(0));
+        assert_eq!(startup_cached_tab_count(Some(&partial_with_rows)), None);
+        assert_eq!(startup_cached_tab_count(Some(&partial_empty)), None);
+        assert_eq!(startup_cached_tab_count(Some(&unavailable)), None);
+    }
+
+    #[test]
+    fn startup_switch_and_header_use_only_observed_state() {
+        assert_eq!(known_enabled_value(&EnabledState::Enabled), Some(true));
+        assert_eq!(known_enabled_value(&EnabledState::Disabled), Some(false));
+        assert_eq!(
+            known_enabled_value(&EnabledState::Unknown {
+                reason: "fixture unknown".into()
+            }),
+            None
+        );
+        assert_eq!(state_header_label(StartupSection::ScheduledTasks), "Enable");
+        assert_eq!(state_header_label(StartupSection::StartupApps), "Start up");
+        assert_eq!(state_header_label(StartupSection::ContextMenu), "Start up");
+        assert_eq!(
+            state_header_label(StartupSection::WindowsServices),
+            "Start up"
+        );
+    }
+
+    #[test]
+    fn startup_freshness_warning_survives_a_stalled_refresh() {
+        assert_eq!(
+            startup_freshness_label(true, false, Some(Duration::from_secs(30))),
+            Some("checking current state")
+        );
+        assert_eq!(
+            startup_freshness_label(false, true, Some(Duration::from_secs(2))),
+            Some("change in progress; shown state not refreshed")
+        );
+        assert_eq!(
+            startup_freshness_label(false, false, Some(Duration::from_secs(30))),
+            Some("state may be stale")
+        );
+        assert_eq!(
+            startup_freshness_label(false, false, Some(Duration::from_secs(9))),
+            None
+        );
+        assert_eq!(startup_freshness_label(false, false, None), None);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn fixture_review_intent_is_typed_read_only_and_unknown_cannot_toggle() {
+        let enabled = startup_qa_entry(StartupSection::StartupApps, EnabledState::Enabled);
+        let intent = startup_qa_intent(&enabled, false).unwrap();
+        assert!(valid_change_intent(&intent));
+        assert_eq!(intent.before.native, NativeState::ReadOnly);
+        assert_eq!(intent.expected_after.native, NativeState::ReadOnly);
+
+        let mut unknown = startup_qa_entry(
+            StartupSection::StartupApps,
+            EnabledState::Unknown {
+                reason: "fixture unknown".into(),
+            },
+        );
+        unknown.can_change_enabled = true;
+        assert!(startup_qa_intent(&unknown, true).is_none());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn fixture_run_removal_review_is_typed_and_contains_no_live_registry_snapshot() {
+        let entry = startup_qa_entry(StartupSection::StartupApps, EnabledState::Enabled);
+        let intent = startup_qa_removal_intent(&entry).unwrap();
+        assert!(valid_removal_intent(&intent));
+        assert!(dcleaner::startup_removal::supports_run_value_removal(
+            &intent.identity
+        ));
+        assert_eq!(intent.id, entry.id);
+        assert_eq!(intent.before.approval, None);
+        assert_eq!(
+            intent.before.run.unwrap().value_type,
+            1,
+            "the fixture represents an explicitly synthetic REG_SZ"
+        );
+    }
+
+    #[test]
+    fn removal_history_only_offers_guarded_restore_until_one_is_confirmed() {
+        let intent = {
+            #[cfg(debug_assertions)]
+            {
+                startup_qa_removal_intent(&startup_qa_entry(
+                    StartupSection::StartupApps,
+                    EnabledState::Enabled,
+                ))
+                .unwrap()
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                let identity = EntryIdentity::StartupRunValue {
+                    hive: dcleaner::startup::RegistryHive::CurrentUser,
+                    view: RegistryView::Registry64,
+                    key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
+                    value_name: "FixtureEntry".into(),
+                    approval_hive: dcleaner::startup::RegistryHive::CurrentUser,
+                    approval_key:
+                        r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+                            .into(),
+                };
+                let intent = RemovalIntent {
+                    schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+                    operation_id: Uuid::new_v4(),
+                    id: StartupId::for_identity(&identity),
+                    identity,
+                    before: RunValueSlots {
+                        run: Some(RegistryValueSnapshot {
+                            value_type: 1,
+                            data: vec![b'x', 0, 0, 0],
+                        }),
+                        approval: None,
+                    },
+                };
+                assert!(valid_removal_intent(&intent));
+                intent
+            }
+        };
+        let removal = RemovalReceipt {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            operation_id: intent.operation_id,
+            id: intent.id.clone(),
+            identity: intent.identity.clone(),
+            before: intent.before.clone(),
+            after: Some(RunValueSlots {
+                run: None,
+                approval: None,
+            }),
+            outcome: RemovalOutcome::Removed,
+            error: None,
+        };
+        let record = EffectHistory {
+            id: intent.operation_id,
+            feature: "startup".into(),
+            date: "2026-10-15T00:00:00Z".into(),
+            intent: serde_json::to_value(&intent).unwrap(),
+            state: "applied".into(),
+            receipt: Some(serde_json::to_value(&removal).unwrap()),
+        };
+        assert!(matches!(
+            history_removal_source(&record, std::slice::from_ref(&record)),
+            Some(RemovalHistorySource::Receipt(_))
+        ));
+
+        let restore_intent = RemovalRestoreIntent {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            restore_id: Uuid::new_v4(),
+            source_operation_id: intent.operation_id,
+            id: intent.id.clone(),
+            identity: intent.identity.clone(),
+            before: intent.before.clone(),
+            expected_current: RunValueSlots {
+                run: None,
+                approval: None,
+            },
+        };
+        assert!(valid_restore_intent(&restore_intent));
+        let uncertain_restore = EffectHistory {
+            id: restore_intent.restore_id,
+            feature: "startup".into(),
+            date: "2026-10-15T00:00:30Z".into(),
+            intent: serde_json::to_value(&restore_intent).unwrap(),
+            state: "uncertain".into(),
+            receipt: None,
+        };
+        assert!(matches!(
+            history_removal_source(
+                &uncertain_restore,
+                &[record.clone(), uncertain_restore.clone()]
+            ),
+            Some(RemovalHistorySource::Intent(_))
+        ));
+
+        let restored = RemovalRestoreReceipt {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            restore_id: restore_intent.restore_id,
+            source_operation_id: intent.operation_id,
+            id: intent.id,
+            identity: intent.identity,
+            before: intent.before.clone(),
+            expected_current: restore_intent.expected_current.clone(),
+            after: Some(intent.before),
+            outcome: RemovalRestoreOutcome::Restored,
+            error: None,
+        };
+        let restore_record = EffectHistory {
+            id: restored.restore_id,
+            feature: "startup".into(),
+            date: "2026-10-15T00:01:00Z".into(),
+            intent: serde_json::to_value(&restore_intent).unwrap(),
+            state: "restored".into(),
+            receipt: Some(serde_json::to_value(restored).unwrap()),
+        };
+        assert!(history_removal_source(&record, &[record.clone(), restore_record]).is_none());
+    }
+
+    #[test]
+    fn removal_history_rejects_payloads_that_do_not_match_the_journal_intent() {
+        let intent = {
+            #[cfg(debug_assertions)]
+            {
+                startup_qa_removal_intent(&startup_qa_entry(
+                    StartupSection::StartupApps,
+                    EnabledState::Enabled,
+                ))
+                .unwrap()
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                let identity = EntryIdentity::StartupRunValue {
+                    hive: dcleaner::startup::RegistryHive::CurrentUser,
+                    view: RegistryView::Registry64,
+                    key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
+                    value_name: "FixtureEntry".into(),
+                    approval_hive: dcleaner::startup::RegistryHive::CurrentUser,
+                    approval_key:
+                        r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+                            .into(),
+                };
+                RemovalIntent {
+                    schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+                    operation_id: Uuid::new_v4(),
+                    id: StartupId::for_identity(&identity),
+                    identity,
+                    before: RunValueSlots {
+                        run: Some(RegistryValueSnapshot {
+                            value_type: 1,
+                            data: vec![b'x', 0, 0, 0],
+                        }),
+                        approval: None,
+                    },
+                }
+            }
+        };
+        assert!(valid_removal_intent(&intent));
+        let mut receipt = RemovalReceipt {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            operation_id: intent.operation_id,
+            id: intent.id.clone(),
+            identity: intent.identity.clone(),
+            before: intent.before.clone(),
+            after: Some(RunValueSlots {
+                run: None,
+                approval: None,
+            }),
+            outcome: RemovalOutcome::Removed,
+            error: None,
+        };
+        assert!(valid_removal_receipt(&receipt));
+        let mut record = EffectHistory {
+            id: intent.operation_id,
+            feature: "startup".into(),
+            date: "2026-10-15T00:00:00Z".into(),
+            intent: serde_json::to_value(&intent).unwrap(),
+            state: "applied".into(),
+            receipt: Some(serde_json::to_value(&receipt).unwrap()),
+        };
+        assert!(matches!(
+            history_removal_source(&record, std::slice::from_ref(&record)),
+            Some(RemovalHistorySource::Receipt(_))
+        ));
+
+        if let EntryIdentity::StartupRunValue { value_name, .. } = &mut receipt.identity {
+            *value_name = "DifferentEntry".into();
+        }
+        receipt.id = StartupId::for_identity(&receipt.identity);
+        assert!(valid_removal_receipt(&receipt));
+        record.receipt = Some(serde_json::to_value(&receipt).unwrap());
+        assert!(history_removal_source(&record, std::slice::from_ref(&record)).is_none());
+
+        let mut changed_intent = intent.clone();
+        changed_intent.before.run.as_mut().unwrap().data = vec![b'y', 0, 0, 0];
+        assert!(valid_removal_intent(&changed_intent));
+        record.intent = serde_json::to_value(changed_intent).unwrap();
+        record.receipt = Some(
+            serde_json::to_value(RemovalReceipt {
+                schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+                operation_id: intent.operation_id,
+                id: intent.id,
+                identity: intent.identity,
+                before: intent.before,
+                after: Some(RunValueSlots {
+                    run: None,
+                    approval: None,
+                }),
+                outcome: RemovalOutcome::Removed,
+                error: None,
+            })
+            .unwrap(),
+        );
+        assert!(history_removal_source(&record, std::slice::from_ref(&record)).is_none());
+    }
+
+    #[test]
+    fn uncertain_restore_history_requires_its_original_removal_and_matching_receipt() {
+        let identity = EntryIdentity::StartupRunValue {
+            hive: dcleaner::startup::RegistryHive::CurrentUser,
+            view: RegistryView::Registry64,
+            key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
+            value_name: "FixtureEntry".into(),
+            approval_hive: dcleaner::startup::RegistryHive::CurrentUser,
+            approval_key: r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+                .into(),
+        };
+        let removal_intent = RemovalIntent {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            operation_id: Uuid::new_v4(),
+            id: StartupId::for_identity(&identity),
+            identity: identity.clone(),
+            before: RunValueSlots {
+                run: Some(RegistryValueSnapshot {
+                    value_type: 1,
+                    data: vec![b'x', 0, 0, 0],
+                }),
+                approval: None,
+            },
+        };
+        let restore_intent = RemovalRestoreIntent {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            restore_id: Uuid::new_v4(),
+            source_operation_id: removal_intent.operation_id,
+            id: removal_intent.id.clone(),
+            identity: identity.clone(),
+            before: removal_intent.before.clone(),
+            expected_current: RunValueSlots {
+                run: None,
+                approval: None,
+            },
+        };
+        let uncertain_restore = EffectHistory {
+            id: restore_intent.restore_id,
+            feature: "startup".into(),
+            date: "2026-10-15T00:00:00Z".into(),
+            intent: serde_json::to_value(&restore_intent).unwrap(),
+            state: "uncertain".into(),
+            receipt: None,
+        };
+        assert!(
+            history_removal_source(&uncertain_restore, std::slice::from_ref(&uncertain_restore))
+                .is_none()
+        );
+
+        let removal_receipt = RemovalReceipt {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            operation_id: removal_intent.operation_id,
+            id: removal_intent.id.clone(),
+            identity: identity.clone(),
+            before: removal_intent.before.clone(),
+            after: Some(RunValueSlots {
+                run: None,
+                approval: None,
+            }),
+            outcome: RemovalOutcome::Removed,
+            error: None,
+        };
+        let source = EffectHistory {
+            id: removal_intent.operation_id,
+            feature: "startup".into(),
+            date: "2026-10-14T00:00:00Z".into(),
+            intent: serde_json::to_value(&removal_intent).unwrap(),
+            state: "applied".into(),
+            receipt: Some(serde_json::to_value(&removal_receipt).unwrap()),
+        };
+        assert!(
+            history_removal_source(
+                &uncertain_restore,
+                &[source.clone(), uncertain_restore.clone()]
+            )
+            .is_some()
+        );
+
+        let mut alternate_identity = identity.clone();
+        if let EntryIdentity::StartupRunValue { value_name, .. } = &mut alternate_identity {
+            *value_name = "AlternateEntry".into();
+        }
+        let mut alternate_restore_intent = restore_intent.clone();
+        alternate_restore_intent.identity = alternate_identity.clone();
+        alternate_restore_intent.id = StartupId::for_identity(&alternate_identity);
+        assert!(valid_restore_intent(&alternate_restore_intent));
+        let alternate_restore_record = EffectHistory {
+            id: alternate_restore_intent.restore_id,
+            feature: "startup".into(),
+            date: "2026-10-15T00:00:10Z".into(),
+            intent: serde_json::to_value(alternate_restore_intent).unwrap(),
+            state: "uncertain".into(),
+            receipt: None,
+        };
+        assert!(
+            history_removal_source(
+                &alternate_restore_record,
+                &[source.clone(), alternate_restore_record.clone()]
+            )
+            .is_none()
+        );
+
+        let mut mismatched_restore_receipt = RemovalRestoreReceipt {
+            schema_version: dcleaner::startup_removal::REMOVAL_SCHEMA_VERSION,
+            restore_id: restore_intent.restore_id,
+            source_operation_id: restore_intent.source_operation_id,
+            id: restore_intent.id.clone(),
+            identity,
+            before: restore_intent.before.clone(),
+            expected_current: restore_intent.expected_current.clone(),
+            after: Some(restore_intent.before.clone()),
+            outcome: RemovalRestoreOutcome::Restored,
+            error: None,
+        };
+        mismatched_restore_receipt.source_operation_id = Uuid::new_v4();
+        assert!(valid_restore_receipt(&mismatched_restore_receipt));
+        let mut confirmed_restore = uncertain_restore.clone();
+        confirmed_restore.state = "restored".into();
+        confirmed_restore.receipt =
+            Some(serde_json::to_value(&mismatched_restore_receipt).unwrap());
+        assert!(
+            history_removal_source(&source, &[source.clone(), confirmed_restore.clone()]).is_some()
+        );
+
+        mismatched_restore_receipt.source_operation_id = restore_intent.source_operation_id;
+        let mut changed_restore_intent = restore_intent.clone();
+        changed_restore_intent.expected_current = removal_intent.before.clone();
+        assert!(valid_restore_intent(&changed_restore_intent));
+        confirmed_restore.intent = serde_json::to_value(changed_restore_intent).unwrap();
+        confirmed_restore.receipt =
+            Some(serde_json::to_value(&mismatched_restore_receipt).unwrap());
+        assert!(valid_restore_receipt(&mismatched_restore_receipt));
+        assert!(
+            history_removal_source(&source, &[source.clone(), confirmed_restore.clone()]).is_some()
+        );
+
+        confirmed_restore.intent = serde_json::to_value(&restore_intent).unwrap();
+        assert!(history_removal_source(&source, &[source.clone(), confirmed_restore]).is_none());
+    }
+
+    #[test]
+    fn text_export_uses_explicit_unknowns_and_sanitizes_record_delimiters() {
+        assert_eq!(startup_export_enabled(&EnabledState::Enabled), "Yes");
+        assert_eq!(
+            startup_export_enabled(&EnabledState::Unknown { reason: "x".into() }),
+            "Unknown"
+        );
+        assert_eq!(
+            startup_export_field(&FieldValue::Known {
+                value: "one\ttwo\r\nthree".into()
+            }),
+            "one two  three"
+        );
+        assert_eq!(
+            startup_export_field(&FieldValue::Unknown {
+                reason: "no path".into()
+            }),
+            "Unknown"
+        );
+    }
 
     #[test]
     fn task_change_xml_payloads_are_only_offered_as_typed_recovery() {

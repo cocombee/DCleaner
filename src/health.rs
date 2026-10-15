@@ -221,6 +221,7 @@ impl HealthStepReport {
         let mut notes = Vec::new();
         let temp = analysis_category_ids(&files, &["temp", "crash"]);
         let app_cache = analysis_category_ids(&files, &["chrome", "edge", "firefox"]);
+        categories.push(recycle_bin_category(&recycle_bin));
         categories.push(file_category(
             HealthCategory::TemporarySystemFiles,
             &files,
@@ -233,7 +234,6 @@ impl HealthStepReport {
             &app_cache,
             "Application-cache analysis was cancelled.".into(),
         ));
-        categories.push(recycle_bin_category(&recycle_bin));
         if !recycle_bin.issues.is_empty() {
             notes.push(format!(
                 "{} Recycle Bin inventory issue(s) need review.",
@@ -260,17 +260,8 @@ impl HealthStepReport {
     ) -> Self {
         let mut categories = vec![startup_category(&startup)];
         categories.push(software_category(&software));
-        categories.push(unsupported_category(
-            HealthCategory::DriverUpdates,
-            "Driver-update results are not yet included in this Health Check scan.",
-        ));
-        categories.push(unsupported_category(
-            HealthCategory::BackgroundApps,
-            "No background-app optimizer classifier or verified sleep/wake service is integrated.",
-        ));
         let notes = vec![
             "Startup entries are shown for review; the current startup inventory does not classify entries as unnecessary.".into(),
-            "Driver updater and background-app optimizer results are unsupported and were not simulated.".into(),
         ];
         let quality = aggregate_quality(&categories, false, false);
         Self {
@@ -415,7 +406,7 @@ impl HealthStepReport {
             step: self.step,
             actions,
             selected_count: selected.len(),
-            partial_acknowledged: acknowledge_partial,
+            partial_acknowledged: self.quality == HealthScanQuality::Partial && acknowledge_partial,
         })
     }
 }
@@ -734,18 +725,6 @@ fn software_category(snapshot: &Result<SoftwareSnapshot, String>) -> HealthCateg
         reported_bytes: None,
         coverage,
         findings,
-    }
-}
-
-fn unsupported_category(category: HealthCategory, reason: &str) -> HealthCategoryReport {
-    HealthCategoryReport {
-        category,
-        coverage: HealthCoverage::Unsupported {
-            reason: reason.into(),
-        },
-        findings: Vec::new(),
-        reported_items: 0,
-        reported_bytes: None,
     }
 }
 

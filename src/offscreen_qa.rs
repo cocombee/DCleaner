@@ -262,6 +262,30 @@ fn click_point(
     let matches: Vec<_> = controls
         .iter()
         .filter(|control| control["label"] == action.label && control["enabled"] == true)
+        .filter(|control| {
+            let rect = |key: &str| -> Option<egui::Rect> {
+                let values = control[key].as_array()?;
+                Some(egui::Rect::from_min_size(
+                    egui::pos2(values[0].as_f64()? as f32, values[1].as_f64()? as f32),
+                    egui::vec2(values[2].as_f64()? as f32, values[3].as_f64()? as f32),
+                ))
+            };
+            let Some(bounds) = rect("rect") else {
+                return false;
+            };
+            let Some(clip) = rect("clip_rect") else {
+                return false;
+            };
+            let center = bounds.center();
+            clip.contains(center)
+                && center.x >= 0.
+                && center.y >= 0.
+                && center.x < dimensions[0] as f32
+                && center.y < dimensions[1] as f32
+                && context
+                    .layer_id_at(center)
+                    .is_some_and(|layer| control["layer"] == format!("{layer:?}"))
+        })
         .collect();
     if matches.len() > 1 && action.occurrence.is_none() {
         return Err(format!(
@@ -342,6 +366,9 @@ pub fn run() -> Result<(), String> {
             !matches!(
                 action.label.as_str(),
                 "Get started"
+                    | "Clear selection"
+                    | "Review 1 item"
+                    | "Keep items"
                     | "Cleanup history"
                     | "Details"
                     | "Close"
@@ -354,6 +381,102 @@ pub fn run() -> Result<(), String> {
                     | "Sort Publisher"
                     | "All statistics"
                     | "Rescan"
+                    | "Cookie settings"
+                    | "Close settings"
+                    | "Clean"
+                    | "Resolve"
+                    | "Back to findings"
+                    | "Show Temporary internet files"
+                    | "Hide Temporary internet files"
+                    | "Select all Health findings"
+                    | "Stop scan"
+                    | "Stop cleaning"
+                    | "Skip"
+                    | "General"
+                    | "Scheduling"
+                    | "Updates"
+                    | "Privacy"
+                    | "Menu Layout"
+                    | "My Subscription"
+                    | "About"
+                    | "Light"
+                    | "Dark"
+                    | "Auto"
+                    | "Health Check"
+                    | "Custom Clean"
+                    | "Always show the landing page at the top of the menu"
+                    | "Reset"
+                    | "Cancel"
+                    | "Open Help"
+                    | "Select all"
+                    | "Select all eligible updates"
+                    | "Skip closing browsers"
+                    | "Cancel browser review"
+                    | "Enable startup item"
+                    | "Disable startup item"
+                    | "More"
+                    | "Show details"
+                    | "Remove"
+                    | "Confirm fixture review"
+                    | "Check for updates"
+                    | "Outdated software"
+                    | "Up-to-date software"
+                    | "Skipped & ignored"
+                    | "Sort Software"
+                    | "Sort Current version"
+                    | "Sort New version"
+                    | "Update"
+                    | "Update all"
+                    | "Update selected"
+                    | "Close dialog"
+                    | "Outdated drivers"
+                    | "No offer / unknown"
+                    | "Skipped & Ignored"
+                    | "Sort Drivers"
+                    | "Sort Installed"
+                    | "Sort Released"
+                    | "Sort State"
+                    | "Fix a problem"
+                    | "Sound"
+                    | "Network or Wi-Fi"
+                    | "Show relevant drivers"
+                    | "Sort Name"
+                    | "Sort Size"
+                    | "Sort Provider date"
+                    | "Review"
+                    | "More options"
+                    | "All items"
+                    | "Large files"
+                    | "Possible duplicates"
+                    | "Older items"
+                    | "Ignored"
+                    | "Keep oldest"
+                    | "Keep newest"
+                    | "Deselect all"
+                    | "Keep this copy"
+                    | "Review 2 files"
+                    | "Keep files"
+                    | "Close duplicate review"
+                    | "Close Health review"
+                    | "Find specific drivers"
+                    | "Not now"
+                    | "Don't show this message again"
+                    | "Clear history filter"
+                    | "Review restore"
+                    | "Installed"
+                    | "Disabled · unavailable"
+                    | "Uninstall"
+                    | "Row details"
+                    | "Row uninstall"
+                    | "Close finding details"
+                    | "Close details"
+                    | "Applications"
+                    | "Active apps"
+                    | "Sleeping apps"
+                    | "Excluded apps"
+                    | "Select this exact Windows Update offer"
+                    | "Collapse Display"
+                    | "Expand Display"
             )
         })
         || (!actions.is_empty()
@@ -361,12 +484,15 @@ pub fn run() -> Result<(), String> {
             && !fixture_case.starts_with("disk-")
             && !fixture_case.starts_with("startup-")
             && !fixture_case.starts_with("health-")
+            && !fixture_case.starts_with("settings-")
+            && !fixture_case.starts_with("software-")
+            && !fixture_case.starts_with("drivers-")
+            && !fixture_case.starts_with("duplicates-")
+            && !fixture_case.starts_with("programs-")
+            && !fixture_case.starts_with("optimizer-")
             && !fixture_case.ends_with("-intro"))
     {
-        return Err(
-            "Fixture actions must use the bounded, effect-free Cloud/Disk/Startup/first-use action set."
-                .into(),
-        );
+        return Err("Fixture actions must use the bounded, effect-free page action set.".into());
     }
     let context = egui::Context::default();
     let mut app = crate::app::App::new_fixture_with_context(&context, &fixture_case)?;
@@ -375,6 +501,7 @@ pub fn run() -> Result<(), String> {
     let mut idle_frames = 0;
     let mut pending_events = Vec::new();
     let mut release_at = None;
+    let mut clear_fixture_pointer = false;
     let mut awaiting_action: Option<UiAction> = None;
     let mut action_log = Vec::new();
     let mut copy_request_observed = false;
@@ -417,6 +544,16 @@ pub fn run() -> Result<(), String> {
                 pressed: false,
                 modifiers: egui::Modifiers::NONE,
             });
+            clear_fixture_pointer = true;
+            idle_frames = 0;
+            textures.finish_frame();
+            continue;
+        }
+        if clear_fixture_pointer {
+            // Settle captures without an incidental tooltip from the last
+            // fixture click. This only changes this owned egui input stream.
+            pending_events.push(egui::Event::PointerGone);
+            clear_fixture_pointer = false;
             idle_frames = 0;
             textures.finish_frame();
             continue;
@@ -446,7 +583,7 @@ pub fn run() -> Result<(), String> {
                 continue;
             }
             if let Some(action) = awaiting_action.take() {
-                let state = app.qa_action_state(&action.label)?;
+                let state = app.qa_action_state(&action.label, &context)?;
                 if action.label == "Copy path" && !copy_request_observed {
                     return Err(
                         "Copy path did not emit a copy request; no native clipboard was touched."
@@ -468,7 +605,7 @@ pub fn run() -> Result<(), String> {
                 action_log.push(serde_json::json!({"label":action.label,"occurrence":action.occurrence,"post_state":state,"physical_input":false}));
             }
             if let Some(action) = actions.pop_front() {
-                app.qa_action_precondition(&action.label)?;
+                app.qa_action_precondition(&action.label, &context)?;
                 copy_request_observed = false;
                 let point = click_point(&context, &action, dimensions)?;
                 let stem = destination

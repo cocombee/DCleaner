@@ -60,8 +60,7 @@ impl App {
                         .collect();
                 }
                 self.custom_analysis = Some(report);
-                self.notice =
-                    Some("Synthetic Custom Clean preview; no filesystem scan was run.".into());
+                self.notice = None;
                 if case == "clean-error" {
                     self.error =
                         Some("Synthetic QA result: the fixture location is unavailable.".into());

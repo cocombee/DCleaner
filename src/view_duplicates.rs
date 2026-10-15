@@ -43,6 +43,7 @@ pub(super) struct DuplicateUi {
     minimum_size_text: String,
     file_types_text: String,
     options_open: bool,
+    edit_locations: bool,
     report: Option<DuplicateReport>,
     cleanup_review: bool,
     acknowledge_all_copies: bool,
@@ -61,6 +62,7 @@ impl Default for DuplicateUi {
             file_types_text: String::new(),
             options,
             options_open: false,
+            edit_locations: false,
             report: None,
             cleanup_review: false,
             acknowledge_all_copies: false,
@@ -82,6 +84,7 @@ impl DuplicateUi {
             file_types_text: String::new(),
             options,
             options_open: false,
+            edit_locations: false,
             report: None,
             cleanup_review: false,
             acknowledge_all_copies: false,
@@ -98,6 +101,73 @@ pub(super) enum DuplicateEvent {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_duplicates_precondition(&self, label: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() || self.duplicate_ui.report.is_none() || self.busy() {
+            return Err("Duplicate actions require a completed isolated fixture.".into());
+        }
+        let reviewing = self.duplicate_ui.cleanup_review;
+        let valid = match label {
+            "Keep oldest" | "Keep newest" | "Select all" | "Deselect all" | "Keep this copy" => {
+                !reviewing
+            }
+            "Review 2 files" => {
+                !reviewing
+                    && self
+                        .duplicate_ui
+                        .report
+                        .as_ref()
+                        .is_some_and(|report| report.selected_ids().len() == 2)
+            }
+            "Keep files" | "Close duplicate review" => reviewing,
+            _ => false,
+        };
+        valid
+            .then_some(())
+            .ok_or_else(|| format!("Duplicate action is unavailable: {label}"))
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_duplicates_action_state(
+        &self,
+        label: &str,
+    ) -> Result<serde_json::Value, String> {
+        let report = self
+            .duplicate_ui
+            .report
+            .as_ref()
+            .ok_or("No duplicate fixture report")?;
+        let files = report
+            .groups
+            .iter()
+            .map(|group| group.files.len())
+            .sum::<usize>();
+        let selected = report.selected_ids().len();
+        let valid = match label {
+            "Keep oldest" | "Keep newest" => report
+                .groups
+                .iter()
+                .all(|group| group.files.iter().filter(|file| !file.selected).count() == 1),
+            "Keep this copy" => report.groups.first().is_some_and(|group| {
+                group.files.first().is_some_and(|file| !file.selected)
+                    && group.files.iter().filter(|file| !file.selected).count() == 1
+            }),
+            "Select all" => selected == files,
+            "Deselect all" => selected == 0,
+            "Review 2 files" => self.duplicate_ui.cleanup_review && selected == 2,
+            "Keep files" | "Close duplicate review" => !self.duplicate_ui.cleanup_review,
+            _ => false,
+        };
+        if !valid {
+            return Err(format!(
+                "Duplicate action did not reach its expected state: {label}"
+            ));
+        }
+        Ok(
+            serde_json::json!({"selected": selected, "files": files, "review_open": self.duplicate_ui.cleanup_review, "native_effects": false}),
+        )
+    }
+
     #[cfg(debug_assertions)]
     pub(super) fn seed_duplicates_qa(&mut self, case: &str) -> Result<(), String> {
         if !self.qa_fixture_mode() {
@@ -144,16 +214,7 @@ impl App {
     }
 
     pub(super) fn duplicates_page(&mut self, ui: &mut egui::Ui, t: Tokens, _ctx: &egui::Context) {
-        let fixture_mode = self.qa_fixture_mode();
         let busy = self.busy();
-        if fixture_mode {
-            theme::muted(
-                ui,
-                "QA fixture — synthetic paths and metadata only; no folder scan or file operation was run.",
-                t,
-            );
-            ui.add_space(6.);
-        }
         if !self.feature_seen("duplicates") {
             if self.feature_intro(
                 ui,
@@ -179,9 +240,17 @@ impl App {
             return;
         }
         self.source_card(ui, t, busy);
-        ui.add_space(10.);
+        ui.add_space(if self.duplicate_ui.report.is_some() {
+            4.
+        } else {
+            10.
+        });
         self.options_card(ui, t, busy);
-        ui.add_space(10.);
+        ui.add_space(if self.duplicate_ui.report.is_some() {
+            4.
+        } else {
+            10.
+        });
         if self.duplicate_ui.report.is_some() {
             self.results_card(ui, t, busy);
         }
@@ -248,7 +317,15 @@ impl App {
         let selected_count = selected.len();
         egui::Modal::new(egui::Id::new("duplicate-cleanup-review")).show(ctx, |ui| {
             ui.set_width(460.);
-            ui.heading("Review duplicate files");
+            ui.horizontal(|ui| {
+                ui.heading("Review duplicate files");
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if theme::close_button(ui, "Close duplicate review", true) {
+                        self.duplicate_ui.cleanup_review = false;
+                        self.duplicate_ui.acknowledge_all_copies = false;
+                    }
+                });
+            });
             ui.add_space(10.);
             ui.label(format!(
                 "Move {} selected files ({}) to {}?",
@@ -305,6 +382,8 @@ impl App {
             DuplicateEvent::Progress(text) => self.progress = text,
             DuplicateEvent::Scanned(report) => {
                 self.worker = None;
+                self.duplicate_ui.edit_locations = false;
+                self.duplicate_ui.options_open = false;
                 if report.cancelled {
                     self.notice = Some(
                         "Duplicate scan cancelled. Review the partial results; they cannot be cleaned until you scan again.".into(),
@@ -367,6 +446,36 @@ impl App {
     }
 
     fn source_card(&mut self, ui: &mut egui::Ui, t: Tokens, busy: bool) {
+        if self.duplicate_ui.report.is_some() && !self.duplicate_ui.edit_locations {
+            let summary = match self.duplicate_ui.scope {
+                ScanScope::Drives => {
+                    let selected = self
+                        .duplicate_ui
+                        .drives
+                        .iter()
+                        .filter(|drive| drive.selected)
+                        .count();
+                    format!(
+                        "{selected} of {} drives selected",
+                        self.duplicate_ui.drives.len()
+                    )
+                }
+                ScanScope::Folders => format!(
+                    "{} folder{} selected",
+                    self.duplicate_ui.folders.len(),
+                    if self.duplicate_ui.folders.len() == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
+                ),
+            };
+            let edit = compact_summary_row(ui, t, "Scan locations", &summary, !busy);
+            if edit {
+                self.duplicate_ui.edit_locations = true;
+            }
+            return;
+        }
         let mut scope_changed = false;
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -531,6 +640,41 @@ impl App {
     }
 
     fn options_card(&mut self, ui: &mut egui::Ui, t: Tokens, busy: bool) {
+        if self.duplicate_ui.report.is_some() && !self.duplicate_ui.options_open {
+            let mut attributes = Vec::new();
+            if self.duplicate_ui.options.include_hidden {
+                attributes.push("hidden");
+            }
+            if self.duplicate_ui.options.include_system {
+                attributes.push("system");
+            }
+            if self.duplicate_ui.options.include_read_only {
+                attributes.push("read-only");
+            }
+            if self.duplicate_ui.options.include_compressed {
+                attributes.push("compressed");
+            }
+            let file_types = self.duplicate_ui.file_types_text.trim();
+            let type_summary = if file_types.is_empty() {
+                "all file types".to_owned()
+            } else {
+                format!("types: {file_types}")
+            };
+            let attribute_summary = if attributes.is_empty() {
+                "default attributes".to_owned()
+            } else {
+                format!("includes {}", attributes.join(", "))
+            };
+            let summary = format!(
+                "Minimum {} bytes · {type_summary} · {attribute_summary}",
+                self.duplicate_ui.options.minimum_size
+            );
+            let edit = compact_summary_row(ui, t, "Scan criteria", &summary, !busy);
+            if edit {
+                self.duplicate_ui.options_open = true;
+            }
+            return;
+        }
         let mut scan_option_changed = false;
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -606,25 +750,14 @@ impl App {
 
     fn results_card(&mut self, ui: &mut egui::Ui, t: Tokens, busy: bool) {
         let expand_qa_details = self.duplicate_ui.expand_qa_details;
-        let qa_fixture_mode = self.qa_fixture_mode();
-        theme::card(t).show(ui, |ui| {
+        let compact_layout = ui.available_width() < 760.;
+        let frame = if compact_layout {
+            egui::Frame::new().inner_margin(0.)
+        } else {
+            theme::card(t)
+        };
+        frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("Duplicate results").family(theme::semibold()));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if let Some(report) = &self.duplicate_ui.report {
-                        theme::muted(
-                            ui,
-                            format!(
-                                "{} groups · {} duplicate files",
-                                report.groups.len(), report.duplicate_files
-                            ),
-                            t,
-                        );
-                    }
-                });
-            });
-            ui.add_space(8.);
             let Some(report) = &mut self.duplicate_ui.report else {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new("No scan yet").family(theme::semibold()));
@@ -637,24 +770,48 @@ impl App {
                 return;
             };
 
-            ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(size_text(report.potential_reclaimable_bytes))
-                        .size(theme::FONT_DISPLAY)
-                        .family(theme::semibold()),
-                );
-                theme::muted(ui, "logical size beyond one copy per group", t);
-                theme::muted(
-                    ui,
-                    format!(
-                        "{} candidates · {} read · {:.1}s",
-                        report.candidate_files,
-                        size_text(report.bytes_read),
-                        report.elapsed_ms as f64 / 1000.
-                    ),
-                    t,
-                );
-            });
+            if compact_layout {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(size_text(report.potential_reclaimable_bytes))
+                            .size(theme::FONT_TITLE)
+                            .family(theme::semibold()),
+                    );
+                    theme::muted(ui, "potentially reclaimable", t);
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let summary = format!(
+                            "{} groups · {} duplicate files",
+                            report.groups.len(), report.duplicate_files
+                        );
+                        ui.add(egui::Label::new(RichText::new(&summary).color(t.muted)).truncate())
+                            .on_hover_text(format!(
+                                "{} candidates · {} read · {:.1}s elapsed",
+                                report.candidate_files,
+                                size_text(report.bytes_read),
+                                report.elapsed_ms as f64 / 1000.
+                            ));
+                    });
+                });
+            } else {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(size_text(report.potential_reclaimable_bytes))
+                            .size(theme::FONT_DISPLAY)
+                            .family(theme::semibold()),
+                    );
+                    theme::muted(ui, "logical size beyond one copy per group", t);
+                    theme::muted(
+                        ui,
+                        format!(
+                            "{} candidates · {} read · {:.1}s",
+                            report.candidate_files,
+                            size_text(report.bytes_read),
+                            report.elapsed_ms as f64 / 1000.
+                        ),
+                        t,
+                    );
+                });
+            }
             if report.partial {
                 ui.add_space(5.);
                 ui.colored_label(
@@ -667,7 +824,7 @@ impl App {
                     ),
                 );
             }
-            ui.add_space(8.);
+            ui.add_space(if compact_layout { 4. } else { 8. });
             ui.horizontal_wrapped(|ui| {
                 if theme::secondary(ui, "Keep oldest", !busy && !report.cancelled) {
                     report.keep_oldest();
@@ -707,12 +864,7 @@ impl App {
                 );
             } else {
                 let cancelled = report.cancelled;
-                egui::ScrollArea::vertical()
-                    .id_salt("duplicate-groups")
-                    .max_height(440.)
-                    .auto_shrink([false, true])
-                    .show(ui, |ui| {
-                        for group in &mut report.groups {
+                for (group_index, group) in report.groups.iter_mut().enumerate() {
                             let selected_in_group = group.files.iter().filter(|file| file.selected).count();
                             let title = format!(
                                 "{} · {} copies · {} · {}/{} selected",
@@ -729,7 +881,7 @@ impl App {
                             );
                             egui::CollapsingHeader::new(title)
                                 .id_salt(group.id)
-                                .default_open(expand_qa_details)
+                                .default_open(expand_qa_details || group_index == 0)
                                 .show(ui, |ui| {
                                     ui.horizontal_wrapped(|ui| {
                                         let mut all_selected = group.files.iter().all(|file| file.selected);
@@ -745,73 +897,107 @@ impl App {
                                                 file.selected = all_selected;
                                             }
                                         }
-                                        theme::muted(
-                                            ui,
-                                            if qa_fixture_mode {
-                                                "Synthetic QA preview group; no files were read or compared."
-                                            } else {
-                                                "Groups contain byte-for-byte verified matches."
-                                            },
-                                            t,
-                                        );
                                     });
                                     ui.add_space(4.);
                                     for file_index in 0..group.files.len() {
                                         let mut keep_this_copy = false;
-                                        ui.separator();
+                                        let available_width = ui.available_width().max(1.);
+                                        let checkbox_width = 28.;
+                                        let action_width = ui
+                                            .painter()
+                                            .layout_no_wrap(
+                                                "Keep this copy".into(),
+                                                egui::FontId::new(
+                                                    theme::FONT_CAPTION,
+                                                    theme::semibold(),
+                                                ),
+                                                ui.visuals().text_color(),
+                                            )
+                                            .size()
+                                            .x
+                                            + 24.;
+                                        let gap = ui.spacing().item_spacing.x;
+                                        let text_width = (available_width
+                                            - checkbox_width
+                                            - action_width
+                                            - gap * 2.)
+                                            .max(1.);
+                                        let row_top = ui.cursor().top();
+                                        let row_left = ui.min_rect().left();
+                                        let row_right = ui.min_rect().right();
                                         {
                                             let file = &mut group.files[file_index];
-                                            ui.horizontal(|ui| {
-                                            theme::checkbox_widget(
-                                                ui,
-                                                &mut file.selected,
-                                                !busy && !cancelled,
-                                            );
-                                            ui.vertical(|ui| {
-                                                let path = file.candidate.path.display().to_string();
-                                                ui.add(
-                                                    egui::Label::new(
-                                                        RichText::new(
-                                                            file.candidate
-                                                                .path
-                                                                .file_name()
-                                                                .map(|name| name.to_string_lossy())
-                                                                .unwrap_or_default(),
-                                                        )
-                                                        .family(theme::semibold()),
-                                                    )
-                                                    .truncate(),
-                                                )
-                                                .on_hover_text(&path);
-                                                ui.add(egui::Label::new(path).truncate())
-                                                    .on_hover_text(
-                                                        file.candidate.path.display().to_string(),
+                                            ui.allocate_ui_with_layout(
+                                                Vec2::new(available_width, 60.),
+                                                Layout::left_to_right(Align::Center),
+                                                |row| {
+                                                    row.set_min_width(available_width);
+                                                    row.set_max_width(available_width);
+                                                    row.set_min_height(60.);
+                                                    row.spacing_mut().item_spacing.x = gap;
+                                                    row.allocate_ui_with_layout(
+                                                        Vec2::new(checkbox_width, 60.),
+                                                        Layout::left_to_right(Align::Center),
+                                                        |cell| {
+                                                            theme::checkbox_widget(
+                                                                cell,
+                                                                &mut file.selected,
+                                                                !busy && !cancelled,
+                                                            );
+                                                        },
                                                     );
-                                                theme::muted(
-                                                    ui,
-                                                    format!(
-                                                        "Created {} · Modified {} · {}",
-                                                        datetime_display(file.candidate.created_ns),
-                                                        datetime_display(Some(
-                                                            file.candidate.modified_ns,
-                                                        )),
-                                                        size_text(file.candidate.size)
-                                                    ),
-                                                    t,
-                                                );
-                                            });
-                                                ui.with_layout(
-                                                    Layout::right_to_left(Align::Center),
-                                                    |ui| {
-                                                        keep_this_copy = theme::row_action(ui, "Keep this copy", !busy && !cancelled)
-                                                            .on_hover_text(
-                                                                "Keep this file and select the other copies in this group for review.",
-                                                            )
-                                                            .clicked();
-                                                    },
-                                                );
-                                            });
+                                                    row.allocate_ui_with_layout(
+                                                        Vec2::new(text_width, 60.),
+                                                        Layout::top_down(Align::Min),
+                                                        |text| {
+                                                            text.set_min_width(text_width);
+                                                            text.set_max_width(text_width);
+                                                            text.spacing_mut().item_spacing.y = 0.;
+                                                            let path = file.candidate.path.display().to_string();
+                                                            let name = file.candidate.path.file_name()
+                                                                .map(|name| name.to_string_lossy().into_owned())
+                                                                .unwrap_or_else(|| "File".into());
+                                                            text.add(egui::Label::new(
+                                                                RichText::new(name).family(theme::semibold()),
+                                                            ).truncate())
+                                                            .on_hover_text(&path);
+                                                            text.add(egui::Label::new(
+                                                                RichText::new(&path).size(theme::FONT_CAPTION).color(t.muted),
+                                                            ).truncate())
+                                                            .on_hover_text(&path);
+                                                            text.add(egui::Label::new(
+                                                                RichText::new(format!(
+                                                                    "Created {} · Modified {} · {}",
+                                                                    datetime_display(file.candidate.created_ns),
+                                                                    datetime_display(Some(file.candidate.modified_ns)),
+                                                                    size_text(file.candidate.size),
+                                                                )).size(theme::FONT_CAPTION).color(t.muted),
+                                                            ).wrap())
+                                                            .on_hover_text(format!(
+                                                                "Created {} · Modified {} · {}",
+                                                                datetime_display(file.candidate.created_ns),
+                                                                datetime_display(Some(file.candidate.modified_ns)),
+                                                                size_text(file.candidate.size),
+                                                            ));
+                                                        },
+                                                    );
+                                                    row.allocate_ui_with_layout(
+                                                        Vec2::new(action_width, 60.),
+                                                        Layout::right_to_left(Align::Center),
+                                                        |action| {
+                                                            keep_this_copy = theme::row_action(action, "Keep this copy", !busy && !cancelled)
+                                                                .on_hover_text("Keep this file and select the other copies in this group for review.")
+                                                                .clicked();
+                                                        },
+                                                    );
+                                                },
+                                            );
                                         }
+                                        ui.painter().hline(
+                                            row_left..=row_right,
+                                            row_top + 59.,
+                                            egui::Stroke::new(1., t.border),
+                                        );
                                         if keep_this_copy {
                                             for (index, other) in
                                                 group.files.iter_mut().enumerate()
@@ -821,8 +1007,7 @@ impl App {
                                         }
                                     }
                                 });
-                        }
-                    });
+                }
             }
             if report.skipped_count > 0 {
                 egui::CollapsingHeader::new(format!(
@@ -922,6 +1107,7 @@ impl App {
             });
             return;
         }
+        self.duplicate_ui.edit_locations = false;
         let minimum_size = match self.duplicate_ui.minimum_size_text.trim().parse::<u64>() {
             Ok(value) => value,
             Err(_) => {
@@ -1014,6 +1200,49 @@ impl App {
         self.duplicate_ui.cleanup_review = false;
         self.duplicate_ui.acknowledge_all_copies = false;
     }
+}
+
+fn compact_summary_row(
+    ui: &mut egui::Ui,
+    t: Tokens,
+    title: &str,
+    summary: &str,
+    enabled: bool,
+) -> bool {
+    let width = ui.available_width().max(1.);
+    let title_width = 112.;
+    let action_width = 52.;
+    let gap = 8.;
+    let summary_width = (width - title_width - action_width - gap * 2.).max(1.);
+    let mut edit = false;
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, 32.),
+        Layout::left_to_right(Align::Center),
+        |row| {
+            row.set_min_width(width);
+            row.set_max_width(width);
+            row.spacing_mut().item_spacing.x = gap;
+            theme::table_cell(
+                row,
+                RichText::new(title).family(theme::semibold()),
+                title_width,
+                32.,
+            );
+            theme::table_cell(
+                row,
+                RichText::new(summary).color(t.muted),
+                summary_width,
+                32.,
+            )
+            .on_hover_text(summary);
+            row.allocate_ui_with_layout(
+                Vec2::new(action_width, 32.),
+                Layout::right_to_left(Align::Center),
+                |action| edit = theme::row_action(action, "Edit", enabled).clicked(),
+            );
+        },
+    );
+    edit
 }
 
 #[cfg(debug_assertions)]

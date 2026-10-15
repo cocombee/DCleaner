@@ -86,6 +86,69 @@ impl IconCache {
     }
 }
 
+/// Resolve artwork from the executable of an observed browser process. This is
+/// a read-only query performed by the inventory worker, never by the UI thread.
+pub fn browser_icon_sources(
+    processes: &[dcleaner::privacy::RunningBrowser],
+) -> HashMap<dcleaner::privacy::Browser, String> {
+    #[cfg(windows)]
+    {
+        use windows::{
+            Win32::{
+                Foundation::CloseHandle,
+                System::Threading::{
+                    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+                    QueryFullProcessImageNameW,
+                },
+            },
+            core::PWSTR,
+        };
+        let mut resources = HashMap::new();
+        for process in processes {
+            if resources.contains_key(&process.browser) {
+                continue;
+            }
+            let Ok(handle) =
+                (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process.pid) })
+            else {
+                continue;
+            };
+            let mut buffer = vec![0u16; 32_768];
+            let mut length = buffer.len() as u32;
+            let result = unsafe {
+                QueryFullProcessImageNameW(
+                    handle,
+                    PROCESS_NAME_WIN32,
+                    PWSTR(buffer.as_mut_ptr()),
+                    &mut length,
+                )
+            };
+            let _ = unsafe { CloseHandle(handle) };
+            if result.is_err() || length as usize > buffer.len() {
+                continue;
+            }
+            let Ok(path) = String::from_utf16(&buffer[..length as usize]) else {
+                continue;
+            };
+            let path = std::path::PathBuf::from(path);
+            if path.is_absolute()
+                && path.file_name().is_some_and(|name| {
+                    name.to_string_lossy()
+                        .eq_ignore_ascii_case(&process.executable)
+                })
+            {
+                resources.insert(process.browser, path.to_string_lossy().into_owned());
+            }
+        }
+        resources
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = processes;
+        HashMap::new()
+    }
+}
+
 fn resource_locator(raw: &str) -> Option<(std::path::PathBuf, i32)> {
     let raw = raw.trim().strip_prefix('@').unwrap_or(raw.trim());
     let (path, index) = match raw.rsplit_once(',') {

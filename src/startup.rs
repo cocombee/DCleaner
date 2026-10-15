@@ -10,7 +10,8 @@ use std::path::Path;
 use uuid::Uuid;
 
 pub const MAX_ITEMS_PER_SOURCE: usize = 4_096;
-pub const CHANGE_SCHEMA_VERSION: u32 = 1;
+pub const CHANGE_SCHEMA_VERSION: u32 = 2;
+const LEGACY_CHANGE_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -143,6 +144,45 @@ pub struct StartupId(pub String);
 pub enum RegistryHive {
     CurrentUser,
     LocalMachine,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RegistryView {
+    Registry32,
+    Registry64,
+    LegacyUnknown,
+}
+
+impl Default for RegistryView {
+    fn default() -> Self {
+        Self::LegacyUnknown
+    }
+}
+
+impl RegistryView {
+    pub const fn process_default() -> Self {
+        #[cfg(target_pointer_width = "64")]
+        {
+            Self::Registry64
+        }
+        #[cfg(not(target_pointer_width = "64"))]
+        {
+            Self::Registry32
+        }
+    }
+
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::Registry32 => "32",
+            Self::Registry64 => "64",
+            Self::LegacyUnknown => "legacy-unknown",
+        }
+    }
+
+    pub const fn is_known(self) -> bool {
+        matches!(self, Self::Registry32 | Self::Registry64)
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -404,6 +444,10 @@ mod startup_folder_scope_tests {
 pub enum EntryIdentity {
     StartupRunValue {
         hive: RegistryHive,
+        /// The exact WOW64 registry view read by this process. Legacy records omit this field
+        /// and deserialize as LegacyUnknown; they remain identifiable but cannot authorize writes.
+        #[serde(default)]
+        view: RegistryView,
         key: String,
         value_name: String,
         approval_hive: RegistryHive,
@@ -441,18 +485,30 @@ impl EntryIdentity {
         match self {
             Self::StartupRunValue {
                 hive,
+                view,
                 key,
                 value_name,
                 approval_hive,
                 approval_key,
-            } => format!(
-                "run|{}|{}|{}|{}|{}",
-                hive_tag(*hive),
-                key.to_lowercase(),
-                value_name.to_lowercase(),
-                hive_tag(*approval_hive),
-                approval_key.to_lowercase()
-            ),
+            } => match view {
+                RegistryView::LegacyUnknown => format!(
+                    "run|{}|{}|{}|{}|{}",
+                    hive_tag(*hive),
+                    key.to_lowercase(),
+                    value_name.to_lowercase(),
+                    hive_tag(*approval_hive),
+                    approval_key.to_lowercase()
+                ),
+                RegistryView::Registry32 | RegistryView::Registry64 => format!(
+                    "run|{}|{}|{}|{}|{}|{}",
+                    hive_tag(*hive),
+                    view.tag(),
+                    key.to_lowercase(),
+                    value_name.to_lowercase(),
+                    hive_tag(*approval_hive),
+                    approval_key.to_lowercase()
+                ),
+            },
             Self::StartupFolderItem { path } => {
                 format!("folder|{}", path.to_lowercase())
             }
@@ -701,6 +757,7 @@ impl<P: StartupPlatform> StartupManager<P> {
     /// Call only after the caller has durably saved `intent`.
     pub fn apply_intent(&mut self, intent: &ChangeIntent) -> Result<ChangeReceipt, StartupError> {
         validate_intent(intent)?;
+        require_explicit_run_view(&intent.before.identity)?;
         let current = self.platform.observe(&intent.id)?;
         if current == intent.expected_after {
             return Ok(receipt_from_intent(
@@ -761,6 +818,7 @@ impl<P: StartupPlatform> StartupManager<P> {
         before: &ObservedState,
         after: &ObservedState,
     ) -> Result<ChangeReceipt, StartupError> {
+        require_explicit_run_view(&before.identity)?;
         let current = self.platform.observe(id)?;
         if current == *before {
             return Ok(ChangeReceipt {
@@ -797,8 +855,24 @@ impl<P: StartupPlatform> StartupManager<P> {
     }
 }
 
+fn require_explicit_run_view(identity: &EntryIdentity) -> Result<(), StartupError> {
+    if matches!(
+        identity,
+        EntryIdentity::StartupRunValue {
+            view: RegistryView::LegacyUnknown,
+            ..
+        }
+    ) {
+        return Err(StartupError::new(
+            StartupErrorKind::Unsupported,
+            "This saved Run identity predates explicit registry-view tracking. Refresh the inventory before changing it; no native change was made.",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_intent(intent: &ChangeIntent) -> Result<(), StartupError> {
-    if intent.schema_version != CHANGE_SCHEMA_VERSION
+    if !change_schema_is_supported(intent.schema_version, &intent.before.identity)
         || intent.id != intent.before.id
         || intent.id != intent.expected_after.id
         || intent.before.identity != intent.expected_after.identity
@@ -821,7 +895,7 @@ fn validate_intent(intent: &ChangeIntent) -> Result<(), StartupError> {
 }
 
 fn validate_receipt(receipt: &ChangeReceipt) -> Result<(), StartupError> {
-    if receipt.schema_version != CHANGE_SCHEMA_VERSION
+    if !change_schema_is_supported(receipt.schema_version, &receipt.before.identity)
         || receipt.id != receipt.before.id
         || receipt.id != receipt.after.id
         || receipt.before.identity != receipt.after.identity
@@ -857,6 +931,20 @@ fn validate_receipt(receipt: &ChangeReceipt) -> Result<(), StartupError> {
         }
     }
     Ok(())
+}
+
+pub fn change_schema_is_supported(version: u32, identity: &EntryIdentity) -> bool {
+    match version {
+        LEGACY_CHANGE_SCHEMA_VERSION => match identity {
+            EntryIdentity::StartupRunValue { view, .. } => *view == RegistryView::LegacyUnknown,
+            _ => true,
+        },
+        CHANGE_SCHEMA_VERSION => match identity {
+            EntryIdentity::StartupRunValue { view, .. } => view.is_known(),
+            _ => true,
+        },
+        _ => false,
+    }
 }
 
 fn receipt_from_intent(
@@ -1249,9 +1337,9 @@ mod windows_backend {
                 },
                 Registry::{
                     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_READ,
-                    KEY_SET_VALUE, REG_BINARY, REG_EXPAND_SZ, REG_SAM_FLAGS, REG_SZ,
-                    REG_VALUE_TYPE, RegCloseKey, RegDeleteValueW, RegEnumKeyExW, RegEnumValueW,
-                    RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
+                    KEY_SET_VALUE, KEY_WOW64_32KEY, KEY_WOW64_64KEY, REG_BINARY, REG_EXPAND_SZ,
+                    REG_SAM_FLAGS, REG_SZ, REG_VALUE_TYPE, RegCloseKey, RegDeleteValueW,
+                    RegEnumKeyExW, RegEnumValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
                 },
                 Services::{
                     ChangeServiceConfigW, CloseServiceHandle, ENUM_SERVICE_STATUS_PROCESSW,
@@ -1309,6 +1397,7 @@ mod windows_backend {
             let mut entries = Vec::new();
             let mut sources = Vec::new();
             let mut version_metadata_lookups = 0usize;
+            let registry_view = RegistryView::process_default();
             for (hive, run_key) in [
                 (
                     RegistryHive::CurrentUser,
@@ -1336,27 +1425,35 @@ mod windows_backend {
                 };
                 let approval_hive = RegistryHive::CurrentUser;
                 let source = format!("{}\\{}", hive_tag(hive), run_key);
-                match read_registry_values(hive, run_key) {
+                match read_registry_values(hive, run_key, registry_view) {
                     Ok(Some((values, values_truncated))) => {
-                        let approval_key_available =
-                            match registry_key_exists(approval_hive, &approval_key) {
-                                Ok(available) => available,
-                                Err(error) => {
-                                    sources.push(SourceOutcome {
-                                        source: format!(
-                                            "{}\\{}",
-                                            hive_tag(approval_hive),
-                                            approval_key
-                                        ),
-                                        state: registry_source_error(error),
-                                    });
-                                    false
-                                }
-                            };
+                        let approval_key_available = match registry_key_exists_in_view(
+                            approval_hive,
+                            &approval_key,
+                            registry_view,
+                        ) {
+                            Ok(available) => available,
+                            Err(error) => {
+                                sources.push(SourceOutcome {
+                                    source: format!(
+                                        "{}\\{}",
+                                        hive_tag(approval_hive),
+                                        approval_key
+                                    ),
+                                    state: registry_source_error(error),
+                                });
+                                false
+                            }
+                        };
                         let mut count = 0usize;
                         for (name, value) in values.into_iter().take(MAX_ITEMS_PER_SOURCE) {
                             let (approval, enabled, approval_readable) =
-                                match read_registry_value(approval_hive, &approval_key, &name) {
+                                match read_registry_value_in_view(
+                                    approval_hive,
+                                    &approval_key,
+                                    &name,
+                                    registry_view,
+                                ) {
                                     Ok(approval) => {
                                         let enabled = startup_approved_enabled(approval.as_ref());
                                         (approval, enabled, true)
@@ -1384,6 +1481,7 @@ mod windows_backend {
                                 };
                             let identity = EntryIdentity::StartupRunValue {
                                 hive,
+                                view: registry_view,
                                 key: run_key.to_string(),
                                 value_name: name.clone(),
                                 approval_hive,
@@ -1897,11 +1995,18 @@ mod windows_backend {
             match find_identity_by_id(self, id)? {
                 EntryIdentity::StartupRunValue {
                     hive,
+                    view,
                     key,
                     value_name,
                     approval_hive,
                     approval_key,
                 } => {
+                    if !view.is_known() {
+                        return Err(StartupError::new(
+                            StartupErrorKind::Unsupported,
+                            "This saved Run identity predates explicit registry-view tracking. Refresh the inventory before changing it; no native change was made.",
+                        ));
+                    }
                     if hive != RegistryHive::CurrentUser
                         || !key
                             .eq_ignore_ascii_case(r"Software\Microsoft\Windows\CurrentVersion\Run")
@@ -1911,24 +2016,31 @@ mod windows_backend {
                             "Only current-user Run values have a supported reversible toggle.",
                         ));
                     }
-                    let value = read_registry_value(hive, &key, &value_name)?.ok_or_else(|| {
-                        StartupError::new(
-                            StartupErrorKind::UnknownId,
-                            "The selected Run value no longer exists.",
-                        )
-                    })?;
-                    if !registry_key_exists(approval_hive, &approval_key)? {
+                    let value = read_registry_value_in_view(hive, &key, &value_name, view)?
+                        .ok_or_else(|| {
+                            StartupError::new(
+                                StartupErrorKind::UnknownId,
+                                "The selected Run value no longer exists.",
+                            )
+                        })?;
+                    if !registry_key_exists_in_view(approval_hive, &approval_key, view)? {
                         return Err(StartupError::new(
                             StartupErrorKind::Unsupported,
                             "The StartupApproved key is absent; this Run value is inventory-only.",
                         ));
                     }
-                    let approval = read_registry_value(approval_hive, &approval_key, &value_name)?;
+                    let approval = read_registry_value_in_view(
+                        approval_hive,
+                        &approval_key,
+                        &value_name,
+                        view,
+                    )?;
                     let enabled = startup_approved_enabled(approval.as_ref());
                     Ok(ObservedState {
                         id: id.clone(),
                         identity: EntryIdentity::StartupRunValue {
                             hive,
+                            view,
                             key,
                             value_name,
                             approval_hive,
@@ -2014,6 +2126,7 @@ mod windows_backend {
             if let (
                 EntryIdentity::StartupRunValue {
                     hive,
+                    view,
                     key,
                     value_name,
                     approval_hive,
@@ -2026,6 +2139,12 @@ mod windows_backend {
                 },
             ) = (&expected.identity, &expected.native, &desired.native)
             {
+                if !view.is_known() {
+                    return Err(StartupError::new(
+                        StartupErrorKind::Unsupported,
+                        "This saved Run identity predates explicit registry-view tracking. Refresh the inventory before changing it; no native change was made.",
+                    ));
+                }
                 if *hive != RegistryHive::CurrentUser
                     || !key.eq_ignore_ascii_case(r"Software\Microsoft\Windows\CurrentVersion\Run")
                 {
@@ -2037,6 +2156,7 @@ mod windows_backend {
                 write_registry_approval(
                     *approval_hive,
                     *hive,
+                    *view,
                     key,
                     expected,
                     approval_key,
@@ -2850,8 +2970,9 @@ mod windows_backend {
     fn read_registry_values(
         hive: RegistryHive,
         subkey: &str,
+        view: RegistryView,
     ) -> Result<Option<(Vec<(String, RegistryValueSnapshot)>, bool)>, StartupError> {
-        let Some(key) = open_registry_key(hive, subkey, KEY_READ)? else {
+        let Some(key) = open_registry_key_in_view(hive, subkey, KEY_READ, view)? else {
             return Ok(None);
         };
         let mut values = Vec::new();
@@ -2879,7 +3000,7 @@ mod windows_backend {
                 return Err(registry_error("enumerate registry values", code.0));
             }
             let name = String::from_utf16_lossy(&name_buffer[..name_len as usize]);
-            let value = read_registry_value(hive, subkey, &name)?.ok_or_else(|| {
+            let value = read_registry_value_on_handle(key.0, &name)?.ok_or_else(|| {
                 StartupError::new(
                     StartupErrorKind::ChangedSinceReview,
                     "A registry value disappeared during inventory.",
@@ -2958,6 +3079,18 @@ mod windows_backend {
         read_registry_value_on_handle(key.0, value_name)
     }
 
+    fn read_registry_value_in_view(
+        hive: RegistryHive,
+        subkey: &str,
+        value_name: &str,
+        view: RegistryView,
+    ) -> Result<Option<RegistryValueSnapshot>, StartupError> {
+        let Some(key) = open_registry_key_in_view(hive, subkey, KEY_READ, view)? else {
+            return Ok(None);
+        };
+        read_registry_value_on_handle(key.0, value_name)
+    }
+
     fn read_registry_value_on_handle(
         key: HKEY,
         value_name: &str,
@@ -3015,6 +3148,7 @@ mod windows_backend {
     fn write_registry_approval(
         approval_hive: RegistryHive,
         run_hive: RegistryHive,
+        view: RegistryView,
         run_key_path: &str,
         expected: &ObservedState,
         approval_key_path: &str,
@@ -3022,20 +3156,22 @@ mod windows_backend {
         value: Option<&RegistryValueSnapshot>,
     ) -> Result<(), StartupError> {
         let access = REG_SAM_FLAGS(KEY_QUERY_VALUE.0 | KEY_SET_VALUE.0);
-        let run_key =
-            open_registry_key(run_hive, run_key_path, KEY_QUERY_VALUE)?.ok_or_else(|| {
+        let run_key = open_registry_key_in_view(run_hive, run_key_path, KEY_QUERY_VALUE, view)?
+            .ok_or_else(|| {
                 StartupError::new(
                     StartupErrorKind::ChangedSinceReview,
                     "The selected Run key no longer exists.",
                 )
             })?;
-        let approval_key = open_registry_key(approval_hive, approval_key_path, access)?
-            .ok_or_else(|| {
-                StartupError::new(
-                    StartupErrorKind::Inaccessible,
-                    "StartupApproved key is absent; the selected item was not changed.",
-                )
-            })?;
+        let approval_key =
+            open_registry_key_in_view(approval_hive, approval_key_path, access, view)?.ok_or_else(
+                || {
+                    StartupError::new(
+                        StartupErrorKind::Inaccessible,
+                        "StartupApproved key is absent; the selected item was not changed.",
+                    )
+                },
+            )?;
         let (expected_value, expected_approval) = match &expected.native {
             NativeState::StartupRunValue { value, approval } => (value, approval),
             _ => {
@@ -3228,12 +3364,41 @@ mod windows_backend {
         subkey: &str,
         access: REG_SAM_FLAGS,
     ) -> Result<Option<RegistryHandle>, StartupError> {
+        open_registry_key_with_flags(hive, subkey, access, 0)
+    }
+
+    fn open_registry_key_in_view(
+        hive: RegistryHive,
+        subkey: &str,
+        access: REG_SAM_FLAGS,
+        view: RegistryView,
+    ) -> Result<Option<RegistryHandle>, StartupError> {
+        let flags = match view {
+            RegistryView::Registry32 => KEY_WOW64_32KEY.0,
+            RegistryView::Registry64 => KEY_WOW64_64KEY.0,
+            RegistryView::LegacyUnknown => {
+                return Err(StartupError::new(
+                    StartupErrorKind::Unsupported,
+                    "The saved Run identity has no explicit registry view; no native change was made.",
+                ));
+            }
+        };
+        open_registry_key_with_flags(hive, subkey, access, flags)
+    }
+
+    fn open_registry_key_with_flags(
+        hive: RegistryHive,
+        subkey: &str,
+        access: REG_SAM_FLAGS,
+        view_flags: u32,
+    ) -> Result<Option<RegistryHandle>, StartupError> {
         let root = match hive {
             RegistryHive::CurrentUser => HKEY_CURRENT_USER,
             RegistryHive::LocalMachine => HKEY_LOCAL_MACHINE,
         };
         let subkey = wide(subkey);
         let mut opened = HKEY(ptr::null_mut());
+        let access = REG_SAM_FLAGS(access.0 | view_flags);
         let status =
             unsafe { RegOpenKeyExW(root, PCWSTR(subkey.as_ptr()), None, access, &mut opened) };
         if status.0 == ERROR_FILE_NOT_FOUND.0 || status.0 == 3 {
@@ -3253,6 +3418,14 @@ mod windows_backend {
 
     fn registry_key_exists(hive: RegistryHive, subkey: &str) -> Result<bool, StartupError> {
         Ok(open_registry_key(hive, subkey, KEY_READ)?.is_some())
+    }
+
+    fn registry_key_exists_in_view(
+        hive: RegistryHive,
+        subkey: &str,
+        view: RegistryView,
+    ) -> Result<bool, StartupError> {
+        Ok(open_registry_key_in_view(hive, subkey, KEY_READ, view)?.is_some())
     }
 
     struct RegistryHandle(HKEY);
@@ -4235,6 +4408,7 @@ mod native_transition_tests {
     fn run_state() -> ObservedState {
         let identity = EntryIdentity::StartupRunValue {
             hive: RegistryHive::CurrentUser,
+            view: RegistryView::Registry64,
             key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
             value_name: "Sample".into(),
             approval_hive: RegistryHive::CurrentUser,
@@ -4253,6 +4427,64 @@ mod native_transition_tests {
                 approval: None,
             },
         }
+    }
+
+    #[test]
+    fn run_identity_ids_include_view_and_legacy_payloads_remain_unknown() {
+        let old_identity: EntryIdentity = serde_json::from_value(serde_json::json!({
+            "kind": "startup_run_value",
+            "hive": "current_user",
+            "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "value_name": "Legacy",
+            "approval_hive": "current_user",
+            "approval_key": "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run"
+        }))
+        .unwrap();
+        let EntryIdentity::StartupRunValue { view, .. } = &old_identity else {
+            panic!("expected legacy Run identity");
+        };
+        assert_eq!(*view, RegistryView::LegacyUnknown);
+        assert!(change_schema_is_supported(
+            LEGACY_CHANGE_SCHEMA_VERSION,
+            &old_identity
+        ));
+        assert!(!change_schema_is_supported(
+            CHANGE_SCHEMA_VERSION,
+            &old_identity
+        ));
+
+        let EntryIdentity::StartupRunValue {
+            hive,
+            key,
+            value_name,
+            approval_hive,
+            approval_key,
+            ..
+        } = &old_identity
+        else {
+            unreachable!();
+        };
+        let for_view = |view| EntryIdentity::StartupRunValue {
+            hive: *hive,
+            view,
+            key: key.clone(),
+            value_name: value_name.clone(),
+            approval_hive: *approval_hive,
+            approval_key: approval_key.clone(),
+        };
+        let legacy_id = StartupId::for_identity(&old_identity);
+        assert_ne!(
+            legacy_id,
+            StartupId::for_identity(&for_view(RegistryView::Registry32))
+        );
+        assert_ne!(
+            legacy_id,
+            StartupId::for_identity(&for_view(RegistryView::Registry64))
+        );
+        assert_ne!(
+            StartupId::for_identity(&for_view(RegistryView::Registry32)),
+            StartupId::for_identity(&for_view(RegistryView::Registry64))
+        );
     }
 
     fn folder_state() -> ObservedState {

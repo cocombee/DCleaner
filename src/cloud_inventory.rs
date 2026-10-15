@@ -661,6 +661,19 @@ pub struct Snapshot {
 
 impl Snapshot {
     #[cfg(debug_assertions)]
+    pub fn visual_preview_partial_fixture(scope: AccountScope) -> Self {
+        let mut snapshot = Self::visual_preview_fixture(scope);
+        for kind in [
+            InventoryIssueKind::ScanDeadlineReached,
+            InventoryIssueKind::PageLimitReached,
+            InventoryIssueKind::RowLimitReached,
+            InventoryIssueKind::RetainedByteLimitReached,
+        ] {
+            record_partial(&mut snapshot, kind);
+        }
+        snapshot
+    }
+    #[cfg(debug_assertions)]
     pub fn visual_preview_fixture(scope: AccountScope) -> Self {
         let scan_id = Uuid::from_u128(0x4443_434c_4f55_4400_0000_0000_0000_0003);
         Self {

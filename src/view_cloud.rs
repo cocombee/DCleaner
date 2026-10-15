@@ -21,6 +21,8 @@ pub(super) struct CloudUi {
     query: String,
     sort: CloudSort,
     descending: bool,
+    shown_count: Option<usize>,
+    more_open_for: Option<ScanItemId>,
     history_before: Option<Uuid>,
     history_back: Vec<Option<Uuid>>,
     older_days: u32,
@@ -56,6 +58,26 @@ impl CloudFilter {
             Self::History => "Cleanup history",
         }
     }
+    fn help(self) -> &'static str {
+        match self {
+            Self::All => {
+                "Choose individual items after review. Folders and shortcuts cannot be moved to trash here."
+            }
+            Self::Large => {
+                "Items are at least 100 MB. Estimates may not equal quota reclaimed after trashing."
+            }
+            Self::Duplicates => {
+                "Provider hashes suggest possible duplicates; content equality is not verified."
+            }
+            Self::Older => "Age comes from provider metadata and may not reflect last use.",
+            Self::Ignored => {
+                "Ignored items remain in the scan and are excluded only from this results view."
+            }
+            Self::History => {
+                "History shows local operation receipts; uncertain outcomes are never retried automatically."
+            }
+        }
+    }
 }
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum CloudSort {
@@ -63,16 +85,6 @@ enum CloudSort {
     Name,
     Size,
     Date,
-}
-impl CloudSort {
-    const ALL: [Self; 3] = [Self::Name, Self::Size, Self::Date];
-    fn label(self) -> &'static str {
-        match self {
-            Self::Name => "Name",
-            Self::Size => "Size",
-            Self::Date => "Provider date",
-        }
-    }
 }
 const MAX_HISTORY_BACK_PAGES: usize = 500;
 enum CloudDialog {
@@ -110,7 +122,89 @@ pub(super) enum CloudEvent {
 impl App {
     #[cfg(debug_assertions)]
     pub(super) fn qa_cloud_state(&self) -> serde_json::Value {
-        serde_json::json!({"introduced":self.cloud_ui.introduced,"history":self.cloud_ui.filter == CloudFilter::History})
+        let dialog = match self.cloud_ui.dialog.as_ref() {
+            Some(CloudDialog::Details(_)) => "details",
+            Some(CloudDialog::Trash { .. }) => "trash-review",
+            Some(CloudDialog::Disconnect(_)) => "disconnect-review",
+            Some(CloudDialog::Restore(_)) => "restore-review",
+            None => "closed",
+        };
+        let has_rows =
+            self.cloud_ui.snapshot.is_some() && self.cloud_ui.shown_count.unwrap_or(0) > 0;
+        serde_json::json!({
+            "introduced": self.cloud_ui.introduced,
+            "history": self.cloud_ui.filter == CloudFilter::History,
+            "filter": self.cloud_ui.filter.label(),
+            "sort": cloud_sort_label(self.cloud_ui.sort),
+            "descending": self.cloud_ui.descending,
+            "shown": self.cloud_ui.shown_count,
+            "selected": self.cloud_ui.selected.len(),
+            "row_actions": if has_rows { vec!["Review", "More options"] } else { Vec::<&str>::new() },
+            "more_open": self.cloud_ui.more_open_for.is_some(),
+            "dialog": dialog,
+        })
+    }
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_cloud_precondition(&self, action: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Cloud visual actions require isolated fixture mode.".into());
+        }
+        let has_account = self.cloud_ui.account.is_some();
+        let has_rows =
+            self.cloud_ui.snapshot.is_some() && self.cloud_ui.shown_count.unwrap_or(0) > 0;
+        match action {
+            "All items" | "Large files" | "Possible duplicates" | "Older items" | "Ignored"
+                if has_account =>
+            {
+                Ok(())
+            }
+            "Sort Name" | "Sort Size" | "Sort Provider date" if has_rows => Ok(()),
+            "Review" | "More options" if has_rows && self.cloud_ui.dialog.is_none() => Ok(()),
+            "Clear selection" | "Review 1 item"
+                if has_rows
+                    && self.cloud_ui.selected.len() == 1
+                    && self.cloud_ui.dialog.is_none() =>
+            {
+                Ok(())
+            }
+            "Keep items" if matches!(self.cloud_ui.dialog, Some(CloudDialog::Trash { .. })) => {
+                Ok(())
+            }
+            "Details" if has_rows && self.cloud_ui.dialog.is_none() => Ok(()),
+            "Close" | "Escape" if matches!(self.cloud_ui.dialog, Some(CloudDialog::Details(_))) => {
+                Ok(())
+            }
+            _ => Err(format!(
+                "Cloud action is not available in the current safe fixture state: {action}"
+            )),
+        }
+    }
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_cloud_action_state(&self, action: &str) -> Result<serde_json::Value, String> {
+        if !self.qa_fixture_mode() {
+            return Err("Cloud visual actions require isolated fixture mode.".into());
+        }
+        let state = self.qa_cloud_state();
+        let valid = match action {
+            "All items" | "Large files" | "Possible duplicates" | "Older items" | "Ignored" => {
+                state["filter"] == action
+            }
+            "Sort Name" => state["sort"] == "Name",
+            "Sort Size" => state["sort"] == "Size",
+            "Sort Provider date" => state["sort"] == "Provider date",
+            "Review" | "Details" => state["dialog"] == "details",
+            "Review 1 item" => state["dialog"] == "trash-review",
+            "Clear selection" => state["selected"] == 0,
+            "More options" => state["more_open"] == true,
+            "Close" | "Escape" | "Keep items" => state["dialog"] == "closed",
+            _ => false,
+        };
+        if !valid {
+            return Err(format!(
+                "Cloud action did not reach its expected safe state: {action}"
+            ));
+        }
+        Ok(serde_json::json!({"action": action, "state": state}))
     }
     #[cfg(debug_assertions)]
     pub(super) fn seed_cloud_qa(&mut self, case: &str) {
@@ -129,7 +223,7 @@ impl App {
             }),
             ..Default::default()
         };
-        if case == "cloud-selected" {
+        if matches!(case, "cloud-selected" | "cloud-partial") {
             let scope = dcleaner::cloud_inventory::AccountScope::new(
                 Provider::GoogleDrive,
                 "fixture-subject",
@@ -137,7 +231,11 @@ impl App {
             )
             .expect("valid synthetic scope");
             let account = AccountRecord::visual_preview_fixture(scope.clone());
-            let snapshot = Snapshot::visual_preview_fixture(scope);
+            let snapshot = if case == "cloud-partial" {
+                Snapshot::visual_preview_partial_fixture(scope)
+            } else {
+                Snapshot::visual_preview_fixture(scope)
+            };
             self.cloud_ui.introduced = true;
             self.cloud_ui.account = Some(account.id());
             self.cloud_ui.selected = snapshot.items().iter().map(RemoteItem::id).collect();
@@ -148,9 +246,7 @@ impl App {
                 .unwrap()
                 .accounts
                 .push(account);
-            self.notice = Some(
-                "Synthetic cloud preview; no account was connected or provider contacted.".into(),
-            );
+            self.notice = None;
         }
     }
     fn begin_cloud_job(
@@ -330,6 +426,8 @@ impl App {
     fn clear_cloud_results(&mut self) {
         self.cloud_ui.snapshot = None;
         self.cloud_ui.selected.clear();
+        self.cloud_ui.shown_count = None;
+        self.cloud_ui.more_open_for = None;
         self.cloud_ui.ignored.clear();
     }
     fn cloud_account(&self) -> Option<AccountRecord> {
@@ -363,6 +461,7 @@ impl App {
         );
     }
     pub(super) fn cloud_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        let compact_layout = ui.available_width() < 760.;
         if self.cloud_ui.older_days == 0 {
             self.cloud_ui.older_days = 365;
         }
@@ -388,7 +487,7 @@ impl App {
                     self.cancel.store(true, Ordering::Relaxed);
                 }
             });
-            ui.add_space(20.);
+            ui.add_space(if compact_layout { 6. } else { 20. });
         }
         if self.cloud_ui.workspace.is_none() {
             theme::muted(
@@ -510,7 +609,7 @@ impl App {
             if old != self.cloud_ui.account {
                 self.clear_cloud_results();
             }
-            ui.add_space(20.);
+            ui.add_space(if compact_layout { 6. } else { 20. });
         }
         if self.cloud_ui.account.is_none() {
             ui.horizontal(|ui| {
@@ -537,14 +636,19 @@ impl App {
             self.cloud_providers(ui, t, ctx);
             return;
         }
+        let previous_filter = self.cloud_ui.filter;
         theme::tabs(ui, |ui| {
             ui.add_enabled_ui(!busy, |ui| {
                 for filter in CloudFilter::ALL {
-                    theme::tab_value(ui, &mut self.cloud_ui.filter, filter, filter.label());
+                    theme::tab_value(ui, &mut self.cloud_ui.filter, filter, filter.label())
+                        .on_hover_text(filter.help());
                 }
             });
         });
-        ui.add_space(20.);
+        if self.cloud_ui.filter != previous_filter {
+            self.cloud_ui.more_open_for = None;
+        }
+        ui.add_space(if compact_layout { 6. } else { 20. });
         if self.cloud_ui.filter == CloudFilter::History {
             self.cloud_history(ui, t, ctx);
             return;
@@ -688,15 +792,12 @@ impl App {
     ) {
         let busy = self.busy();
         let storage_available = self.cloud_storage_available();
-        ui.horizontal_wrapped(|ui| {
-            ui.label(format!(
-                "{} · {:?}",
-                theme::counted_label(snapshot.items().len(), "item", "items"),
-                snapshot.status()
-            ));
-        });
-        let sort_choices: Vec<&str> = CloudSort::ALL.iter().map(|sort| sort.label()).collect();
-        let search_width = theme::search_width(ui, &sort_choices);
+        let compact_layout = ui.available_width() < 760.;
+        let has_query = !self.cloud_ui.query.is_empty();
+        let older_filter = self.cloud_ui.filter == CloudFilter::Older;
+        let reserved =
+            52. + if has_query { 68. } else { 0. } + if older_filter { 148. } else { 0. };
+        let search_width = (ui.available_width() - reserved).clamp(150., 480.);
         theme::control_row(ui, |ui| {
             ui.label(RichText::new("Search").color(t.muted));
             theme::input(
@@ -706,27 +807,11 @@ impl App {
                 "Files or messages",
                 !busy,
             );
-            ui.add_space(8.);
-            ui.label(RichText::new("Sort by").color(t.muted));
-            theme::selector(
-                ui,
-                "cloud-sort",
-                self.cloud_ui.sort.label(),
-                &sort_choices,
-                |ui| {
-                    for sort in CloudSort::ALL {
-                        ui.selectable_value(&mut self.cloud_ui.sort, sort, sort.label());
-                    }
-                },
-            );
-            ui.add_space(8.);
-            theme::checkbox(ui, &mut self.cloud_ui.descending, "Descending", !busy);
-            if !self.cloud_ui.query.is_empty() && theme::field_action(ui, "Clear", !busy) {
+            if has_query && theme::field_action(ui, "Clear", !busy) {
                 self.cloud_ui.query.clear();
             }
-            if self.cloud_ui.filter == CloudFilter::Older {
-                ui.add_space(8.);
-                ui.label(RichText::new("Older than days").color(t.muted));
+            if older_filter {
+                ui.label(RichText::new("Days").color(t.muted));
                 ui.add_enabled_ui(!busy, |ui| {
                     ui.add_sized(
                         Vec2::new(92., 32.),
@@ -735,45 +820,28 @@ impl App {
                 });
             }
         });
-        ui.add_space(12.);
+        ui.add_space(if compact_layout { 5. } else { 12. });
         if !snapshot.is_complete() {
             theme::muted(
                 ui,
                 "This scan is incomplete. Only returned items are shown; omissions and provider limits may affect duplicate groups. Review issues before selecting cleanup.",
                 t,
             );
-            for issue in snapshot.issues() {
-                theme::muted(
-                    ui,
-                    &format!("{:?} ×{}", issue.kind(), issue.occurrences()),
-                    t,
-                );
-            }
+            egui::CollapsingHeader::new(format!("Scan issues ({})", snapshot.issues().len()))
+                .id_salt("cloud-partial-scan-issues")
+                .default_open(false)
+                .show(ui, |ui| {
+                    for issue in snapshot.issues() {
+                        theme::muted(
+                            ui,
+                            &format!("{:?} ×{}", issue.kind(), issue.occurrences()),
+                            t,
+                        );
+                    }
+                });
             ui.add_space(12.);
         }
-        match self.cloud_ui.filter {
-            CloudFilter::Duplicates => theme::muted(
-                ui,
-                "Matching provider hashes identify possible duplicates; content equality and safe removal are not verified. Keep the copies you need.",
-                t,
-            ),
-            CloudFilter::Older => theme::muted(
-                ui,
-                "Age is based on provider metadata, not last use. Gmail uses its internal date, which can be set from imported message headers.",
-                t,
-            ),
-            CloudFilter::Large => theme::muted(
-                ui,
-                "Items at least 100 MB. Provider sizes and Gmail estimates are labeled separately; trashing may not immediately release quota.",
-                t,
-            ),
-            _ => theme::muted(
-                ui,
-                "Choose individual items after review. Folders and shortcuts require separate descendant or target review and cannot be trashed here.",
-                t,
-            ),
-        }
-        ui.add_space(16.);
+        ui.add_space(if compact_layout { 4. } else { 12. });
         let query = self.cloud_ui.query.trim().to_lowercase();
         let duplicate_ids: HashSet<_> = snapshot
             .possible_duplicate_groups()
@@ -827,61 +895,158 @@ impl App {
                 order
             }
         });
-        ui.horizontal(|ui| {
-            theme::muted(
-                ui,
-                &format!(
-                    "{} shown · {} selected",
-                    rows.len(),
-                    self.cloud_ui.selected.len()
-                ),
-                t,
-            );
-            if theme::row_action(
-                ui,
-                "Clear selection",
-                !busy && !self.cloud_ui.selected.is_empty(),
-            )
-            .clicked()
-            {
-                self.cloud_ui.selected.clear();
-            }
-        });
-        ui.add_space(8.);
-        let width = ui.available_width().max(780.);
-        let name_width = (width - 484.).max(220.);
-        egui::ScrollArea::horizontal().id_salt("cloud-table-x").show(ui,|ui|{
-            ui.set_min_width(width);ui.spacing_mut().item_spacing.x=8.;
-            ui.horizontal(|ui|{
-                theme::table_cell(ui,"",28.,32.);
-                for (sort,label,w) in [(CloudSort::Name,"Name",name_width),(CloudSort::Size,"Size",108.),(CloudSort::Date,"Provider date",150.)]{
-                    ui.allocate_ui_with_layout(Vec2::new(w,32.),Layout::left_to_right(Align::Center),|ui|{if ui.selectable_label(self.cloud_ui.sort==sort,label).clicked(){if self.cloud_ui.sort==sort{self.cloud_ui.descending=!self.cloud_ui.descending;}else{self.cloud_ui.sort=sort;self.cloud_ui.descending=false;}}});
+        if self
+            .cloud_ui
+            .more_open_for
+            .is_some_and(|open| !rows.iter().any(|item| item.id() == open))
+        {
+            self.cloud_ui.more_open_for = None;
+        }
+        self.cloud_ui.shown_count = Some(rows.len());
+        ui.add_space(if compact_layout { 2. } else { 8. });
+        // The parent page can reserve a vertical scrollbar. Keep the table
+        // inside that actual content width instead of forcing a wider grid.
+        let width = ui.available_width().max(1.);
+        let checkbox_width = 28.;
+        let size_width = if compact_layout { 84. } else { 108. };
+        let date_width = if compact_layout { 104. } else { 150. };
+        let action_width = if compact_layout { 100. } else { 138. };
+        let visible_gaps = 4.;
+        let name_width =
+            (width - checkbox_width - size_width - date_width - action_width - 8. * visible_gaps)
+                .max(1.);
+        ui.scope(|ui| {
+            ui.set_min_width(width);
+            ui.set_max_width(width);
+            ui.spacing_mut().item_spacing.x = 8.;
+            ui.horizontal(|ui| {
+                theme::table_cell(ui,"",checkbox_width,32.);
+                let columns = [
+                    (CloudSort::Name, "Name", name_width),
+                    (CloudSort::Size, "Size", size_width),
+                    (CloudSort::Date, "Provider date", date_width),
+                ];
+                for (sort, label, column_width) in columns {
+                    let accessible_label = format!("Sort {label}");
+                    let response = cloud_sort_header(
+                        ui,
+                        label,
+                        &accessible_label,
+                        column_width,
+                        self.cloud_ui.sort == sort,
+                        self.cloud_ui.descending,
+                        t,
+                    );
+                    if response.clicked() {
+                        if self.cloud_ui.sort == sort {
+                            self.cloud_ui.descending = !self.cloud_ui.descending;
+                        } else {
+                            self.cloud_ui.sort = sort;
+                            self.cloud_ui.descending = false;
+                        }
+                    }
                 }
-                theme::table_cell(ui,"Actions",138.,32.);
-            });ui.separator();
-            egui::ScrollArea::vertical().id_salt("cloud-table-y").max_height(410.).show_rows(ui,48.,rows.len(),|ui,range|{
-                for index in range{let item=rows[index];ui.push_id(item.id(),|ui|{
-                    ui.horizontal(|ui|{
-                        ui.allocate_ui_with_layout(Vec2::new(28.,44.),Layout::left_to_right(Align::Center),|ui|{let mut selected=self.cloud_ui.selected.contains(&item.id());let eligible=matches!(item.kind(),RemoteItemKind::File|RemoteItemKind::Mail)&&self.cloud_ui.filter!=CloudFilter::Ignored;if theme::checkbox_widget(ui,&mut selected,!busy&&eligible).changed(){if selected{self.cloud_ui.selected.insert(item.id());}else{self.cloud_ui.selected.remove(&item.id());}}});
-                        theme::table_cell(ui,RichText::new(item.display_name()).family(theme::semibold()),name_width,44.).on_hover_text(item.display_name());
-                        theme::table_cell(ui,cloud_size(item),108.,44.).on_hover_text("Size is provider-reported. Gmail and other estimates are marked ≈; — means unknown.");
-                        let date=item.provider_timestamp().and_then(|d|chrono::DateTime::from_timestamp_millis(d.unix_millis())).map(|d|d.format("%d %b %Y").to_string()).unwrap_or_else(||"—".into());
-                        theme::table_cell(ui,date,150.,44.);
-                        ui.allocate_ui_with_layout(Vec2::new(138.,44.),Layout::left_to_right(Align::Center),|ui|{
-                            if theme::row_action(ui,"Review",!busy).clicked(){self.cloud_ui.dialog=Some(CloudDialog::Details(item.clone()));}
-                            let more=theme::row_more(ui,!busy);
-                            egui::Popup::menu(&more).show(|ui|{
-                                if ui.add_enabled(!busy,egui::Button::new("Details")).clicked(){self.cloud_ui.dialog=Some(CloudDialog::Details(item.clone()));ui.close();}
-                                if self.cloud_ui.filter==CloudFilter::Ignored{if ui.add_enabled(!busy,egui::Button::new("Include in results")).clicked(){self.cloud_ui.ignored.remove(&item.id());ui.close();}}
-                                else{if ui.add_enabled(!busy,egui::Button::new("Ignore for this scan")).clicked(){self.cloud_ui.ignored.insert(item.id());self.cloud_ui.selected.remove(&item.id());ui.close();}if ui.add_enabled(!busy&&storage_available&&matches!(item.kind(),RemoteItemKind::File|RemoteItemKind::Mail),egui::Button::new("Move to trash…")).clicked(){self.cloud_ui.dialog=Some(CloudDialog::Trash{ids:vec![item.id()],partial:false,copies:false,race:false});ui.close();}}
+                theme::table_cell(ui,"Actions",action_width,32.);
+            });
+            ui.separator();
+            egui::ScrollArea::vertical()
+                .id_salt("cloud-table-y")
+                .max_height(410.)
+                .show_rows(ui, 44., rows.len(), |ui, range| {
+                    ui.spacing_mut().item_spacing.y = 0.;
+                    for index in range {
+                        let item = rows[index];
+                        let row_top = ui.cursor().top();
+                        let row_left = ui.min_rect().left();
+                        let row_right = ui.min_rect().right();
+                        ui.push_id(item.id(), |ui| {
+                            ui.horizontal(|ui| {
+                                ui.allocate_ui_with_layout(
+                                    Vec2::new(checkbox_width, 44.),
+                                    Layout::left_to_right(Align::Center),
+                                    |ui| {
+                                        let mut selected = self.cloud_ui.selected.contains(&item.id());
+                                        let eligible = matches!(item.kind(), RemoteItemKind::File | RemoteItemKind::Mail)
+                                            && self.cloud_ui.filter != CloudFilter::Ignored;
+                                        if theme::checkbox_widget(ui, &mut selected, !busy && eligible).changed() {
+                                            if selected { self.cloud_ui.selected.insert(item.id()); }
+                                            else { self.cloud_ui.selected.remove(&item.id()); }
+                                        }
+                                    },
+                                );
+                                theme::table_cell(
+                                    ui,
+                                    RichText::new(item.display_name()).family(theme::semibold()),
+                                    name_width,
+                                    44.,
+                                ).on_hover_text(item.display_name());
+                                theme::table_cell(ui, cloud_size(item), size_width, 44.)
+                                    .on_hover_text("Size is provider-reported. Gmail and other estimates are marked ≈; — means unknown.");
+                                let date = item.provider_timestamp()
+                                    .and_then(|d| chrono::DateTime::from_timestamp_millis(d.unix_millis()))
+                                    .map(|d| d.format("%d %b %Y").to_string())
+                                    .unwrap_or_else(|| "—".into());
+                                theme::table_cell(ui, date, date_width, 44.);
+                                ui.allocate_ui_with_layout(
+                                    Vec2::new(action_width, 44.),
+                                    Layout::left_to_right(Align::Center),
+                                    |ui| {
+                                        if theme::row_action(ui, "Review", !busy).clicked() {
+                                            self.cloud_ui.dialog = Some(CloudDialog::Details(item.clone()));
+                                        }
+                                        let more = theme::row_more(ui, !busy);
+                                        let popup = egui::Popup::menu(&more);
+                                        let popup_id = popup.get_id();
+                                        let popup_ctx = popup.ctx().clone();
+                                        popup.show(|ui| {
+                                            let details = ui.add_enabled(!busy, egui::Button::new("Details"));
+                                            #[cfg(debug_assertions)]
+                                            theme::record_fixture_control(ui, "Details", &details);
+                                            if details.clicked() {
+                                                self.cloud_ui.dialog = Some(CloudDialog::Details(item.clone()));
+                                                ui.close();
+                                            }
+                                            if self.cloud_ui.filter == CloudFilter::Ignored {
+                                                if ui.add_enabled(!busy, egui::Button::new("Include in results")).clicked() {
+                                                    self.cloud_ui.ignored.remove(&item.id());
+                                                    ui.close();
+                                                }
+                                            } else {
+                                                if ui.add_enabled(!busy, egui::Button::new("Ignore for this scan")).clicked() {
+                                                    self.cloud_ui.ignored.insert(item.id());
+                                                    self.cloud_ui.selected.remove(&item.id());
+                                                    ui.close();
+                                                }
+                                                if ui.add_enabled(
+                                                    !busy && storage_available && matches!(item.kind(), RemoteItemKind::File | RemoteItemKind::Mail),
+                                                    egui::Button::new("Move to trash…"),
+                                                ).clicked() {
+                                                    self.cloud_ui.dialog = Some(CloudDialog::Trash { ids: vec![item.id()], partial: false, copies: false, race: false });
+                                                    ui.close();
+                                                }
+                                            }
+                                        });
+                                        let popup_open = egui::Popup::is_id_open(&popup_ctx, popup_id);
+                                        if popup_open {
+                                            self.cloud_ui.more_open_for = Some(item.id());
+                                        } else if self.cloud_ui.more_open_for == Some(item.id()) {
+                                            self.cloud_ui.more_open_for = None;
+                                        }
+                                    },
+                                );
                             });
                         });
-                    });ui.separator();
-                });}
+                        ui.painter().hline(
+                            row_left..=row_right,
+                            row_top + 43.,
+                            egui::Stroke::new(1., t.border),
+                        );
+                    }
             });
         });
         if rows.is_empty() {
             ui.add_space(24.);
+            theme::muted(ui, self.cloud_ui.filter.help(), t);
             theme::muted(
                 ui,
                 "No items match this view. Change the filter or scan again.",
@@ -995,59 +1160,71 @@ impl App {
         let busy = self.busy();
         let storage_available = self.cloud_storage_available();
         let compact = ui.available_width() < 760.;
-        ui.with_layout(
-            Layout::right_to_left(Align::Center).with_main_wrap(true),
-            |ui| {
-                if self.cloud_ui.filter == CloudFilter::History {
-                    if theme::secondary(ui, "Refresh history", !busy) {
-                        self.cloud_ui.reload = true;
-                    }
-                    return;
-                }
-                if self.cloud_ui.account.is_some() {
-                    let selected = self.cloud_ui.selected.len();
-                    let label = if selected == 0 {
-                        "Review selected".into()
+        ui.horizontal(|ui| {
+            if self.cloud_ui.account.is_some() && self.cloud_ui.filter != CloudFilter::History {
+                if theme::secondary(
+                    ui,
+                    if self.cloud_ui.snapshot.is_some() {
+                        "Scan again"
                     } else {
-                        format!("Review {}", theme::counted_label(selected, "item", "items"))
-                    };
-                    if theme::primary(
-                        ui,
-                        &label,
-                        t,
-                        !busy && storage_available && !self.cloud_ui.selected.is_empty(),
-                    )
-                    .then_some(())
-                    .is_some()
-                    {
-                        self.cloud_ui.dialog = Some(CloudDialog::Trash {
-                            ids: self.cloud_ui.selected.iter().copied().collect(),
-                            partial: false,
-                            copies: false,
-                            race: false,
-                        });
-                    }
-                    theme::muted(ui, &format!("{selected} selected"), t);
-                    if theme::secondary(
-                        ui,
-                        if self.cloud_ui.snapshot.is_some() {
-                            "Scan again"
-                        } else {
-                            "Scan files"
-                        },
-                        !busy && storage_available,
-                    ) {
-                        self.begin_cloud_scan(ctx);
-                    }
-                } else if !self.cloud_ui.introduced && compact {
-                    if theme::primary(ui, "Get started", t, !busy) {
-                        self.cloud_ui.introduced = true;
-                    }
-                } else {
-                    theme::muted(ui, "Choose a provider to connect", t);
+                        "Scan files"
+                    },
+                    !busy && storage_available,
+                ) {
+                    self.begin_cloud_scan(ctx);
                 }
-            },
-        );
+            }
+            ui.with_layout(
+                Layout::right_to_left(Align::Center).with_main_wrap(true),
+                |ui| {
+                    if self.cloud_ui.filter == CloudFilter::History {
+                        if theme::secondary(ui, "Refresh history", !busy) {
+                            self.cloud_ui.reload = true;
+                        }
+                        return;
+                    }
+                    if self.cloud_ui.account.is_some() {
+                        let selected = self.cloud_ui.selected.len();
+                        let count = self
+                            .cloud_ui
+                            .shown_count
+                            .map(|shown| format!("{shown} shown · {selected} selected"))
+                            .unwrap_or_else(|| format!("{selected} selected"));
+                        let label = if selected == 0 {
+                            "Review selected".into()
+                        } else {
+                            format!("Review {}", theme::counted_label(selected, "item", "items"))
+                        };
+                        if theme::primary(
+                            ui,
+                            &label,
+                            t,
+                            !busy && storage_available && !self.cloud_ui.selected.is_empty(),
+                        )
+                        .then_some(())
+                        .is_some()
+                        {
+                            self.cloud_ui.dialog = Some(CloudDialog::Trash {
+                                ids: self.cloud_ui.selected.iter().copied().collect(),
+                                partial: false,
+                                copies: false,
+                                race: false,
+                            });
+                        }
+                        theme::muted(ui, &count, t);
+                        if selected > 0 && theme::secondary(ui, "Clear selection", !busy) {
+                            self.cloud_ui.selected.clear();
+                        }
+                    } else if !self.cloud_ui.introduced && compact {
+                        if theme::primary(ui, "Get started", t, !busy) {
+                            self.cloud_ui.introduced = true;
+                        }
+                    } else {
+                        theme::muted(ui, "Choose a provider to connect", t);
+                    }
+                },
+            );
+        });
     }
     pub(super) fn cloud_dialog(&mut self, ctx: &egui::Context) {
         let t = theme::tokens(self.prefs.dark);
@@ -1214,6 +1391,50 @@ enum CloudCommand {
     Trash(Vec<ScanItemId>, bool, bool, bool),
     Restore(OperationRecord),
 }
+fn cloud_sort_header(
+    ui: &mut egui::Ui,
+    label: &str,
+    accessible_label: &str,
+    width: f32,
+    selected: bool,
+    descending: bool,
+    t: Tokens,
+) -> egui::Response {
+    let shown = if selected {
+        format!("{label} {}", if descending { "↓" } else { "↑" })
+    } else {
+        label.to_owned()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 32.), egui::Sense::click());
+    let color = if selected || response.hovered() {
+        t.foreground
+    } else {
+        t.muted
+    };
+    ui.painter().text(
+        rect.left_center(),
+        egui::Align2::LEFT_CENTER,
+        shown,
+        egui::FontId::new(theme::FONT_CAPTION, theme::semibold()),
+        color,
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, accessible_label)
+    });
+    #[cfg(debug_assertions)]
+    theme::record_fixture_control(ui, accessible_label, &response);
+    response.on_hover_text(format!("{accessible_label} by {label}"))
+}
+
+#[cfg(any(test, debug_assertions))]
+fn cloud_sort_label(sort: CloudSort) -> &'static str {
+    match sort {
+        CloudSort::Name => "Name",
+        CloudSort::Size => "Size",
+        CloudSort::Date => "Provider date",
+    }
+}
+
 fn cloud_size(item: &RemoteItem) -> String {
     item.size()
         .map(|s| {

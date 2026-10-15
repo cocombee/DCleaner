@@ -40,5 +40,6 @@ pub mod recycle_bin;
 pub mod scanner;
 pub mod software;
 pub mod startup;
+pub mod startup_removal;
 pub mod store;
 pub mod support;

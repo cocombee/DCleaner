@@ -44,6 +44,8 @@ mod view_privacy;
 mod view_programs;
 #[path = "view_recycle_bin.rs"]
 mod view_recycle_bin;
+#[path = "view_settings.rs"]
+mod view_settings;
 #[path = "view_software.rs"]
 mod view_software;
 #[path = "view_startup.rs"]
@@ -65,6 +67,21 @@ enum Page {
     Settings,
     Help,
 }
+fn navigation_pages(prefs: &Preferences) -> Vec<Page> {
+    let mut pages = PAGES.to_vec();
+    if prefs.menu_pin_landing_page {
+        let landing = match prefs.landing_page {
+            dcleaner::domain::LandingPage::HealthCheck => Page::Overview,
+            dcleaner::domain::LandingPage::CustomClean => Page::Clean,
+        };
+        if let Some(index) = pages.iter().position(|page| *page == landing) {
+            pages.remove(index);
+            pages.insert(0, landing);
+        }
+    }
+    pages
+}
+
 impl Page {
     fn icon(self) -> theme::Icon {
         match self {
@@ -136,6 +153,7 @@ const PAGES: [Page; 13] = [
     Page::Help,
 ];
 enum Event {
+    Settings(view_settings::SettingsEvent),
     Cloud(view_cloud::CloudEvent),
     CleanSettings(view_clean_settings::CleanSettingsEvent),
     ConfiguredScanned(Result<custom_clean::CustomCleanReport, String>),
@@ -168,6 +186,7 @@ pub struct App {
     logo_texture: Option<egui::TextureHandle>,
     cloud_ui: view_cloud::CloudUi,
     clean_settings_ui: view_clean_settings::CleanSettingsUi,
+    settings_ui: view_settings::SettingsUi,
     custom_analysis: Option<custom_clean::CustomCleanReport>,
     custom_partial_acknowledged: bool,
     health_ui: view_health::HealthUi,
@@ -300,11 +319,25 @@ impl App {
             let mut prefs = prefs;
             if qa_mode {
                 prefs.dark = std::env::var("DCLEANER_QA_THEME").as_deref() != Ok("light");
+                prefs.appearance = Some(if prefs.dark {
+                    dcleaner::domain::AppearanceMode::Dark
+                } else {
+                    dcleaner::domain::AppearanceMode::Light
+                });
             }
             prefs
         };
+        let mut prefs = prefs;
+        prefs.dark = prefs.effective_dark(
+            context
+                .system_theme()
+                .map(|theme| theme == egui::Theme::Dark),
+        );
         theme::apply(context, prefs.dark);
-        let initial_page = Page::Overview;
+        let initial_page = match prefs.landing_page {
+            dcleaner::domain::LandingPage::HealthCheck => Page::Overview,
+            dcleaner::domain::LandingPage::CustomClean => Page::Clean,
+        };
         #[cfg(debug_assertions)]
         let initial_page = if qa_mode {
             match std::env::var("DCLEANER_QA_PAGE").as_deref() {
@@ -347,6 +380,7 @@ impl App {
             qa_fixture_mode: fixture,
             logo_texture,
             clean_settings_ui,
+            settings_ui: Default::default(),
             custom_analysis: None,
             custom_partial_acknowledged: false,
             health_ui: Default::default(),
@@ -408,6 +442,7 @@ impl App {
         if !matches!(
             case,
             "cloud-intro"
+                | "cloud-partial"
                 | "cloud-selected"
                 | "cloud-providers"
                 | "disk-results"
@@ -429,6 +464,14 @@ impl App {
                 | "software-details"
                 | "software-error"
                 | "software-intro"
+                | "software-batch-review"
+                | "software-update-review"
+                | "drivers-problem-categories"
+                | "drivers-problem-categories-empty"
+                | "drivers-restore-prompt"
+                | "drivers-no-recent-updates"
+                | "drivers-recent-updates"
+                | "drivers-offered"
                 | "optimizer-empty"
                 | "optimizer-populated"
                 | "optimizer-details"
@@ -453,6 +496,19 @@ impl App {
                 | "history-empty"
                 | "history-populated"
                 | "settings"
+                | "settings-general"
+                | "settings-scheduling"
+                | "settings-updates"
+                | "settings-privacy"
+                | "settings-menu-layout"
+                | "settings-my-subscription"
+                | "settings-about"
+                | "settings-updates-checking"
+                | "settings-updates-no-release"
+                | "settings-updates-latest-newer"
+                | "settings-updates-latest-current"
+                | "settings-updates-latest-unparseable"
+                | "settings-updates-error"
                 | "help"
                 | "help-diagnostics"
                 | "clean-settings-inclusions"
@@ -466,6 +522,14 @@ impl App {
                 | "health-activity-unavailable"
                 | "health-intro"
                 | "health-privacy"
+                | "health-privacy-expanded"
+                | "health-privacy-review"
+                | "health-finding-details"
+                | "health-cookie-settings"
+                | "health-scanning"
+                | "health-cleaning"
+                | "health-browser-review"
+                | "health-space-review"
                 | "health-space"
                 | "health-issues"
                 | "health-summary"
@@ -484,7 +548,16 @@ impl App {
             return Err(format!("Unsupported isolated visual fixture: {case}"));
         }
         let mut app = Self::construct(context, true);
-        if case.starts_with("health-") {
+        if case.starts_with("settings-") {
+            app.seed_core_qa("settings")?;
+            app.prefs.seen_features = vec!["health".into(), "software".into()];
+            if case.starts_with("settings-updates-") {
+                view_settings::seed_qa_tab(context, "updates")?;
+                view_settings::seed_qa_update_case(&mut app.settings_ui, case)?;
+            } else {
+                view_settings::seed_qa_tab(context, case)?;
+            }
+        } else if case.starts_with("health-") {
             app.page = Page::Overview;
             app.seed_health_qa(case)?;
         } else if case.starts_with("privacy-") {
@@ -683,6 +756,10 @@ impl App {
             match event {
                 Event::Cloud(event) => self.cloud_event(event),
                 Event::CleanSettings(event) => self.clean_settings_event(event),
+                Event::Settings(event) => {
+                    self.worker = None;
+                    view_settings::handle_event(&mut self.settings_ui, event);
+                }
                 Event::ConfiguredScanned(result) => {
                     self.worker = None;
                     match result {
@@ -995,18 +1072,33 @@ impl App {
         }
     }
     fn clean_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        ui.horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                self.clean_settings_configure_button(ui, t, ctx);
-            });
-        });
-        ui.add_space(8.);
         theme::tabs(ui, |ui| {
             ui.add_enabled_ui(!self.busy(), |ui| {
-                if theme::tab_value(ui, &mut self.clean_browser, false, "Junk").clicked() {
+                if theme::tab_with_icon_count(
+                    ui,
+                    !self.clean_browser,
+                    theme::Icon::Trash,
+                    "Junk",
+                    None,
+                    t,
+                )
+                .clicked()
+                {
+                    self.clean_browser = false;
                     self.clean_bin = false;
                 }
-                theme::tab_value(ui, &mut self.clean_browser, true, "Browser");
+                if theme::tab_with_icon_count(
+                    ui,
+                    self.clean_browser,
+                    theme::Icon::Browser,
+                    "Browser",
+                    None,
+                    t,
+                )
+                .clicked()
+                {
+                    self.clean_browser = true;
+                }
             });
         });
         ui.add_space(16.);
@@ -1337,19 +1429,33 @@ impl App {
         });
     }
     fn settings_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());ui.label(RichText::new("Cleaning preferences").family(theme::semibold()));ui.add_space(12.);theme::muted(ui,"Minimum file age",t);
-            let mut changed=false;
-            let age_labels:Vec<_>=[1,7,14,30,90].iter().map(|days|format!("{days} days or older")).collect();
-            let age_choices:Vec<_>=age_labels.iter().map(String::as_str).collect();
-            let selected_age=format!("{} days or older",self.prefs.minimum_age_days);
-            ui.add_enabled_ui(self.settings_readable&&!self.busy(),|ui|{
-                theme::selector(ui,"age",&selected_age,&age_choices,|ui|{for days in [1,7,14,30,90]{changed|=ui.selectable_value(&mut self.prefs.minimum_age_days,days,format!("{days} days or older")).changed();}});
+        let mut settings = std::mem::take(&mut self.settings_ui);
+        view_settings::show(self, &mut settings, ui, t, ctx);
+        self.settings_ui = settings;
+        if view_settings::take_check_request(&mut self.settings_ui) {
+            if self.qa_fixture_mode() {
+                // Fixture requests are handled by the view; this boundary never
+                // grants them a network worker even if a future view regresses.
+                view_settings::handle_event(
+                    &mut self.settings_ui,
+                    view_settings::SettingsEvent::ReleaseChecked(Err(
+                        "Fixture network access is disabled.".into(),
+                    )),
+                );
+                return;
+            }
+            let (sender, receiver) = mpsc::channel();
+            self.worker = Some(receiver);
+            self.progress = "Checking published DCleaner releases…".into();
+            let context = ctx.clone();
+            thread::spawn(move || {
+                let result = view_settings::check_latest_release();
+                let _ = sender.send(Event::Settings(
+                    view_settings::SettingsEvent::ReleaseChecked(result),
+                ));
+                context.request_repaint();
             });
-            if changed{self.invalidate();}ui.add_space(20.);ui.separator();ui.add_space(20.);ui.label(RichText::new("Appearance").family(theme::semibold()));ui.add_space(8.);
-            if theme::checkbox(ui,&mut self.prefs.dark,"Dark mode",true).changed(){theme::apply(ctx,self.prefs.dark);self.persist();}
-            ui.add_space(20.);ui.separator();ui.add_space(20.);ui.label(RichText::new("DCleaner 0.1.0 · Native Rust").family(theme::semibold()));theme::muted(ui,"Navy workspace, blue actions and Inter typography.",t);ui.add_space(8.);theme::muted(ui,"This foundation supports temp/cache cleanup, folder analysis and durable history. Full CCleaner parity is tracked in the project plan.",t);
-            ui.add_space(8.);theme::muted(ui,format!("Data directory: {}",self.data_dir.display()),t);
-        });
+        }
     }
 }
 impl App {
@@ -1358,9 +1464,60 @@ impl App {
         self.busy() || self.app_icons.is_loading()
     }
     #[cfg(debug_assertions)]
-    pub(crate) fn qa_action_precondition(&self, label: &str) -> Result<(), String> {
+    pub(crate) fn qa_action_precondition(
+        &self,
+        label: &str,
+        ctx: &egui::Context,
+    ) -> Result<(), String> {
+        if self.page == Page::Optimizer && !matches!(label, "Start now" | "Scan now") {
+            return self.qa_optimizer_precondition(label);
+        }
+        if self.page == Page::Programs && !matches!(label, "Start now" | "Scan now") {
+            return self.qa_programs_precondition(label);
+        }
+        if self.page == Page::Duplicates && !matches!(label, "Start now" | "Scan now") {
+            return self.qa_duplicates_precondition(label);
+        }
+        if self.page == Page::Cloud && !matches!(label, "Get started" | "Cleanup history") {
+            return self.qa_cloud_precondition(label);
+        }
+        if self.page == Page::Software && label != "Start now" && label != "Scan now" {
+            return self.qa_software_action_precondition(label);
+        }
+        if self.page == Page::Drivers && label != "Start now" && label != "Scan now" {
+            return self.qa_driver_action_precondition(label);
+        }
+        if self.page == Page::Startup
+            && matches!(
+                label,
+                "Enable startup item"
+                    | "Disable startup item"
+                    | "More"
+                    | "Show details"
+                    | "Remove"
+                    | "Cancel"
+                    | "Confirm fixture review"
+            )
+        {
+            return self.qa_startup_action_precondition(label);
+        }
+        if self.page == Page::Settings {
+            if !view_settings::qa_action_precondition(self, ctx, label) {
+                return Err(format!(
+                    "Settings action precondition is not satisfied: {label}"
+                ));
+            }
+            let before = view_settings::qa_state(self, ctx);
+            ctx.data_mut(|data| {
+                data.insert_temp(egui::Id::new("qa-settings-before-action"), before)
+            });
+            return Ok(());
+        }
         let cloud = self.qa_cloud_state();
         let valid = match (self.page, label) {
+            (Page::Overview, label) if self.qa_health_action(label, false).is_some() => {
+                self.qa_health_action(label, false).unwrap_or(false)
+            }
             (Page::Cloud, "Get started") => cloud["introduced"] == false,
             (Page::Cloud, "Cleanup history") => cloud["history"] == false,
             (Page::Disk, "Details") => !self.qa_disk_detail_open(),
@@ -1387,12 +1544,98 @@ impl App {
         }
     }
     #[cfg(debug_assertions)]
-    pub(crate) fn qa_action_state(&self, label: &str) -> Result<serde_json::Value, String> {
+    pub(crate) fn qa_action_state(
+        &self,
+        label: &str,
+        ctx: &egui::Context,
+    ) -> Result<serde_json::Value, String> {
         if !self.qa_fixture_mode() {
             return Err("UI action verification requires isolated fixture mode.".into());
         }
-        let state = serde_json::json!({"page":self.page.name(),"health_started":self.health_started(),"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_info_open":self.qa_startup_info_open(),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
+        if self.page == Page::Optimizer && !matches!(label, "Start now" | "Scan now") {
+            return self.qa_optimizer_action_state(label);
+        }
+        if self.page == Page::Programs && !matches!(label, "Start now" | "Scan now") {
+            return self.qa_programs_action_state(label);
+        }
+        if self.page == Page::Duplicates && !matches!(label, "Start now" | "Scan now") {
+            return self.qa_duplicates_action_state(label);
+        }
+        if self.page == Page::Cloud && !matches!(label, "Get started" | "Cleanup history") {
+            return self.qa_cloud_action_state(label);
+        }
+        if self.page == Page::Software && label != "Start now" && label != "Scan now" {
+            return self.qa_software_action_state(label);
+        }
+        if self.page == Page::Drivers && label != "Start now" && label != "Scan now" {
+            return self.qa_driver_action_state(label);
+        }
+        if self.page == Page::Startup
+            && matches!(
+                label,
+                "Enable startup item"
+                    | "Disable startup item"
+                    | "More"
+                    | "Show details"
+                    | "Remove"
+                    | "Cancel"
+                    | "Confirm fixture review"
+            )
+        {
+            return self.qa_startup_action_state(label);
+        }
+        let state = serde_json::json!({"page":self.page.name(),"settings":view_settings::qa_state(self, ctx),"health_started":self.health_started(),"health":self.qa_health_state(),"clean_settings":self.qa_clean_settings_state(),"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_info_open":self.qa_startup_info_open(),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
         let valid = match (self.page, label) {
+            (Page::Settings, label) => {
+                let before = ctx
+                    .data(|data| {
+                        data.get_temp::<serde_json::Value>(egui::Id::new(
+                            "qa-settings-before-action",
+                        ))
+                    })
+                    .unwrap_or(serde_json::Value::Null);
+                let settings = &state["settings"];
+                match label {
+                    "General" => settings["tab"] == "general",
+                    "Scheduling" => settings["tab"] == "scheduling",
+                    "Updates" => settings["tab"] == "updates",
+                    "Privacy" => settings["tab"] == "privacy",
+                    "Menu Layout" => settings["tab"] == "menu-layout",
+                    "My Subscription" => settings["tab"] == "my-subscription",
+                    "About" => settings["tab"] == "about",
+                    "Light" => settings["appearance"] == "Light" && settings["dark"] == false,
+                    "Dark" => settings["appearance"] == "Dark" && settings["dark"] == true,
+                    "Auto" => settings["appearance"] == "System",
+                    "Check for updates" => {
+                        settings["update_check"] == "no_published_release"
+                            && settings["update_check_pending"] == false
+                    }
+                    "Health Check" => settings["landing_page"] == "HealthCheck",
+                    "Custom Clean" => settings["landing_page"] == "CustomClean",
+                    "Always show the landing page at the top of the menu" => {
+                        settings["menu_pin_landing_page"] != before["menu_pin_landing_page"]
+                    }
+                    "Reset" if before["reset_dialog_open"] == false => {
+                        settings["reset_dialog_open"] == true
+                            && settings["seen_features"] == before["seen_features"]
+                    }
+                    "Reset" => {
+                        settings["reset_dialog_open"] == false
+                            && settings["seen_features"]
+                                .as_array()
+                                .is_some_and(Vec::is_empty)
+                    }
+                    "Cancel" | "Close" => {
+                        settings["reset_dialog_open"] == false
+                            && settings["seen_features"] == before["seen_features"]
+                    }
+                    _ => false,
+                }
+            }
+            (Page::Help, "Open Help") => true,
+            (Page::Overview, label) if self.qa_health_action(label, true).is_some() => {
+                self.qa_health_action(label, true).unwrap_or(false)
+            }
             (Page::Cloud, "Get started") => state["cloud"]["introduced"] == true,
             (Page::Cloud, "Cleanup history") => state["cloud"]["history"] == true,
             (Page::Disk, "Details") => self.qa_disk_detail_open(),
@@ -1438,6 +1681,13 @@ impl App {
     pub(crate) fn paint(&mut self, root: &mut egui::Ui) {
         self.poll();
         let ctx = root.ctx().clone();
+        let effective_dark = self
+            .prefs
+            .effective_dark(ctx.system_theme().map(|theme| theme == egui::Theme::Dark));
+        if self.prefs.dark != effective_dark {
+            self.prefs.dark = effective_dark;
+            theme::apply(&ctx, effective_dark);
+        }
         #[cfg(debug_assertions)]
         theme::begin_geometry_frame(&ctx);
         if !self.qa_fixture_mode() {
@@ -1454,6 +1704,7 @@ impl App {
         // The supplied desktop reference keeps both navigation columns at
         // roughly 920 px. Collapse only below that composition's usable width.
         let narrow = root.available_width() < 900.;
+        let navigation_pages = navigation_pages(&self.prefs);
         egui::Panel::left("icon-rail")
             .resizable(false)
             .exact_size(64.)
@@ -1482,7 +1733,7 @@ impl App {
                 });
                 ui.add_space(if cfg!(windows) { 26. } else { 28. });
                 let rail_pages: &[Page] = if narrow {
-                    &PAGES
+                    &navigation_pages
                 } else {
                     &[Page::Overview, Page::Settings, Page::Help]
                 };
@@ -1544,7 +1795,7 @@ impl App {
                             );
                         });
                     ui.add_space(6.);
-                    for page in PAGES {
+                    for page in navigation_pages.iter().copied() {
                         if matches!(page, Page::Settings | Page::Help) {
                             continue;
                         }
@@ -1566,7 +1817,11 @@ impl App {
                 let status_overview = self.page == Page::Overview
                     && !self.health_started()
                     && self.feature_seen("health");
-                if !status_overview {
+                let health_workflow = self.page == Page::Overview && self.health_started();
+                if !status_overview
+                    && !matches!(self.page, Page::Settings | Page::Help)
+                    && !(health_workflow && self.health_progress_active())
+                {
                     egui::Panel::bottom("page-actions")
                         .resizable(false)
                         .default_size(74.)
@@ -1615,30 +1870,43 @@ impl App {
                         bottom: 28,
                     })
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.heading(
-                                if self.page == Page::Overview
-                                    && !self.health_started()
-                                    && self.feature_seen("health")
-                                {
-                                    "Your scan results"
-                                } else {
-                                    self.page.name()
-                                },
-                            );
-                            if self.page == Page::Startup {
-                                self.startup_info_button(ui);
+                        if !health_workflow {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    if self.page == Page::Overview
+                                        && !self.health_started()
+                                        && self.feature_seen("health")
+                                    {
+                                        "Your scan results"
+                                    } else {
+                                        self.page.name()
+                                    },
+                                );
+                                if self.page == Page::Startup {
+                                    self.startup_info_button(ui);
+                                }
+                                if self.page == Page::Clean {
+                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                        self.clean_settings_configure_button(ui, t, &ctx);
+                                    });
+                                }
+                                if status_overview {
+                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                        if theme::header_action(ui, "Rescan", !busy) {
+                                            self.rescan_health(&ctx);
+                                        }
+                                    });
+                                }
+                            });
+                            if !matches!(self.page, Page::Settings | Page::Help) {
+                                theme::muted(ui, self.page.description(), t);
                             }
-                            if status_overview {
-                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    if theme::header_action(ui, "Rescan", !busy) {
-                                        self.rescan_health(&ctx);
-                                    }
-                                });
-                            }
-                        });
-                        theme::muted(ui, self.page.description(), t);
-                        ui.add_space(26.);
+                            ui.add_space(if matches!(self.page, Page::Settings | Page::Help) {
+                                16.
+                            } else {
+                                26.
+                            });
+                        }
                         let page_scroll = egui::ScrollArea::vertical()
                             .auto_shrink([false, false])
                             .id_salt(self.page.name())
@@ -1679,7 +1947,10 @@ impl App {
                                 if busy
                                     && !matches!(
                                         self.page,
-                                        Page::Overview | Page::Optimizer | Page::Cloud
+                                        Page::Overview
+                                            | Page::Optimizer
+                                            | Page::Cloud
+                                            | Page::Settings
                                     )
                                 {
                                     theme::card(t).show(ui, |ui| {

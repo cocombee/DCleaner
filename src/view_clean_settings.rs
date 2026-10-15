@@ -24,44 +24,31 @@ enum SettingsTab {
 
 const POPULAR_COOKIE_DOMAINS: &[&str] = &[
     "amazon.com",
-    "aol.com",
-    "auth.me.com",
     "bing.com",
     "discord.com",
     "duckduckgo.com",
     "ebay.com",
-    "facebook.com",
-    "fastmail.fm",
     "google.com",
-    "icloud.com",
     "instagram.com",
     "linkedin.com",
     "live.com",
-    "login.comcast.net",
-    "login.live.com",
-    "mail.lycos.com",
-    "mail.netscape.com",
     "microsoft.com",
     "msn.com",
     "netflix.com",
     "office.com",
-    "ovi.com",
     "pinterest.com",
     "quora.com",
     "reddit.com",
     "roblox.com",
     "samsung.com",
-    "services.adobe.com",
     "sharepoint.com",
     "tiktok.com",
-    "twitch.tv",
-    "twitter.com",
     "weather.com",
-    "webmail.earthlink.net",
     "whatsapp.com",
-    "wikipedia.org",
     "yahoo.com",
     "youtube.com",
+    "wikipedia.org",
+    "twitch.tv",
     "zoom.us",
 ];
 
@@ -104,6 +91,8 @@ struct InclusionForm {
 
 pub(super) struct CleanSettingsUi {
     open: bool,
+    cookies_only: bool,
+    close_after_save: bool,
     operation: SettingsOperation,
     saved: Option<CustomCleanSettings>,
     draft: Option<CustomCleanSettings>,
@@ -128,6 +117,8 @@ impl Default for CleanSettingsUi {
     fn default() -> Self {
         Self {
             open: false,
+            cookies_only: false,
+            close_after_save: false,
             operation: SettingsOperation::Idle,
             saved: None,
             draft: None,
@@ -181,7 +172,10 @@ pub(super) enum CleanSettingsEvent {
 }
 
 impl App {
-    /// Call from the Custom Clean page to open its saved-settings editor.
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_clean_settings_state(&self) -> serde_json::Value {
+        serde_json::json!({"open":self.clean_settings_ui.open, "cookies_only":self.clean_settings_ui.cookies_only, "popular_sites_open":self.clean_settings_ui.popular_sites_open})
+    }
     pub(super) fn clean_settings_configure_button(
         &mut self,
         ui: &mut egui::Ui,
@@ -189,26 +183,55 @@ impl App {
         ctx: &egui::Context,
     ) {
         if theme::field_action(ui, "Configure", !self.busy()) {
-            self.clean_settings_ui.open = true;
-            self.clean_settings_ui.form_error = None;
-            self.clean_settings_ui.load_error = None;
-            self.clean_settings_ui.save_error = None;
-            if self.qa_fixture_mode() {
-                let settings = self.clean_settings_ui.saved.clone().unwrap_or_default();
-                let cookies = self
-                    .clean_settings_ui
-                    .saved_cookies
-                    .clone()
-                    .unwrap_or_default();
-                self.clean_settings_ui.saved = Some(settings.clone());
-                self.clean_settings_ui.draft = Some(settings);
-                self.clean_settings_ui.saved_cookies = Some(cookies.clone());
-                self.clean_settings_ui.draft_cookie_domains = Some(cookies.keep_domains);
-            } else {
-                self.clean_settings_ui.draft = None;
-                self.clean_settings_ui.draft_cookie_domains = None;
-                self.start_clean_settings_load(ctx);
-            }
+            self.open_clean_settings_editor(ctx, false);
+        }
+    }
+
+    pub(super) fn open_health_cookie_settings(&mut self, ctx: &egui::Context) {
+        self.open_clean_settings_editor(ctx, true);
+    }
+
+    fn open_clean_settings_editor(&mut self, ctx: &egui::Context, cookies_only: bool) {
+        self.clean_settings_ui.open = true;
+        self.clean_settings_ui.cookies_only = cookies_only;
+        self.clean_settings_ui.close_after_save = false;
+        self.clean_settings_ui.tab = SettingsTab::Cookies;
+        self.clean_settings_ui.form_error = None;
+        self.clean_settings_ui.load_error = None;
+        self.clean_settings_ui.save_error = None;
+        if self.qa_fixture_mode() {
+            let settings = self.clean_settings_ui.saved.clone().unwrap_or_default();
+            let cookies = self
+                .clean_settings_ui
+                .saved_cookies
+                .clone()
+                .unwrap_or_default();
+            self.clean_settings_ui.saved = Some(settings.clone());
+            self.clean_settings_ui.draft = Some(settings);
+            self.clean_settings_ui.saved_cookies = Some(cookies.clone());
+            self.clean_settings_ui.draft_cookie_domains = Some(cookies.keep_domains);
+        } else {
+            self.clean_settings_ui.draft = None;
+            self.clean_settings_ui.draft_cookie_domains = None;
+            self.start_clean_settings_load(ctx);
+        }
+    }
+
+    fn clean_settings_changed(&self) -> bool {
+        matches!((&self.clean_settings_ui.saved, &self.clean_settings_ui.draft), (Some(saved), Some(draft)) if saved != draft)
+            || matches!((&self.clean_settings_ui.saved_cookies, &self.clean_settings_ui.draft_cookie_domains), (Some(saved), Some(draft)) if &saved.keep_domains != draft)
+    }
+
+    fn save_committed_clean_settings(&mut self, ctx: &egui::Context) {
+        if self.clean_settings_ui.open
+            && self.clean_settings_ui.operation == SettingsOperation::Idle
+            && !self.busy()
+            && !self.clean_settings_ui.popular_sites_open
+            && self.clean_settings_ui.load_error.is_none()
+            && self.clean_settings_ui.save_error.is_none()
+            && self.clean_settings_changed()
+        {
+            self.begin_save_clean_settings(ctx);
         }
     }
 
@@ -243,6 +266,7 @@ impl App {
         if !self.clean_settings_ui.open {
             return;
         }
+        self.save_committed_clean_settings(ctx);
         let escape_pressed = self.clean_settings_ui.operation == SettingsOperation::Idle
             && ctx.input(|input| input.key_pressed(egui::Key::Escape));
         let escape_cancelled_popular_sites =
@@ -263,25 +287,29 @@ impl App {
         let width = (ctx.content_rect().width() - 100.).clamp(300., 760.);
         let mut close = false;
         let mut retry = false;
-        let mut submit = false;
 
         let response = egui::Modal::new(egui::Id::new("custom-clean-settings"))
             .frame(theme::dialog_frame(t))
             .show(ctx, |ui| {
                 ui.set_width(width);
                 let content_top = ui.cursor().top();
-                ui.heading("Custom Clean settings");
+                ui.horizontal(|ui| {
+                    ui.heading(if self.clean_settings_ui.cookies_only { "Cookie settings" } else { "Custom Clean settings" });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        close = theme::close_button(ui, "Close settings", !busy);
+                    });
+                });
                 ui.add_space(4.);
                 theme::muted(
                     ui,
-                    "Edit scan rules and saved preferences. This form does not run cleanup actions.",
+                    if self.clean_settings_ui.cookies_only { "Choose websites whose cookies you want to keep." } else { "Committed changes are saved automatically. These settings do not run cleanup." },
                     t,
                 );
                 if self.qa_fixture_mode() {
                     ui.add_space(4.);
                     theme::muted(
                         ui,
-                        "QA fixture — edits stay in memory; loading and saving are disabled.",
+                        "QA fixture — changes stay in memory; no settings file is read or written.",
                         t,
                     );
                 }
@@ -307,11 +335,11 @@ impl App {
                         !busy && !self.qa_fixture_mode(),
                     );
                 } else if self.clean_settings_ui.draft.is_some() {
-                    self.clean_settings_tabs(ui, t, editable);
+                    if !self.clean_settings_ui.cookies_only { self.clean_settings_tabs(ui, t, editable); }
                     ui.add_space(8.);
                     let body_height = (ctx.content_rect().height()
                         - (ui.cursor().top() - content_top)
-                        - 48. - 48. - 92.).max(96.);
+                        - 48. - 48. - 32.).max(96.);
                     egui::ScrollArea::vertical()
                         .id_salt("custom-clean-settings-body")
                         .max_height(body_height)
@@ -342,39 +370,34 @@ impl App {
                     ui.colored_label(t.attention, error);
                 }
 
-                ui.add_space(10.);
-                ui.separator();
-                ui.add_space(8.);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    submit = theme::primary(
-                        ui,
-                "Save settings",
-                        t,
-                        editable
-                            && self.clean_settings_ui.load_error.is_none()
-                            && !self.qa_fixture_mode(),
-                    );
-                    close = theme::secondary(ui, "Cancel", !busy);
-                });
+                if self.clean_settings_ui.save_error.is_some() {
+                    retry |= theme::field_action(ui, "Reload saved settings", !busy && !self.qa_fixture_mode());
+                }
             });
 
         if retry {
             self.clean_settings_ui.load_error = None;
             self.start_clean_settings_load(ctx);
-        } else if submit {
-            self.begin_save_clean_settings(ctx);
         } else if close
             || (response.should_close()
                 && !busy
                 && !escape_cancelled_popular_sites
                 && !self.clean_settings_ui.popular_sites_open)
         {
-            self.close_clean_settings_dialog();
+            if self.clean_settings_changed()
+                && self.clean_settings_ui.save_error.is_none()
+                && self.clean_settings_ui.form_error.is_none()
+            {
+                self.clean_settings_ui.close_after_save = true;
+            } else {
+                self.close_clean_settings_dialog();
+            }
         }
 
         if self.clean_settings_ui.open && self.clean_settings_ui.popular_sites_open {
             self.popular_cookie_sites_dialog(ctx, t);
         }
+        self.save_committed_clean_settings(ctx);
     }
 
     pub(super) fn clean_settings_event(&mut self, event: CleanSettingsEvent) {
@@ -439,15 +462,14 @@ impl App {
                 }
                 if errors.is_empty() {
                     self.clean_settings_ui.save_error = None;
-                    self.clean_settings_ui.open = false;
+                    self.clean_settings_ui.open = !self.clean_settings_ui.close_after_save;
+                    self.clean_settings_ui.close_after_save = false;
                     self.invalidate();
                     self.custom_analysis = None;
-                    self.notice = Some(
-                        "Custom Clean settings and cookie keep domains were saved. Scan again to review the updated rules.".into(),
-                    );
+                    self.notice = None;
                 } else {
                     self.clean_settings_ui.save_error = Some(format!(
-                        "{} The settings files are saved separately, so a write that returned an error may still have committed. Cancel discards only unsaved drafts; it does not undo a completed file. The dialog remains open.",
+                        "{} The settings files are saved separately, so a write that returned an error may still have committed. Reload the saved settings before making another change. The panel remains open.",
                         errors.join(" ")
                     ));
                     if self.clean_settings_ui.saved.is_some() {
@@ -488,9 +510,6 @@ impl App {
     }
 
     fn begin_save_clean_settings(&mut self, ctx: &egui::Context) {
-        if self.qa_fixture_mode() {
-            return;
-        }
         let Some(settings) = self.clean_settings_ui.draft.as_ref() else {
             return;
         };
@@ -503,12 +522,6 @@ impl App {
         };
         if let Err(error) = validate_cookie_domains(cookie_domains) {
             self.clean_settings_ui.form_error = Some(error);
-            return;
-        }
-        if !self.clean_settings_ui.cookie_domain_input.trim().is_empty() {
-            self.clean_settings_ui.form_error =
-                Some("Select Allow to add the typed website before saving.".into());
-            self.clean_settings_ui.tab = SettingsTab::Cookies;
             return;
         }
         if self.clean_settings_ui.operation != SettingsOperation::Idle || self.busy() {
@@ -529,6 +542,16 @@ impl App {
         };
         let settings_changed = settings != saved_settings;
         let cookies_changed = cookie_domains != saved_cookies.keep_domains;
+        if self.qa_fixture_mode() {
+            self.clean_settings_event(CleanSettingsEvent::Saved {
+                settings: Ok(settings),
+                cookies: Some(Ok(CookieExceptionSettings {
+                    schema: 1,
+                    keep_domains: cookie_domains,
+                })),
+            });
+            return;
+        }
         let root = self.data_dir.clone();
         let context = ctx.clone();
         let (sender, receiver) = mpsc::channel();
@@ -561,6 +584,7 @@ impl App {
 
     fn close_clean_settings_dialog(&mut self) {
         self.clean_settings_ui.open = false;
+        self.clean_settings_ui.close_after_save = false;
         self.clean_settings_ui.popular_sites_open = false;
         self.clean_settings_ui.popular_site_selected.clear();
         self.clean_settings_ui.draft = self.clean_settings_ui.saved.clone();
@@ -753,10 +777,24 @@ impl App {
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
                         for (index, domain) in POPULAR_COOKIE_DOMAINS.iter().enumerate() {
+                            let already_added = self
+                                .clean_settings_ui
+                                .draft_cookie_domains
+                                .as_ref()
+                                .is_some_and(|domains| {
+                                    domains
+                                        .iter()
+                                        .any(|saved| saved.eq_ignore_ascii_case(domain))
+                                });
                             if let Some(selected) =
                                 self.clean_settings_ui.popular_site_selected.get_mut(index)
                             {
-                                theme::checkbox(ui, selected, *domain, true);
+                                ui.horizontal(|ui| {
+                                    theme::checkbox(ui, selected, *domain, !already_added);
+                                    if already_added {
+                                        theme::muted(ui, "Already added", t);
+                                    }
+                                });
                             }
                         }
                     });
@@ -787,7 +825,7 @@ impl App {
     }
 
     /// Apply selected entries atomically to the in-memory keep-domain draft.
-    /// The main Save button remains the only persistence boundary.
+    /// The enclosing editor persists committed changes; Cancel leaves this list unchanged.
     fn add_selected_popular_cookie_sites(&mut self) -> bool {
         let Some(domains) = self.clean_settings_ui.draft_cookie_domains.as_mut() else {
             self.clean_settings_ui.form_error =
@@ -846,7 +884,7 @@ impl App {
         self.clean_settings_ui.form_error = Some(if added == 0 {
             "No new websites were added.".into()
         } else {
-            format!("Added {added} websites to the unsaved settings draft.")
+            format!("Added {added} websites.")
         });
         true
     }
@@ -1865,8 +1903,7 @@ impl App {
         self.analysis = None;
         self.selected.clear();
         self.error = None;
-        self.notice =
-            Some("Synthetic Custom Clean settings preview. Changes remain in memory only.".into());
+        self.notice = None;
         Ok(())
     }
 }
@@ -1881,25 +1918,14 @@ fn validate_cookie_domains(domains: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn popular_cookie_site_defaults(domains: &[String]) -> Vec<bool> {
-    let normalized_domains: Vec<_> = domains
-        .iter()
-        .filter_map(|domain| privacy::normalize_cookie_domain(domain).ok())
-        .collect();
-    POPULAR_COOKIE_DOMAINS
-        .iter()
-        .map(|domain| {
-            !normalized_domains
-                .iter()
-                .any(|saved| saved.eq_ignore_ascii_case(domain))
-        })
-        .collect()
+fn popular_cookie_site_defaults(_domains: &[String]) -> Vec<bool> {
+    vec![true; POPULAR_COOKIE_DOMAINS.len()]
 }
 
 #[cfg(test)]
 mod draft_tests {
     #[cfg(debug_assertions)]
-    use super::super::{view_health::HealthEvent, view_privacy::PrivacyEvent};
+    use super::super::view_privacy::PrivacyEvent;
     use super::*;
 
     fn fixture() -> App {
@@ -1907,17 +1933,76 @@ mod draft_tests {
     }
 
     #[test]
-    fn popular_site_defaults_exclude_already_kept_domains() {
-        let defaults = popular_cookie_site_defaults(&["GOOGLE.COM".into()]);
-        assert_eq!(POPULAR_COOKIE_DOMAINS.len(), 40);
+    fn committed_cookie_change_autosaves_in_memory_and_survives_close() {
+        let mut app = fixture();
+        app.clean_settings_ui
+            .draft_cookie_domains
+            .as_mut()
+            .unwrap()
+            .push("committed.example".into());
+        app.save_committed_clean_settings(&egui::Context::default());
+        assert!(app.clean_settings_ui.open);
         assert!(
-            POPULAR_COOKIE_DOMAINS
-                .windows(2)
-                .all(|pair| pair[0] < pair[1])
+            app.clean_settings_ui
+                .saved_cookies
+                .as_ref()
+                .unwrap()
+                .keep_domains
+                .iter()
+                .any(|domain| domain == "committed.example")
         );
-        for (domain, selected) in POPULAR_COOKIE_DOMAINS.iter().zip(defaults) {
-            assert_eq!(selected, *domain != "google.com");
-        }
+        app.close_clean_settings_dialog();
+        assert!(
+            app.clean_settings_ui
+                .draft_cookie_domains
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|domain| domain == "committed.example")
+        );
+        assert!(app.worker.is_none());
+    }
+
+    #[test]
+    fn nested_picker_cancel_does_not_commit_and_failed_save_does_not_retry() {
+        let mut app = fixture();
+        let before = app.clean_settings_ui.saved_cookies.clone();
+        app.clean_settings_ui.popular_sites_open = true;
+        app.clean_settings_ui.popular_site_selected = vec![true; POPULAR_COOKIE_DOMAINS.len()];
+        app.save_committed_clean_settings(&egui::Context::default());
+        assert_eq!(app.clean_settings_ui.saved_cookies, before);
+        app.clean_settings_ui.popular_sites_open = false;
+        app.clean_settings_ui.popular_site_selected.clear();
+        app.clean_settings_ui
+            .draft_cookie_domains
+            .as_mut()
+            .unwrap()
+            .push("pending.example".into());
+        app.clean_settings_ui.save_error = Some("uncertain fixture write".into());
+        app.save_committed_clean_settings(&egui::Context::default());
+        assert_eq!(app.clean_settings_ui.saved_cookies, before);
+        assert!(app.clean_settings_changed());
+        assert!(app.worker.is_none());
+    }
+
+    #[test]
+    fn health_cookie_settings_uses_the_shared_cookie_only_editor() {
+        let mut app = fixture();
+        app.open_health_cookie_settings(&egui::Context::default());
+        assert!(app.clean_settings_ui.open);
+        assert!(app.clean_settings_ui.cookies_only);
+        assert_eq!(app.clean_settings_ui.tab, SettingsTab::Cookies);
+    }
+
+    #[test]
+    fn popular_site_defaults_match_shipped_suggestions_including_locked_existing_domains() {
+        let defaults = popular_cookie_site_defaults(&["GOOGLE.COM".into()]);
+        assert_eq!(POPULAR_COOKIE_DOMAINS.len(), 27);
+        assert!(defaults.into_iter().all(|selected| selected));
+        assert_eq!(
+            &POPULAR_COOKIE_DOMAINS[24..],
+            &["wikipedia.org", "twitch.tv", "zoom.us"]
+        );
     }
 
     #[test]
@@ -1965,7 +2050,7 @@ mod draft_tests {
     }
 
     #[test]
-    fn cancel_restores_both_saved_drafts_without_accepting_edits() {
+    fn closing_restores_only_uncommitted_drafts() {
         let mut app = fixture();
         let saved = app.clean_settings_ui.saved.clone();
         let cookies = app.clean_settings_ui.saved_cookies.clone().unwrap();
@@ -1989,7 +2074,7 @@ mod draft_tests {
     }
 
     #[test]
-    fn partial_save_keeps_cookie_edits_and_explains_that_cancel_is_not_rollback() {
+    fn partial_save_keeps_cookie_edits_and_requires_verified_reload() {
         let mut app = fixture();
         app.notice = None;
         let saved_cookies = app
@@ -2031,7 +2116,7 @@ mod draft_tests {
                 .save_error
                 .as_ref()
                 .unwrap()
-                .contains("does not undo")
+                .contains("Reload the saved settings")
         );
         assert!(
             app.notice
@@ -2041,7 +2126,7 @@ mod draft_tests {
     }
 
     #[test]
-    fn complete_save_closes_only_after_both_stores_report_success() {
+    fn automatic_save_keeps_the_editor_open_after_both_stores_report_success() {
         let mut app = fixture();
         let settings = app.clean_settings_ui.draft.clone().unwrap();
         let cookies = CookieExceptionSettings {
@@ -2052,7 +2137,7 @@ mod draft_tests {
             settings: Ok(settings),
             cookies: Some(Ok(cookies)),
         });
-        assert!(!app.clean_settings_ui.open);
+        assert!(app.clean_settings_ui.open);
         assert!(app.clean_settings_ui.save_error.is_none());
         assert_eq!(
             app.clean_settings_ui
@@ -2094,7 +2179,10 @@ mod draft_tests {
         assert!(app.health_cookie_test_state().3);
 
         let settings = changed_cookie_settings();
-        app.health_event(HealthEvent::CookieSettingsSaved(Ok(settings.clone())));
+        app.clean_settings_event(CleanSettingsEvent::Saved {
+            settings: Ok(app.clean_settings_ui.saved.clone().unwrap()),
+            cookies: Some(Ok(settings.clone())),
+        });
 
         let privacy = app.privacy_cookie_test_state();
         let health = app.health_cookie_test_state();
@@ -2150,9 +2238,10 @@ mod draft_tests {
 
         let mut health_app = fixture();
         seed_cookie_consumers(&mut health_app);
-        health_app.health_event(HealthEvent::CookieSettingsSaved(Err(
-            "fixture post-rename sync failure".into(),
-        )));
+        health_app.clean_settings_event(CleanSettingsEvent::Saved {
+            settings: Ok(health_app.clean_settings_ui.saved.clone().unwrap()),
+            cookies: Some(Err("fixture post-rename sync failure".into())),
+        });
         let privacy = health_app.privacy_cookie_test_state();
         let health = health_app.health_cookie_test_state();
         assert!(!privacy.1);

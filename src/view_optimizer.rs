@@ -18,6 +18,13 @@ enum Tab {
     Excluded,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum SortColumn {
+    #[default]
+    Program,
+    Publisher,
+}
+
 #[derive(Default)]
 pub(super) struct OptimizerUi {
     snapshot: Option<Arc<Snapshot>>,
@@ -27,6 +34,8 @@ pub(super) struct OptimizerUi {
     loading: bool,
     query: String,
     tab: Tab,
+    sort: SortColumn,
+    descending: bool,
     dialog: Option<Dialog>,
 }
 #[derive(Clone)]
@@ -96,6 +105,69 @@ impl App {
         Ok(())
     }
 
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_optimizer_precondition(&self, action: &str) -> Result<(), String> {
+        if !self.qa_fixture_mode() {
+            return Err("Optimizer UI actions require isolated fixture mode.".into());
+        }
+        let has_program = self
+            .optimizer_ui
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.programs.is_empty());
+        match action {
+            "Applications" | "Active apps" | "Sleeping apps" | "Excluded apps" => Ok(()),
+            "Sort Program" | "Sort Publisher" if has_program => Ok(()),
+            "Details" if has_program && self.optimizer_ui.dialog.is_none() => Ok(()),
+            "Close" | "Close dialog" | "Escape"
+                if matches!(self.optimizer_ui.dialog.as_ref(), Some(Dialog::Details(_))) =>
+            {
+                Ok(())
+            }
+            _ => Err(format!(
+                "Optimizer action is unavailable in this safe fixture state: {action}"
+            )),
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_optimizer_action_state(
+        &self,
+        action: &str,
+    ) -> Result<serde_json::Value, String> {
+        if !self.qa_fixture_mode() {
+            return Err("Optimizer UI actions require isolated fixture mode.".into());
+        }
+        let dialog = if matches!(self.optimizer_ui.dialog.as_ref(), Some(Dialog::Details(_))) {
+            "details"
+        } else {
+            "closed"
+        };
+        let state = serde_json::json!({
+            "tab": optimizer_tab_label(self.optimizer_ui.tab),
+            "sort": optimizer_sort_label(self.optimizer_ui.sort),
+            "descending": self.optimizer_ui.descending,
+            "dialog": dialog,
+            "programs": self.optimizer_ui.snapshot.as_ref().map(|snapshot| snapshot.programs.len()),
+        });
+        let valid = match action {
+            "Applications" | "Active apps" | "Sleeping apps" | "Excluded apps" => {
+                state["tab"] == action
+            }
+            "Sort Program" => state["sort"] == "Program",
+            "Sort Publisher" => state["sort"] == "Publisher",
+            "Details" => state["dialog"] == "details",
+            "Close" | "Close dialog" | "Escape" => state["dialog"] == "closed",
+            _ => false,
+        };
+        if !valid {
+            return Err(format!(
+                "Optimizer action did not reach its expected safe state: {action}"
+            ));
+        }
+        Ok(serde_json::json!({ "action": action, "state": state }))
+    }
+
     fn begin_optimizer_scan(&mut self, ctx: &egui::Context) {
         if self.busy() || self.qa_fixture_mode() {
             return;
@@ -160,14 +232,6 @@ impl App {
         }
     }
     pub(super) fn optimizer_page(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        if self.qa_fixture_mode() {
-            theme::muted(
-                ui,
-                "QA fixture — synthetic data only; no inventory or effects were run.",
-                t,
-            );
-            ui.add_space(6.);
-        }
         if !self.feature_seen("optimizer") {
             if self.feature_intro(
                 ui,
@@ -281,17 +345,47 @@ impl App {
             })
             .map(|(i, _)| i)
             .collect();
-        indices.sort_by_cached_key(|i| {
-            snapshot.programs[*i]
-                .registration
-                .display_name
-                .to_lowercase()
+        indices.sort_by(|left, right| {
+            let left_program = &snapshot.programs[*left];
+            let right_program = &snapshot.programs[*right];
+            let primary = match self.optimizer_ui.sort {
+                SortColumn::Program => left_program
+                    .registration
+                    .display_name
+                    .to_lowercase()
+                    .cmp(&right_program.registration.display_name.to_lowercase()),
+                SortColumn::Publisher => left_program
+                    .registration
+                    .publisher
+                    .as_deref()
+                    .unwrap_or("Unavailable")
+                    .to_lowercase()
+                    .cmp(
+                        &right_program
+                            .registration
+                            .publisher
+                            .as_deref()
+                            .unwrap_or("Unavailable")
+                            .to_lowercase(),
+                    ),
+            };
+            let primary = if self.optimizer_ui.descending {
+                primary.reverse()
+            } else {
+                primary
+            };
+            primary.then_with(|| {
+                left_program
+                    .registration
+                    .display_name
+                    .to_lowercase()
+                    .cmp(&right_program.registration.display_name.to_lowercase())
+            })
         });
         if !excluded_tab {
-            ui.label(RichText::new("Registered applications").family(theme::semibold()));
             theme::muted(
                 ui,
-                "Background activity and impact have not been measured. View possible background items in Details.",
+                "Impact is not measured. Details lists possible background entries.",
                 t,
             );
         } else {
@@ -344,7 +438,39 @@ impl App {
             ui.spacing_mut().item_spacing.y = 0.;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.;
-                for (label,w) in [("Program",name_width),("Publisher",148.),("Impact",90.),("Actions",116.)] {
+                let program_header = optimizer_sort_heading(
+                    ui,
+                    "Program",
+                    "Sort Program",
+                    name_width,
+                    self.optimizer_ui.sort == SortColumn::Program,
+                    self.optimizer_ui.descending,
+                    t,
+                );
+                if program_header.clicked() {
+                    select_optimizer_sort(
+                        &mut self.optimizer_ui.sort,
+                        &mut self.optimizer_ui.descending,
+                        SortColumn::Program,
+                    );
+                }
+                let publisher_header = optimizer_sort_heading(
+                    ui,
+                    "Publisher",
+                    "Sort Publisher",
+                    148.,
+                    self.optimizer_ui.sort == SortColumn::Publisher,
+                    self.optimizer_ui.descending,
+                    t,
+                );
+                if publisher_header.clicked() {
+                    select_optimizer_sort(
+                        &mut self.optimizer_ui.sort,
+                        &mut self.optimizer_ui.descending,
+                        SortColumn::Publisher,
+                    );
+                }
+                for (label, w) in [("Impact", 90.), ("Actions", 116.)] {
                     theme::table_cell(ui,RichText::new(label).color(t.muted).size(theme::FONT_CAPTION),w,22.);
                 }
             });
@@ -365,10 +491,14 @@ impl App {
                                     cell.spacing_mut().item_spacing.x=8.;
                                     self.app_icons.show(cell,program.and_then(|p|p.registration.icon_resource()).as_deref(),22.);
                                     let response = cell.add_sized([(name_width-30.).max(80.),40.],egui::Button::new((RichText::new(name).family(theme::semibold()).color(t.foreground),egui::Atom::grow())).frame(false).truncate());
+                                    #[cfg(debug_assertions)]
+                                    theme::record_fixture_control(cell, "Details", &response);
                                     if response.clicked() { self.optimizer_ui.dialog=Some(optimizer_details_for(program,&key)); }
                                     response.on_hover_text(name).on_hover_text(&key);
                                 });
-                                theme::table_cell(row,RichText::new(program.and_then(|p|p.registration.publisher.as_deref()).unwrap_or("Unavailable")).color(t.muted),148.,40.);
+                                let publisher = program.and_then(|p|p.registration.publisher.as_deref()).unwrap_or("Unavailable");
+                                theme::table_cell(row,RichText::new(publisher).color(t.muted),148.,40.)
+                                    .on_hover_text(publisher);
                                 theme::table_cell(row,RichText::new("Unavailable").color(t.muted),90.,40.);
                                 row.allocate_ui_with_layout(Vec2::new(80.,40.),Layout::left_to_right(Align::Center),|cell| {
                                     cell.set_min_width(80.); cell.set_max_width(80.);
@@ -457,6 +587,19 @@ impl App {
     }
 
     pub(super) fn optimizer_dialog(&mut self, ctx: &egui::Context) {
+        if self.optimizer_ui.dialog.is_some()
+            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            let can_close = !self.busy()
+                || matches!(
+                    self.optimizer_ui.dialog.as_ref(),
+                    Some(Dialog::Details(_) | Dialog::RetainedKey(_))
+                );
+            if can_close {
+                self.optimizer_ui.dialog = None;
+            }
+            return;
+        }
         let Some(dialog) = self.optimizer_ui.dialog.clone() else {
             return;
         };
@@ -468,7 +611,12 @@ impl App {
         let mut save = None;
         let response=egui::Modal::new(egui::Id::new("optimizer-dialog")).frame(theme::dialog_frame(t)).show(ctx,|ui| {
             ui.set_width(width);
-            ui.heading(match &dialog {Dialog::Details(_) | Dialog::RetainedKey(_)=>"Application details",Dialog::Exclusion {excluded:true,..}=>"Exclude application?",Dialog::Exclusion {..}=>"Remove exclusion?"});
+            ui.horizontal(|ui| {
+                ui.heading(match &dialog {Dialog::Details(_) | Dialog::RetainedKey(_)=>"Application details",Dialog::Exclusion {excluded:true,..}=>"Exclude application?",Dialog::Exclusion {..}=>"Remove exclusion?"});
+                ui.with_layout(Layout::right_to_left(Align::Center), |actions| {
+                    close |= theme::close_button(actions, "Close dialog", can_close);
+                });
+            });
             ui.add_space(12.);
             egui::ScrollArea::vertical().id_salt("optimizer-dialog-body").max_height((ctx.content_rect().height()-190.).max(80.)).show(ui,|ui| {
                 match &dialog {
@@ -618,4 +766,67 @@ fn optimizer_detail(ui: &mut egui::Ui, label: &str, value: &str, t: Tokens) {
         ui.add(egui::Label::new(value).wrap()).on_hover_text(value);
     });
     ui.add_space(6.);
+}
+
+fn select_optimizer_sort(current: &mut SortColumn, descending: &mut bool, selected: SortColumn) {
+    if *current == selected {
+        *descending = !*descending;
+    } else {
+        *current = selected;
+        *descending = false;
+    }
+}
+
+fn optimizer_sort_heading(
+    ui: &mut egui::Ui,
+    label: &str,
+    accessible_label: &str,
+    width: f32,
+    selected: bool,
+    descending: bool,
+    t: Tokens,
+) -> egui::Response {
+    let text = if selected {
+        format!("{label} {}", if descending { "↓" } else { "↑" })
+    } else {
+        label.to_owned()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 22.), egui::Sense::click());
+    ui.painter().text(
+        rect.left_center(),
+        egui::Align2::LEFT_CENTER,
+        text,
+        egui::FontId::new(theme::FONT_CAPTION, theme::semibold()),
+        if selected || response.hovered() {
+            t.foreground
+        } else {
+            t.muted
+        },
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, accessible_label)
+    });
+    #[cfg(debug_assertions)]
+    theme::record_fixture_control(ui, accessible_label, &response);
+    response.on_hover_text(format!(
+        "{accessible_label} in ascending or descending order"
+    ))
+}
+
+#[cfg(debug_assertions)]
+fn optimizer_tab_label(tab: Tab) -> &'static str {
+    match tab {
+        Tab::Applications => "Applications",
+        Tab::Active => "Active apps",
+        Tab::Sleeping => "Sleeping apps",
+        Tab::Excluded => "Excluded apps",
+    }
+}
+
+#[cfg(debug_assertions)]
+fn optimizer_sort_label(sort: SortColumn) -> &'static str {
+    match sort {
+        SortColumn::Program => "Program",
+        SortColumn::Publisher => "Publisher",
+    }
 }

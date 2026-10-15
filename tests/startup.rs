@@ -73,6 +73,7 @@ impl StartupPlatform for FakePlatform {
 fn run_state() -> ObservedState {
     let identity = EntryIdentity::StartupRunValue {
         hive: RegistryHive::CurrentUser,
+        view: dcleaner::startup::RegistryView::Registry64,
         key: r"Software\Microsoft\Windows\CurrentVersion\Run".into(),
         value_name: "SampleApp".into(),
         approval_hive: RegistryHive::CurrentUser,

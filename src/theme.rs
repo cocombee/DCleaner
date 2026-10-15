@@ -69,6 +69,8 @@ struct ControlGeometry {
     role: String,
     rect: [f32; 4],
     radius: u8,
+    clip_rect: [f32; 4],
+    layer: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,6 +108,13 @@ fn record_control(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
                 role: role.to_owned(),
                 rect: [rect.left(), rect.top(), rect.width(), rect.height()],
                 radius,
+                clip_rect: [
+                    ui.clip_rect().left(),
+                    ui.clip_rect().top(),
+                    ui.clip_rect().width(),
+                    ui.clip_rect().height(),
+                ],
+                layer: format!("{:?}", ui.layer_id()),
                 label: None,
                 enabled: None,
             });
@@ -221,7 +230,113 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
             FontFamily::Proportional
         }),
     );
-    record_control(ui, "tab", response.rect, 14);
+    record_labeled_control(ui, "tab", response.rect, 14, label, ui.is_enabled());
+    response
+}
+pub fn tab_with_icon_count(
+    ui: &mut egui::Ui,
+    selected: bool,
+    icon: Icon,
+    label: &str,
+    count: Option<usize>,
+    t: Tokens,
+) -> egui::Response {
+    let text = count
+        .map(|count| format!("{label} ({count})"))
+        .unwrap_or_else(|| label.to_owned());
+    let font = FontId::new(FONT_BODY, semibold());
+    let width = ui
+        .painter()
+        .layout_no_wrap(text.clone(), font, t.foreground)
+        .size()
+        .x
+        + 48.;
+    let icon_id = ui.id().with(("page-tab-icon", label));
+    let painted = ui
+        .allocate_ui_with_layout(
+            Vec2::new(width, 40.),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().button_padding = Vec2::new(12., 6.);
+                egui::Button::new((
+                    egui::Atom::custom(icon_id, Vec2::splat(16.)),
+                    RichText::new(text)
+                        .family(semibold())
+                        .size(FONT_BODY)
+                        .color(t.foreground),
+                ))
+                .selected(selected)
+                .fill(if selected { t.canvas } else { t.sidebar })
+                .stroke(Stroke::new(1., if selected { t.primary } else { t.border }))
+                .corner_radius(4)
+                .min_size(Vec2::new(width, 40.))
+                .atom_ui(ui)
+            },
+        )
+        .inner;
+    if let Some(rect) = painted.rect(icon_id) {
+        paint_icon(ui.painter(), rect, icon, t.primary);
+    }
+    focus_ring(ui, &painted.response, 6);
+    record_labeled_control(
+        ui,
+        "page-tab",
+        painted.response.rect,
+        4,
+        label,
+        ui.is_enabled(),
+    );
+    painted.response
+}
+
+/// Full-page sections use the same compact rectangular tabs as inventory pages.
+/// Segmented modes continue to use `tab`.
+pub fn page_tab(ui: &mut egui::Ui, selected: bool, label: &str, t: Tokens) -> egui::Response {
+    let width = ui
+        .painter()
+        .layout_no_wrap(
+            label.to_owned(),
+            FontId::new(FONT_BODY, semibold()),
+            t.foreground,
+        )
+        .size()
+        .x
+        + 16.;
+    let response = ui
+        .allocate_ui_with_layout(
+            Vec2::new(width, 40.),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.spacing_mut().button_padding = Vec2::new(8., 6.);
+                ui.add(
+                    egui::Button::new(
+                        RichText::new(label)
+                            .family(semibold())
+                            .size(FONT_BODY)
+                            .color(t.foreground),
+                    )
+                    .selected(selected)
+                    .fill(if selected { t.canvas } else { t.sidebar })
+                    .stroke(Stroke::new(1., if selected { t.primary } else { t.border }))
+                    .corner_radius(4)
+                    .min_size(Vec2::new(width, 40.)),
+                )
+            },
+        )
+        .inner;
+    focus_ring(ui, &response, 6);
+    record_labeled_control(ui, "page-tab", response.rect, 4, label, ui.is_enabled());
+    response
+}
+
+pub fn radio_value<T: PartialEq>(
+    ui: &mut egui::Ui,
+    current: &mut T,
+    value: T,
+    label: &str,
+) -> egui::Response {
+    let response = ui.radio_value(current, value, label);
+    record_labeled_control(ui, "radio", response.rect, 9, label, ui.is_enabled());
     response
 }
 
@@ -301,24 +416,6 @@ pub fn selector<R>(
     .inner
 }
 
-pub fn search_width(ui: &egui::Ui, choices: &[&str]) -> f32 {
-    let font = ui.style().text_styles[&egui::TextStyle::Body].clone();
-    let text_width = |text: &str| {
-        ui.painter()
-            .layout_no_wrap(text.to_owned(), font.clone(), ui.visuals().text_color())
-            .size()
-            .x
-    };
-    let fixed = text_width("Search")
-        + text_width("Sort by")
-        + text_width("Descending")
-        + selector_width(ui, choices)
-        + ui.spacing().icon_width
-        + ui.spacing().icon_spacing
-        + 48.;
-    (ui.available_width() - fixed).clamp(150., 320.)
-}
-
 pub fn field_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
     action_button(ui, label, enabled, None, FIELD_HEIGHT, 12., "field-action").clicked()
 }
@@ -334,6 +431,28 @@ pub fn checkbox<'a>(
 pub fn checkbox_widget(ui: &mut egui::Ui, checked: &mut bool, enabled: bool) -> egui::Response {
     checkbox_mixed(ui, checked, false, (), enabled)
 }
+pub fn checkbox_text(
+    ui: &mut egui::Ui,
+    checked: &mut bool,
+    label: &str,
+    enabled: bool,
+) -> egui::Response {
+    checkbox(ui, checked, label, enabled)
+}
+pub fn checkbox_named(
+    ui: &mut egui::Ui,
+    checked: &mut bool,
+    mixed: bool,
+    label: &str,
+    enabled: bool,
+) -> egui::Response {
+    let response = checkbox_mixed(ui, checked, mixed, (), enabled);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, enabled, *checked, label)
+    });
+    record_labeled_control(ui, "checkbox", response.rect, 4, label, enabled);
+    response.on_hover_text(label)
+}
 pub fn checkbox_mixed<'a>(
     ui: &mut egui::Ui,
     checked: &'a mut bool,
@@ -344,6 +463,7 @@ pub fn checkbox_mixed<'a>(
     let t = tokens(ui.visuals().dark_mode);
     let selected = *checked || mixed;
     let atoms = label.into_atoms();
+    let control_label: Option<String> = atoms.text().map(|text| text.to_string());
     let width = atoms
         .text()
         .map_or(24., |text| {
@@ -358,13 +478,15 @@ pub fn checkbox_mixed<'a>(
                 + CHECKBOX_SIZE
                 + LABEL_GAP
         })
-        .min(ui.max_rect().width())
+        .min(ui.available_width())
         .max(24.);
     let response = ui
         .allocate_ui_with_layout(
             Vec2::new(width, 24.),
             egui::Layout::left_to_right(egui::Align::Center),
             |ui| {
+                ui.set_max_width(width);
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 ui.spacing_mut().icon_width = CHECKBOX_SIZE;
                 ui.spacing_mut().icon_width_inner = 9.;
                 ui.spacing_mut().interact_size.y = 24.;
@@ -407,7 +529,11 @@ pub fn checkbox_mixed<'a>(
         )
         .inner;
     focus_ring(ui, &response, 6);
-    record_control(ui, "checkbox", response.rect, 4);
+    if let Some(label) = control_label {
+        record_labeled_control(ui, "checkbox", response.rect, 4, &label, enabled);
+    } else {
+        record_control(ui, "checkbox", response.rect, 4);
+    }
     response
 }
 
@@ -587,6 +713,33 @@ pub fn secondary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
 pub fn header_action(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
     action_button(ui, label, enabled, None, 28., 12., "header-action").clicked()
 }
+pub fn close_button(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
+    let response = ui.add_enabled(
+        enabled,
+        egui::Button::new("")
+            .frame(false)
+            .min_size(Vec2::splat(28.)),
+    );
+    let center = response.rect.center();
+    let stroke = Stroke::new(
+        1.4,
+        if enabled {
+            ui.visuals().text_color()
+        } else {
+            ui.visuals().weak_text_color()
+        },
+    );
+    ui.painter()
+        .line_segment([center - Vec2::splat(4.), center + Vec2::splat(4.)], stroke);
+    ui.painter().line_segment(
+        [center + Vec2::new(-4., 4.), center + Vec2::new(4., -4.)],
+        stroke,
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    record_labeled_control(ui, "icon-action", response.rect, 0, label, enabled);
+    focus_ring(ui, &response, 4);
+    response.on_hover_text(label).clicked()
+}
 fn action_button(
     ui: &mut egui::Ui,
     label: &str,
@@ -600,6 +753,7 @@ fn action_button(
     let colour = primary.map_or(t.foreground, |t| t.primary_text);
     let icon = match label {
         "Configure" | "Cookie settings" => Some((Icon::Settings, false)),
+        "Check for updates" => Some((Icon::Update, false)),
         "Rescan" | "Scan again" => Some((Icon::Refresh, true)),
         "Refresh"
         | "Refresh profiles"
@@ -746,13 +900,35 @@ pub fn row_more(ui: &mut egui::Ui, enabled: bool) -> egui::Response {
             .circle_filled(response.rect.center() + Vec2::new(offset, 0.), 1.2, colour);
     }
     focus_ring(ui, &response, (TABLE_ACTION_HEIGHT / 2.) as u8 + 2);
-    record_control(
+    record_labeled_control(
         ui,
         "row-more",
         response.rect,
         (TABLE_ACTION_HEIGHT / 2.) as u8,
+        "More options",
+        enabled,
     );
     response.on_hover_text("More options")
+}
+pub fn disclosure(ui: &mut egui::Ui, label: &str, open: bool) -> egui::Response {
+    let response = ui.add_sized(
+        Vec2::splat(TABLE_ACTION_HEIGHT),
+        egui::Button::new("").frame(false),
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    let center = response.rect.center();
+    let direction = if open { -1. } else { 1. };
+    ui.painter().add(egui::Shape::line(
+        vec![
+            center + Vec2::new(-4., -2. * direction),
+            center + Vec2::new(0., 2. * direction),
+            center + Vec2::new(4., -2. * direction),
+        ],
+        Stroke::new(1.6, ui.visuals().text_color()),
+    ));
+    record_labeled_control(ui, "disclosure", response.rect, 0, label, true);
+    focus_ring(ui, &response, 4);
+    response.on_hover_text(label)
 }
 #[cfg(windows)]
 pub fn window_chrome(ui: &mut egui::Ui, t: Tokens) {
@@ -940,6 +1116,8 @@ fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
 
 #[derive(Clone, Copy)]
 pub enum Icon {
+    Cookie,
+    Trash,
     Refresh,
     Folder,
     Export,
@@ -1073,6 +1251,33 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Cookie => {
+            line(&[
+                (17., 10.),
+                (16., 15.),
+                (12., 18.),
+                (7., 18.),
+                (3., 14.),
+                (2., 9.),
+                (4., 5.),
+                (8., 2.),
+                (11., 2.),
+                (11., 6.),
+                (14., 6.),
+                (14., 10.),
+                (17., 10.),
+            ]);
+            for (x, y) in [(6., 9.), (9., 6.), (8., 14.), (12., 12.)] {
+                p.circle_filled(point(x, y), rect.width() * 0.035, colour);
+            }
+        }
+        Icon::Trash => {
+            line(&[(3., 5.), (17., 5.)]);
+            line(&[(7., 5.), (7., 2.), (13., 2.), (13., 5.)]);
+            line(&[(5., 5.), (6., 18.), (14., 18.), (15., 5.)]);
+            line(&[(8., 8.), (8., 15.)]);
+            line(&[(12., 8.), (12., 15.)]);
+        }
         Icon::Refresh => {
             line(&[(16., 7.), (14., 4.), (10., 3.), (6., 4.), (3., 8.)]);
             line(&[(16., 3.), (16., 7.), (12., 7.)]);
