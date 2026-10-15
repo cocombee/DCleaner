@@ -240,7 +240,7 @@
   ],
   "unknowns": [
     "Exact UI command translation to the service-side native dispatcher (service registration names and selected callbacks are now statically linked)",
-    "Service-side component mutation and app/component association",
+    "Underlying manager/component mutation and app/component association (five module interface targets now statically linked)",
     "Impact classification",
     "Service lifecycle, process-exit monitoring and return-to-sleep",
     "Native journal/receipt, crash and reboot recovery behavior",
@@ -486,6 +486,253 @@
       "No debugger ownership or effective-precedence inference",
       "No registration writes, helper installation, RPC, launch, process effects, Sleep/Wake or return-to-sleep implementation",
       "Not connected as a GUI Sleep action"
+    ]
+  },
+  "service_interface_evidence": {
+    "method": "Offline original-PE x64 type descriptor/COL/vftable mapping, constructor-store validation, DUMPBIN adjustment-thunk decoding",
+    "method_references": [
+      "https://clang.llvm.org/doxygen/CodeGen_2MicrosoftCXXABI_8cpp_source.html",
+      "https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/Decompiler/ghidra_scripts/classrecovery/RTTIWindowsClassRecoverer.java"
+    ],
+    "module_type": ".?AVprogram_deactivator_module@detail@program_deactivator@asw@@",
+    "type_descriptor": "0x141d4c1f0",
+    "interface_subobject_offset": 856,
+    "interface_vftable": "0x1418908c0",
+    "constructor": "0x140826f80",
+    "constructor_table_store": "0x14082711a",
+    "resolved_slots": [
+      {
+        "interface_slot": "0x48",
+        "adjustment_thunk": "0x1408372b4",
+        "implementation": "0x1408339a0",
+        "observation": "Reads adjustment from this-4, adjusts this, then tail-jumps; static only"
+      },
+      {
+        "interface_slot": "0xa0",
+        "adjustment_thunk": "0x1408373d4",
+        "implementation": "0x14082cb20",
+        "observation": "Reads adjustment from this-4, adjusts this, then tail-jumps; static only"
+      },
+      {
+        "interface_slot": "0xb0",
+        "adjustment_thunk": "0x14083732c",
+        "implementation": "0x14082bbb0",
+        "observation": "Reads adjustment from this-4, adjusts this, then tail-jumps; static only"
+      },
+      {
+        "interface_slot": "0xb8",
+        "adjustment_thunk": "0x140837314",
+        "implementation": "0x14082bc60",
+        "observation": "Reads adjustment from this-4, adjusts this, then tail-jumps; static only"
+      },
+      {
+        "interface_slot": "0xc0",
+        "adjustment_thunk": "0x140837350",
+        "implementation": "0x14082bcf0",
+        "observation": "Reads adjustment from this-4, adjusts this, then tail-jumps; static only"
+      }
+    ],
+    "other_type_descriptors": [
+      {
+        "type": ".?AVCProgramManager@detail@program_deactivator@asw@@",
+        "address": "0x141d4d750"
+      },
+      {
+        "type": ".?AVCTUDeactivatorThread@detail@program_deactivator@asw@@",
+        "address": "0x141d4c3b0"
+      },
+      {
+        "type": ".?AVCProgramServiceEntry@ServiceManager@detail@program_deactivator@asw@@",
+        "address": "0x141cbe1f0"
+      },
+      {
+        "type": ".?AVCProgramScheduledTaskEntry@ScheduleManager@detail@program_deactivator@asw@@",
+        "address": "0x141d4ec00"
+      },
+      {
+        "type": ".?AVCProgramStartMenuEntry@StartMenuManager@detail@program_deactivator@asw@@",
+        "address": "0x141d4ed40"
+      },
+      {
+        "type": ".?AVCProgramRegistryRunEntry@RegistryRunManager@detail@program_deactivator@asw@@",
+        "address": "0x141d4ef60"
+      }
+    ],
+    "limitations": [
+      "This links a static module implementation to the observed interface shape; no runtime object or effect is observed",
+      "Class/type names alone do not prove method semantics",
+      "Return-to-sleep, component mutation, impact, ownership and recovery still require implementation-body and runtime evidence"
+    ],
+    "private_record_sha256": {
+      "optimizer-service-rtti-tables.json": "3941092865e724268f1b7de062c1b0798d8804f9d39ea5c2eb8cce5d76c3315d",
+      "optimizer-service-vftable-references.json": "4eab0eef1636a5efd59f4ab23dbda314c5919ce63e1e256179cc2609710d15e1",
+      "optimizer-service-module-vftable-store.disasm.txt": "e646d462d6252d4f912974d82698128a0ee31f6815d7ec7a58a74c47025a084f",
+      "optimizer-service-module-thunks.disasm.txt": "8ecad0d8bfa892762d704afa81f2ce660f1e77697de079c99b7227897f005b07",
+      "optimizer-service-module-resolved-slots.json": "79acabb748afc450969101b88f94b00592f15565b80e5aea0f25fb41c9e1c2e6",
+      "optimizer-service-component-imports.json": "336434254b33828b733196a0610a45843e4665d153602480b41fd615dfb1d39d",
+      "002-function-0x14082bcf0.json": "96b5c89c137a783ba591d6600e26df32ef025b8b6d360d92881b0afa15caa9d9",
+      "optimizer-sqlite-snapshot-manifest.json": "6f5242a325603b14fddbc8570336f910e6d041111fd1e13043206b09913d9564",
+      "optimizer-payload-shape.json": "707a04abc64f7e5cad491cbca30a954608fbc0f27bb85688f5f2a5714b9df31e"
+    }
+  },
+  "service_focused_rea_attempt": {
+    "provider": "Ghidra 12.1.4",
+    "operation": "analyze_function",
+    "procedure": "0x14082bcf0",
+    "configured_disabled_analyzers": [
+      "Decompiler Switch Analysis",
+      "Stack",
+      "Windows x86 PE RTTI Analyzer",
+      "PDB Universal"
+    ],
+    "profile_digest": "16bfc18b2bf30d0a7a52251afb6201fb97b991b8705d062b4bbec02481f9d2ac",
+    "startup_timeout_ms": 600000,
+    "result": "provider_timeout",
+    "failure_kind": "timeout",
+    "failure_message": "Ghidra startup deadline elapsed",
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "ghidra_or_script_log_returned": false,
+    "function_evidence_created": false,
+    "same_launcher_confirmed_exited": true,
+    "limits": [
+      "Profile configuration was committed, but analyzer execution was not established",
+      "The timeout does not establish that the requested procedure or the full service was analyzed",
+      "No identical automatic retry is authorized by this record; diagnose startup or use a supported distinct bounded route"
+    ]
+  },
+  "optimizer_database_evidence": {
+    "method": "Python sqlite3 mode=ro/query_only read transaction and online backup; closed integrity-checked snapshots; schema and bounded aggregate/format queries only",
+    "sqlite_runtime_version": "3.53.1",
+    "snapshots": [
+      {
+        "artifact": "CCleanerPO.db",
+        "snapshot_sha256": "a772ee90b53df0b1c3b8891a11ffa5631dbdf4ab2a73902cf1a514eb19e0cc94",
+        "snapshot_bytes": 196608,
+        "integrity_check": [
+          "ok"
+        ],
+        "source_db_and_wal_unchanged_during_backup": true,
+        "tables": 8,
+        "aggregate_rows": 326,
+        "declared_foreign_keys": 0
+      },
+      {
+        "artifact": "CCleanerPOCache.db",
+        "snapshot_sha256": "ce33a5e034170c36dc27d72d3269e0d2473643451aac635fb31928c0aacfe556",
+        "snapshot_bytes": 430080,
+        "integrity_check": [
+          "ok"
+        ],
+        "source_db_and_wal_unchanged_during_backup": true,
+        "tables": 7,
+        "aggregate_rows": 1655,
+        "declared_foreign_keys": 0
+      }
+    ],
+    "schema_observations": [
+      "ProgramToEntriesMapping has a unique (TUID,UniqueID) index; concrete identity/ownership semantics are unproven.",
+      "ComponentToSubcomponentMapping has a unique SubComponentID index and a ComponentID index.",
+      "ExeFiles has a unique (Exe,TUID,Path) index; IgnoredPrograms has a unique TUID index.",
+      "ActualProgramModifications and ActualEntryModifications retain identifier/time/Data fields; that schema alone does not establish before/after restoration semantics.",
+      "The cache includes program/company, own-product, MSI metadata/date and AppX/MSI icon/resource structures."
+    ],
+    "payload_observations": {
+      "program_modification_rows": 7,
+      "program_payload_type": "TEXT",
+      "program_payload_bytes": {
+        "min": 0,
+        "max": 0
+      },
+      "entry_modification_rows": 5,
+      "entry_payload_type": "TEXT",
+      "entry_payload_bytes": {
+        "min": 26,
+        "max": 123
+      },
+      "json_payloads": 0,
+      "entry_category_null_rows": 5,
+      "format_or_field_semantics_established": false
+    },
+    "rea_inspection": {
+      "runtime": "Node 24.19.0",
+      "result": "access_denied",
+      "system_code": "EPERM",
+      "boundary": "filesystem-read",
+      "original_and_identical_native_workspace_copies_attempted": true,
+      "evidence_ids_created": []
+    },
+    "limitations": [
+      "Python evidence is separate from REA; the REA SQLite attempt did not succeed",
+      "No concrete row identities, private paths, program names, registry values or payload contents are published",
+      "Schema links and aggregate counts do not establish runtime association, state, ownership, Sleep, recovery or re-sleep behavior"
+    ]
+  },
+  "service_bounded_decompilation": {
+    "method": "Standalone direct-JVM headless Ghidra fallback using REA launch-support coordinates; separate from the timed-out REA provider",
+    "ghidra_version": "12.1.4",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "language": "x86:LE:64:default",
+    "compiler_spec": "windows",
+    "global_auto_analysis": false,
+    "target_executed": false,
+    "rea_evidence_ids": [],
+    "per_function_timeout_seconds": 30,
+    "range_basis": "Original PE runtime-function metadata; restricted initial disassembly; manual function bodies assigned to decoded instructions",
+    "private_record_sha256": "713853bafd51b051963c310a638b3d5448065e34eb7a90fea0a0df3fa68f4a34",
+    "functions": [
+      {
+        "entry": "0x14082bcf0",
+        "end_exclusive": "0x14082c3bb",
+        "decoded_instructions": 383,
+        "decompile_completed": true,
+        "pcode_instruction_addresses": 227,
+        "pcode_addresses_outside_requested_range": 0
+      },
+      {
+        "entry": "0x14082bbb0",
+        "end_exclusive": "0x14082bc56",
+        "decoded_instructions": 45,
+        "decompile_completed": true,
+        "pcode_instruction_addresses": 25,
+        "pcode_addresses_outside_requested_range": 0
+      },
+      {
+        "entry": "0x14082cb20",
+        "end_exclusive": "0x14082ccce",
+        "decoded_instructions": 95,
+        "decompile_completed": true,
+        "pcode_instruction_addresses": 111,
+        "pcode_addresses_outside_requested_range": 66
+      },
+      {
+        "entry": "0x1408339a0",
+        "end_exclusive": "0x140833f58",
+        "decoded_instructions": 357,
+        "decompile_completed": true,
+        "pcode_instruction_addresses": 215,
+        "pcode_addresses_outside_requested_range": 0
+      },
+      {
+        "entry": "0x14083f8e0",
+        "end_exclusive": "0x14083fef6",
+        "decoded_instructions": 326,
+        "decompile_completed": true,
+        "pcode_instruction_addresses": 249,
+        "pcode_addresses_outside_requested_range": 0
+      }
+    ],
+    "observations": [
+      "The re-enable implementation passes the supplied wide-string wrapper to 0x1408399b0, then passes the returned object and 0x1f40 to 0x140839fd0. Timeout and result branches are visible; helper semantics, time units and OS effects are unproven.",
+      "The Clean implementation gates on 0x14082e9a0, calls 0x1408395e0 and conditionally calls 0x140839fd0 with 0xffffffff. This is control-flow evidence, not an implemented Sleep operation.",
+      "Scan passes a one-byte output and mode flags to 0x140839bb0. App association and impact classification remain unresolved.",
+      "The program-manager constructor stores the separately validated vftable and initializes subobjects. Concrete component ownership remains unresolved."
+    ],
+    "limitations": [
+      "Imported functions initially had one-byte bodies; explicit body assignment corrected the analysis annotation but does not prove full original source function coverage.",
+      "The decompiler for 0x14082cb20 still follows 66 instruction addresses outside its requested PE range. No chained unwind range was found for that entry; boundary or tail-transfer semantics remain unresolved. The merged pseudocode is not counted as one fully recovered function.",
+      "No outside-range p-code addresses were observed for the other four selections; dependencies, indirect dispatch and omitted semantics remain unresolved.",
+      "Raw pseudocode, assembly and database content remain private. This fallback creates no canonical REA Evidence ID and establishes no runtime Sleep, Wake, recovery or return-to-sleep outcome."
     ]
   }
 }
