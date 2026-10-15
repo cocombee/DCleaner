@@ -956,6 +956,10 @@
       },
       {
         "record": "optimizer-service-dispatch-review.json",
+        "sha256": "3a68b62f93a188cc232ef3ba0a847888205496c3a7bf79c37180d5b973d946c1"
+      },
+      {
+        "record": "optimizer-service-dispatch-review-pre-code2-followup.json",
         "sha256": "f7c36f964be1c2f8573d8e34bcc680fc6ac4d82fbe08a44bd071b760aa339987"
       },
       {
@@ -978,6 +982,14 @@
         "request_code": 1,
         "dispatcher": "0x140838c80",
         "dispatch": "Provider virtual slot +0x110 with request key and argument 1",
+        "dynamic_mutation_target_resolved": false
+      },
+      {
+        "producer": null,
+        "observed_operation": "Dispatcher code 2; producer and operation semantics not traced",
+        "request_code": 2,
+        "dispatcher": "0x140838c80",
+        "dispatch": "Provider virtual slot +0x110 with request key and argument 0 at 0x140839040",
         "dynamic_mutation_target_resolved": false
       },
       {
