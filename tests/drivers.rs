@@ -697,6 +697,28 @@ fn update_rejects_a_wua_package_that_matches_multiple_present_devices() {
     );
 }
 
+#[cfg(not(windows))]
+#[test]
+fn non_windows_driver_update_stops_before_creating_an_operation_journal() {
+    let original = device("PCI\\VEN_A&DEV_B\\X", vec!["PCI\\VEN_A&DEV_B"], vec![]);
+    let snapshot = DriverSnapshot::assemble(
+        inventory(vec![original]),
+        catalogue(vec![candidate("PCI\\VEN_A&DEV_B", 4)]),
+    );
+    let intent = drivers::prepare_update_intent(
+        &snapshot.inventory.devices[0],
+        &snapshot.catalogue.candidates[0],
+    )
+    .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let mut platform = drivers::WindowsDriverPlatform;
+    assert!(matches!(
+        drivers::apply_reviewed_update(root.path(), &intent, &mut platform),
+        Err(drivers::DriverOperationError::NativeUpdateBoundaryUnavailable)
+    ));
+    assert!(!root.path().join("effects").exists());
+}
+
 #[test]
 fn reviewed_update_journals_before_install_and_checks_exact_post_state() {
     let original = device("PCI\\VEN_A&DEV_B\\X", vec!["PCI\\VEN_A&DEV_B"], vec![]);
@@ -1098,6 +1120,23 @@ fn reviewed_restore_rechecks_the_device_journals_and_verifies_original_state() {
     };
     let restore_intent =
         drivers::prepare_restore_intent(&update_intent, &update_receipt, &updated).unwrap();
+
+    #[cfg(not(windows))]
+    {
+        let unsupported_root = tempfile::tempdir().unwrap();
+        let mut unsupported_platform = drivers::WindowsDriverPlatform;
+        assert!(matches!(
+            drivers::apply_reviewed_restore(
+                unsupported_root.path(),
+                &update_intent,
+                &update_receipt,
+                &restore_intent,
+                &mut unsupported_platform,
+            ),
+            Err(drivers::DriverOperationError::NativeUpdateBoundaryUnavailable)
+        ));
+        assert!(!unsupported_root.path().join("effects").exists());
+    }
 
     let root = tempfile::tempdir().unwrap();
     let mut platform = make_action_platform(

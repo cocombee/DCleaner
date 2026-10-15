@@ -200,7 +200,12 @@ mod tests {
             |_, _| {},
         )
         .unwrap();
-        assert_eq!(analysis.count(), 1);
+        assert_eq!(
+            analysis.count(),
+            1,
+            "fixture root validation: {:?}",
+            crate::scanner::safe_root(directory.path())
+        );
         (directory, analysis)
     }
     #[test]

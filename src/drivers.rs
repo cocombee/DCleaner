@@ -4255,6 +4255,57 @@ impl DriverPlatform for WindowsDriverPlatform {
     }
 }
 
+// Keep the shared UI and reviewed workflow callable on other platforms while
+// rejecting Windows-only operations before any native effect or durable intent.
+#[cfg(not(windows))]
+impl DriverActionBoundary for WindowsDriverPlatform {
+    fn current_device(&mut self, _: &DeviceId) -> Result<DriverDevice, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+
+    fn exact_candidate(
+        &mut self,
+        _: &CandidateIdentity,
+    ) -> Result<DriverCandidate, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+
+    fn create_restore_point(&mut self, _: &str) -> Result<i64, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+
+    fn export_driver_package(
+        &mut self,
+        _: &Path,
+        _: &DriverUpdateIntent,
+        _: uuid::Uuid,
+    ) -> Result<DriverBackupReceipt, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+
+    fn download_and_install(
+        &mut self,
+        _: &DriverUpdateIntent,
+    ) -> Result<DriverInstallOutcome, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+
+    fn candidate_is_installed(
+        &mut self,
+        _: &CandidateIdentity,
+    ) -> Result<bool, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+
+    fn restore_from_package(
+        &mut self,
+        _: &Path,
+        _: &DriverRestoreIntent,
+    ) -> Result<DriverRestoreOutcome, DriverOperationError> {
+        Err(DriverOperationError::NativeUpdateBoundaryUnavailable)
+    }
+}
+
 /// The native update boundary is compiled only for Windows. Individual
 /// operations still fail closed when the system refuses package export,
 /// restore-point creation, WUA, SetupAPI, or required privilege.

@@ -3,7 +3,9 @@ name: Native Rust checks
 on:
   push:
     branches: [main]
+    paths: ['Cargo.toml', 'Cargo.lock', '*.rs', 'src/**', 'tests/**', 'scripts/**', 'assets/**', '.github/workflows/**']
   pull_request:
+    paths: ['Cargo.toml', 'Cargo.lock', '*.rs', 'src/**', 'tests/**', 'scripts/**', 'assets/**', '.github/workflows/**']
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,17 @@ jobs:
           cargo +1.98.0 --version
       - name: Check formatting
         run: cargo +1.98.0 fmt --all -- --check
+      - name: Prepare canonical fixture directory
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          directory = Path(os.environ["RUNNER_TEMP"]) / "dcleaner-fixtures"
+          directory.mkdir(parents=True, exist_ok=True)
+          directory = directory.resolve(strict=True)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              for name in ("TEMP", "TMP", "TMPDIR"):
+                  output.write(f"{name}={directory}\n")
       - name: Run ordinary tests
         run: cargo +1.98.0 test --locked
       - name: Build native release
