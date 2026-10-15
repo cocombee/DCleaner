@@ -133,10 +133,10 @@ enum SettingsTab {
 impl SettingsTab {
     const ALL: [(Self, &'static str); 7] = [
         (Self::General, "General"),
+        (Self::MenuLayout, "Menu"),
         (Self::Scheduling, "Scheduling"),
         (Self::Updates, "Updates"),
         (Self::Privacy, "Privacy"),
-        (Self::MenuLayout, "Menu Layout"),
         (Self::Subscription, "My Subscription"),
         (Self::About, "About"),
     ];
@@ -192,7 +192,16 @@ pub(super) fn show(
 
     theme::tabs(ui, |ui| {
         for (tab, label) in SettingsTab::ALL {
-            if theme::page_tab(ui, selected == tab, label, t).clicked() {
+            let icon = match tab {
+                SettingsTab::General => theme::Icon::Home,
+                SettingsTab::MenuLayout => theme::Icon::Menu,
+                SettingsTab::Scheduling => theme::Icon::Calendar,
+                SettingsTab::Updates => theme::Icon::Refresh,
+                SettingsTab::Privacy => theme::Icon::Account,
+                SettingsTab::Subscription => theme::Icon::Subscription,
+                SettingsTab::About => theme::Icon::Info,
+            };
+            if theme::settings_tab(ui, selected == tab, icon, label, t).clicked() {
                 selected = tab;
                 ctx.data_mut(|data| data.insert_temp(tab_id, selected));
             }
@@ -973,6 +982,11 @@ pub(super) fn qa_selected_tab(ctx: &egui::Context) -> &'static str {
 
 #[cfg(debug_assertions)]
 pub(super) fn qa_action_precondition(app: &App, ctx: &egui::Context, label: &str) -> bool {
+    let label = if label == "Menu Layout" {
+        "Menu"
+    } else {
+        label
+    };
     let tab = ctx
         .data(|data| data.get_temp::<SettingsTab>(egui::Id::new(TAB_ID)))
         .unwrap_or_default();

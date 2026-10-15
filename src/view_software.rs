@@ -27,6 +27,7 @@ pub(super) struct SoftwareUi {
     tab: SoftwareTab,
     sort: SoftwareSort,
     descending: bool,
+    app_updates_collapsed: bool,
     selected: Option<String>,
     dialog: Option<SoftwareDialog>,
     settings: SoftwareSettings,
@@ -58,6 +59,7 @@ enum SoftwareSort {
     Name,
     Installed,
     Available,
+    Importance,
     Status,
 }
 
@@ -141,6 +143,27 @@ impl App {
             Some(SoftwareDialog::Details(_)) => Some("details"),
             None => None,
         };
+        let visible_eligible_updates = self
+            .software_ui
+            .snapshot
+            .as_ref()
+            .map(|snapshot| {
+                let visible: Vec<_> = snapshot
+                    .items
+                    .iter()
+                    .filter(|item| {
+                        tab_matches(self.software_ui.tab, item)
+                            && matches_query(item, &self.software_ui.query)
+                    })
+                    .cloned()
+                    .collect();
+                visible_eligible_keys(&visible, &self.software_ui.eligible_updates)
+            })
+            .unwrap_or_default();
+        let selected_visible_updates = visible_eligible_updates
+            .iter()
+            .filter(|key| self.software_ui.selected_updates.contains(*key))
+            .count();
         serde_json::json!({
             "tab": software_tab_name(self.software_ui.tab),
             "sort": software_sort_name(self.software_ui.sort),
@@ -150,6 +173,9 @@ impl App {
             "selected": self.software_ui.selected.is_some(),
             "eligible_updates": self.software_ui.eligible_updates.len(),
             "selected_update_count": self.software_ui.selected_updates.len(),
+            "visible_eligible_updates": visible_eligible_updates.len(),
+            "selected_visible_updates": selected_visible_updates,
+            "app_updates_expanded": !self.software_ui.app_updates_collapsed,
             "dialog": dialog,
             "more_open": self.software_ui.qa_more_open.is_some(),
             "worker_active": self.worker.is_some(),
@@ -169,12 +195,43 @@ impl App {
                     && matches_query(item, &self.software_ui.query)
             })
         });
+        let visible_eligible_count = self
+            .software_ui
+            .snapshot
+            .as_ref()
+            .map(|snapshot| {
+                let filtered: Vec<_> = snapshot
+                    .items
+                    .iter()
+                    .filter(|item| {
+                        tab_matches(self.software_ui.tab, item)
+                            && matches_query(item, &self.software_ui.query)
+                    })
+                    .cloned()
+                    .collect();
+                visible_eligible_keys(&filtered, &self.software_ui.eligible_updates).len()
+            })
+            .unwrap_or_default();
         let can_dismiss = !self.busy();
         let valid = match label {
             "Outdated software" | "Up-to-date software" | "Skipped & ignored" => has_snapshot,
-            "Sort Software" | "Sort Current version" | "Sort New version" => has_snapshot,
-            "Select all eligible updates" => {
-                can_dismiss && visible && self.software_ui.tab == SoftwareTab::Outdated
+            "Sort Software" | "Sort Current version" | "Sort New version" | "Sort Importance" => {
+                has_snapshot
+            }
+            "Select all eligible updates" | "Select App updates" => {
+                can_dismiss
+                    && visible_eligible_count > 0
+                    && self.software_ui.tab == SoftwareTab::Outdated
+            }
+            "Collapse App updates" => {
+                visible
+                    && self.software_ui.tab == SoftwareTab::Outdated
+                    && !self.software_ui.app_updates_collapsed
+            }
+            "Expand App updates" => {
+                visible
+                    && self.software_ui.tab == SoftwareTab::Outdated
+                    && self.software_ui.app_updates_collapsed
             }
             "Update" => {
                 can_dismiss
@@ -231,11 +288,18 @@ impl App {
             "Sort Software" => state["sort"] == "Software",
             "Sort Current version" => state["sort"] == "Current version",
             "Sort New version" => state["sort"] == "New version",
+            "Sort Importance" => state["sort"] == "Importance",
             "Update" => state["dialog"] == "update_review",
             "Update all" | "Update selected" => state["dialog"] == "batch_review",
+            "Select App updates" => {
+                state["selected_visible_updates"] == state["visible_eligible_updates"]
+                    && state["visible_eligible_updates"] != 0
+            }
+            "Collapse App updates" => state["app_updates_expanded"] == false,
+            "Expand App updates" => state["app_updates_expanded"] == true,
             "Select all eligible updates" => {
-                state["selected_update_count"] == state["eligible_updates"]
-                    && !self.software_ui.selected_updates.is_empty()
+                state["selected_visible_updates"] == state["visible_eligible_updates"]
+                    && state["visible_eligible_updates"] != 0
             }
             "More" | "More options" => state["more_open"] == true,
             "Details" | "View details" => state["dialog"] == "details",
@@ -385,7 +449,7 @@ impl App {
                         "Read update offers from the configured WinGet source; other catalogues are not included.",
                     ),
                     (
-                        theme::Icon::Settings,
+                        theme::Icon::Info,
                         "Keep control of each change",
                         "Review package identity and version first. Some updates use the vendor’s interactive installer or require a restart.",
                     ),
@@ -419,13 +483,13 @@ impl App {
                 ),
                 (
                     SoftwareTab::UpToDate,
-                    theme::Icon::Programs,
+                    theme::Icon::WindowCheck,
                     "Up-to-date software",
                     tab_counts.map(|counts| counts.1),
                 ),
                 (
                     SoftwareTab::SkippedIgnored,
-                    theme::Icon::Settings,
+                    theme::Icon::EyeOff,
                     "Skipped & ignored",
                     tab_counts.map(|counts| counts.2),
                 ),
@@ -440,6 +504,11 @@ impl App {
                 );
                 if response.clicked() {
                     self.software_ui.tab = tab;
+                    (self.software_ui.sort, self.software_ui.descending) = sort_for_tab_change(
+                        self.software_ui.sort,
+                        self.software_ui.descending,
+                        tab,
+                    );
                 }
             }
         });
@@ -1212,12 +1281,14 @@ impl App {
             self.software_ui.descending,
         );
         let visible_eligible = visible_eligible_keys(&items, &eligible_keys);
-        let table_width = ui.available_width().max(0.0);
+        egui::ScrollArea::horizontal().id_salt("software-table-columns").auto_shrink([false, true]).show(ui, |ui| {
+        ui.set_min_width(580.);
+        let table_width = ui.available_width().max(580.);
         let action_width = 108.0;
-        let state_width = 70.0;
-        let version_width = 108.0;
-        let name_width =
-            (table_width - action_width - state_width - 2.0 * version_width - 32.0).max(120.0);
+        let state_width = 88.0;
+        let installed_width = 88.0;
+        let available_width = 72.0;
+        let name_width = (table_width - action_width - state_width - installed_width - available_width - 32.).max(192.);
         let previous_y_spacing = ui.spacing().item_spacing.y;
         ui.spacing_mut().item_spacing.y = 0.;
         ui.horizontal(|ui| {
@@ -1246,15 +1317,11 @@ impl App {
                         )
                         .changed()
                         {
-                            if select_all {
-                                self.software_ui
-                                    .selected_updates
-                                    .extend(visible_eligible.iter().cloned());
-                            } else {
-                                for key in &visible_eligible {
-                                    self.software_ui.selected_updates.remove(key);
-                                }
-                            }
+                            set_visible_update_selection(
+                                &mut self.software_ui.selected_updates,
+                                &visible_eligible,
+                                select_all,
+                            );
                         }
                     } else {
                         ui.add_space(22.);
@@ -1262,7 +1329,7 @@ impl App {
                     if sortable_heading(
                         ui,
                         "Software",
-                        (name_width - 30.).max(60.),
+                        (name_width - 32.).max(60.),
                         self.software_ui.sort == SoftwareSort::Name,
                         self.software_ui.descending,
                         t,
@@ -1278,9 +1345,8 @@ impl App {
                 },
             );
             for (heading, width, sort) in [
-                ("Current version", version_width, SoftwareSort::Installed),
-                ("New version", version_width, SoftwareSort::Available),
-                ("Status", state_width, SoftwareSort::Status),
+                ("Current version", installed_width, SoftwareSort::Installed),
+                ("New version", available_width, SoftwareSort::Available),
             ] {
                 if sortable_heading(
                     ui,
@@ -1299,19 +1365,138 @@ impl App {
                     );
                 }
             }
+            let state_sort = if self.software_ui.tab == SoftwareTab::Outdated {
+                SoftwareSort::Importance
+            } else {
+                SoftwareSort::Status
+            };
+            let state_heading = if state_sort == SoftwareSort::Importance {
+                "Importance"
+            } else {
+                "Status"
+            };
+            let state_header = sortable_heading(
+                ui,
+                state_heading,
+                state_width,
+                self.software_ui.sort == state_sort,
+                self.software_ui.descending,
+                t,
+            );
+            let state_header = if state_sort == SoftwareSort::Importance {
+                state_header.on_hover_text(
+                    "WinGet does not provide an importance rating; all listed values are Unavailable.",
+                )
+            } else {
+                state_header
+            };
+            if state_header.clicked() {
+                select_header_sort(
+                    &mut self.software_ui.sort,
+                    &mut self.software_ui.descending,
+                    state_sort,
+                );
+            }
             table_heading(ui, "Actions", action_width, t);
         });
         ui.add_space(3.);
         ui.separator();
         let body_height =
             (ctx.content_rect().bottom() - ui.cursor().top() - 74. - 28. - 50.).max(120.);
+        let has_app_updates_group =
+            self.software_ui.tab == SoftwareTab::Outdated && !items.is_empty();
+        let app_updates_expanded = !self.software_ui.app_updates_collapsed;
+        let group_row_count = usize::from(has_app_updates_group);
+        let row_count = if has_app_updates_group {
+            group_row_count + if app_updates_expanded { items.len() } else { 0 }
+        } else {
+            items.len()
+        };
         egui::ScrollArea::vertical()
             .id_salt("software-table-body")
             .max_height(body_height)
             .auto_shrink([false, true])
-            .show_rows(ui, 44.0, items.len(), |rows_ui, visible_rows| {
-                for index in visible_rows {
-                    let item = &items[index];
+            .show_rows(ui, 44.0, row_count, |rows_ui, visible_rows| {
+                for virtual_index in visible_rows {
+                    if has_app_updates_group && virtual_index == 0 {
+                        let selected_count = visible_eligible
+                            .iter()
+                            .filter(|key| self.software_ui.selected_updates.contains(*key))
+                            .count();
+                        let all_selected = !visible_eligible.is_empty()
+                            && selected_count == visible_eligible.len();
+                        let mixed = selected_count > 0 && !all_selected;
+                        let mut select_group = all_selected;
+                        let group_response = rows_ui.allocate_ui_with_layout(
+                            [table_width, 44.].into(),
+                            Layout::left_to_right(Align::Center),
+                            |row| {
+                                row.set_min_height(44.0);
+                                row.spacing_mut().item_spacing.x = 8.0;
+                                if selected_count > 0 {
+                                    row.painter().rect_filled(
+                                        egui::Rect::from_min_size(
+                                            row.cursor().min,
+                                            [table_width, 44.].into(),
+                                        ),
+                                        0.,
+                                        t.tint,
+                                    );
+                                }
+                                let checkbox = theme::checkbox_named(
+                                    row,
+                                    &mut select_group,
+                                    mixed,
+                                    "Select App updates",
+                                    row_actions_enabled && !visible_eligible.is_empty(),
+                                );
+                                if checkbox.changed() {
+                                    set_visible_update_selection(
+                                        &mut self.software_ui.selected_updates,
+                                        &visible_eligible,
+                                        select_group,
+                                    );
+                                }
+                                let label_width = (table_width - 68.0).max(60.0);
+                                let group_label = row.add_sized(
+                                    [label_width, 40.],
+                                    egui::Button::new((
+                                        RichText::new(format!("App updates ({})", items.len()))
+                                            .family(theme::semibold())
+                                            .color(t.foreground),
+                                        egui::Atom::grow(),
+                                    ))
+                                    .frame(false)
+                                    .truncate(),
+                                );
+                                let disclosure_label = if app_updates_expanded {
+                                    "Collapse App updates"
+                                } else {
+                                    "Expand App updates"
+                                };
+                                let disclosure =
+                                    theme::disclosure(row, disclosure_label, app_updates_expanded);
+                                if group_label.clicked() || disclosure.clicked() {
+                                    self.software_ui.app_updates_collapsed =
+                                        !self.software_ui.app_updates_collapsed;
+                                }
+                            },
+                        );
+                        let rect = group_response.response.rect;
+                        rows_ui.painter().hline(
+                            rect.x_range(),
+                            rect.bottom(),
+                            egui::Stroke::new(1., t.border),
+                        );
+                        continue;
+                    }
+                    let index = virtual_index.saturating_sub(group_row_count);
+                    if has_app_updates_group && !app_updates_expanded {
+                        continue;
+                    }
+                    let Some(item) = items.get(index) else {
+                        continue;
+                    };
                     let key = item.row_key();
                     rows_ui.push_id(&key, |ui| {
                         let row_response = ui.allocate_ui_with_layout(
@@ -1347,6 +1532,7 @@ impl App {
                                             cell.set_min_width(name_width);
                                             cell.set_max_width(name_width);
                                             cell.spacing_mut().item_spacing.x = 8.;
+                                            cell.add_space(32.);
                                             let mut update_selected =
                                                 self.software_ui.selected_updates.contains(&key);
                                             if eligible_keys.contains(&key) {
@@ -1383,7 +1569,7 @@ impl App {
                                                 cell.spacing_mut().button_padding.x = 0.;
                                                 cell.add_sized(
                                                     [
-                                                        (name_width - 58.).clamp(60., name_width),
+                                                        (name_width - 98.).clamp(48., name_width),
                                                         40.,
                                                     ],
                                                     egui::Button::selectable(
@@ -1414,7 +1600,7 @@ impl App {
                                         item.row.installed_version.as_deref().unwrap_or("—"),
                                     )
                                     .color(t.muted),
-                                    version_width,
+                                    installed_width,
                                     40.,
                                 );
                                 theme::table_cell(
@@ -1423,16 +1609,26 @@ impl App {
                                         item.row.available_version.as_deref().unwrap_or("—"),
                                     )
                                     .color(status_color(item.status, t)),
-                                    version_width,
+                                    available_width,
                                     40.,
                                 );
-                                theme::table_cell(
-                                    row,
-                                    RichText::new(status_label(item))
-                                        .color(status_color(item.status, t)),
-                                    state_width,
-                                    40.,
-                                );
+                                if self.software_ui.tab == SoftwareTab::Outdated {
+                                    theme::table_cell(
+                                        row,
+                                        RichText::new("Unavailable").color(t.muted),
+                                        state_width,
+                                        40.,
+                                    )
+                                    .on_hover_text("WinGet does not provide an importance rating.");
+                                } else {
+                                    theme::table_cell(
+                                        row,
+                                        RichText::new(status_label(item))
+                                            .color(status_color(item.status, t)),
+                                        state_width,
+                                        40.,
+                                    );
+                                }
                                 let mut primary_clicked = false;
                                 row.allocate_ui_with_layout(
                                     [72., 40.].into(),
@@ -1493,11 +1689,12 @@ impl App {
                                         };
                                 }
                                 egui::Popup::menu(&more).show(|ui| {
-                                    let details = ui.button("Details");
-                                    #[cfg(debug_assertions)]
-                                    if self.qa_fixture_mode() {
-                                        theme::record_fixture_control(ui, "Details", &details);
-                                    }
+                                    let details = theme::menu_action(
+                                        ui,
+                                        theme::Icon::Info,
+                                        "Details",
+                                        true,
+                                    );
                                     if details.clicked() {
                                         self.software_ui.selected = Some(key.clone());
                                         self.software_ui.dialog =
@@ -1517,62 +1714,63 @@ impl App {
                                             .map(|value| value.state);
                                         match preference {
                                             Some(SoftwarePreferenceState::SkipVersion) => {
-                                                if ui
-                                                    .add_enabled(
-                                                        preference_actions_enabled,
-                                                        egui::Button::new(
-                                                            "Restore skipped version",
-                                                        ),
-                                                    )
-                                                    .clicked()
+                                                if theme::menu_action(
+                                                    ui,
+                                                    theme::Icon::Undo,
+                                                    "Restore skipped version",
+                                                    preference_actions_enabled,
+                                                )
+                                                .clicked()
                                                 {
                                                     self.restore_software_preference(item);
                                                     ui.close();
                                                 }
                                             }
                                             Some(SoftwarePreferenceState::Ignored) => {
-                                                if ui
-                                                    .add_enabled(
-                                                        preference_actions_enabled,
-                                                        egui::Button::new(
-                                                            "Restore ignored package",
-                                                        ),
-                                                    )
-                                                    .clicked()
+                                                if theme::menu_action(
+                                                    ui,
+                                                    theme::Icon::Undo,
+                                                    "Restore ignored package",
+                                                    preference_actions_enabled,
+                                                )
+                                                .clicked()
                                                 {
                                                     self.restore_software_preference(item);
                                                     ui.close();
                                                 }
                                             }
                                             None if item.row.available_version.is_some() => {
-                                                if ui
-                                                    .add_enabled(
-                                                        preference_actions_enabled,
-                                                        egui::Button::new("Skip this version"),
-                                                    )
-                                                    .clicked()
+                                                if theme::menu_action(
+                                                    ui,
+                                                    theme::Icon::Forward,
+                                                    "Skip this version",
+                                                    preference_actions_enabled,
+                                                )
+                                                .clicked()
                                                 {
                                                     self.skip_software_version(item);
                                                     ui.close();
                                                 }
-                                                if ui
-                                                    .add_enabled(
-                                                        preference_actions_enabled,
-                                                        egui::Button::new("Ignore package"),
-                                                    )
-                                                    .clicked()
+                                                if theme::menu_action(
+                                                    ui,
+                                                    theme::Icon::EyeOff,
+                                                    "Ignore package",
+                                                    preference_actions_enabled,
+                                                )
+                                                .clicked()
                                                 {
                                                     self.ignore_software_package(item);
                                                     ui.close();
                                                 }
                                             }
                                             None => {
-                                                if ui
-                                                    .add_enabled(
-                                                        preference_actions_enabled,
-                                                        egui::Button::new("Ignore package"),
-                                                    )
-                                                    .clicked()
+                                                if theme::menu_action(
+                                                    ui,
+                                                    theme::Icon::EyeOff,
+                                                    "Ignore package",
+                                                    preference_actions_enabled,
+                                                )
+                                                .clicked()
                                                 {
                                                     self.ignore_software_package(item);
                                                     ui.close();
@@ -1599,6 +1797,7 @@ impl App {
                 }
             });
         ui.spacing_mut().item_spacing.y = previous_y_spacing;
+        });
         if items.is_empty() {
             ui.add_space(8.);
             theme::muted(ui, "No packages match this view and search.", t);
@@ -2275,6 +2474,34 @@ fn visible_eligible_keys(items: &[SoftwareItem], eligible: &HashSet<String>) -> 
         .collect()
 }
 
+fn set_visible_update_selection(
+    selected: &mut HashSet<String>,
+    visible_eligible: &[String],
+    is_selected: bool,
+) {
+    if is_selected {
+        selected.extend(visible_eligible.iter().cloned());
+    } else {
+        for key in visible_eligible {
+            selected.remove(key);
+        }
+    }
+}
+
+fn sort_for_tab_change(
+    sort: SoftwareSort,
+    descending: bool,
+    next_tab: SoftwareTab,
+) -> (SoftwareSort, bool) {
+    match (sort, next_tab) {
+        (SoftwareSort::Status, SoftwareTab::Outdated) => (SoftwareSort::Importance, false),
+        (SoftwareSort::Importance, _) if next_tab != SoftwareTab::Outdated => {
+            (SoftwareSort::Status, false)
+        }
+        _ => (sort, descending),
+    }
+}
+
 fn sort_items(items: &mut [SoftwareItem], sort: SoftwareSort, descending: bool) {
     items.sort_by(|left, right| {
         let ordering = match sort {
@@ -2291,6 +2518,13 @@ fn sort_items(items: &mut [SoftwareItem], sort: SoftwareSort, descending: bool) 
                 left.row.available_version.as_deref(),
                 right.row.available_version.as_deref(),
             ),
+            // WinGet exposes no severity/importance value, so all current values are unknown.
+            // Keep that sort useful and deterministic by falling back to the package name.
+            SoftwareSort::Importance => left
+                .row
+                .name
+                .to_lowercase()
+                .cmp(&right.row.name.to_lowercase()),
             SoftwareSort::Status => status_label(left).cmp(status_label(right)),
         };
         let ordering = if descending {
@@ -2421,11 +2655,6 @@ fn sortable_heading(
             |cell| {
                 cell.set_min_size([width, 22.].into());
                 cell.set_max_width(width);
-                if label == "Software" {
-                    // The header already owns the selection slot; reserve the
-                    // same icon width as the rows so title text shares an axis.
-                    cell.allocate_exact_size(egui::vec2(22., 22.), egui::Sense::hover());
-                }
                 cell.add(
                     egui::Label::new(
                         RichText::new(format!("{label}{indicator}"))
@@ -2847,6 +3076,97 @@ mod batch_tests {
         assert_eq!(sort, SoftwareSort::Status);
         assert!(!descending);
     }
+
+    #[test]
+    fn tab_change_uses_importance_only_for_outdated_and_keeps_status_elsewhere() {
+        assert_eq!(
+            sort_for_tab_change(SoftwareSort::Status, true, SoftwareTab::Outdated),
+            (SoftwareSort::Importance, false)
+        );
+        assert_eq!(
+            sort_for_tab_change(SoftwareSort::Importance, true, SoftwareTab::UpToDate),
+            (SoftwareSort::Status, false)
+        );
+        assert_eq!(
+            sort_for_tab_change(SoftwareSort::Available, true, SoftwareTab::SkippedIgnored),
+            (SoftwareSort::Available, true)
+        );
+    }
+
+    #[test]
+    fn importance_sort_falls_back_to_name_when_source_has_no_rating() {
+        let mut items = vec![
+            software_qa_item(
+                "Zulu Tool",
+                "Example.Zulu",
+                "1.0",
+                Some("2.0"),
+                SoftwareStatus::UpdateAvailable,
+            ),
+            software_qa_item(
+                "Alpha Tool",
+                "Example.Alpha",
+                "1.0",
+                Some("3.0"),
+                SoftwareStatus::Unmatched,
+            ),
+        ];
+
+        sort_items(&mut items, SoftwareSort::Importance, false);
+
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.row.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Alpha Tool", "Zulu Tool"]
+        );
+    }
+
+    #[test]
+    fn app_updates_group_selection_changes_only_filtered_eligible_rows() {
+        let visible_update = software_qa_item(
+            "Visible update",
+            "Example.Visible",
+            "1.0",
+            Some("2.0"),
+            SoftwareStatus::UpdateAvailable,
+        );
+        let filtered_update = software_qa_item(
+            "Filtered update",
+            "Example.Filtered",
+            "1.0",
+            Some("2.0"),
+            SoftwareStatus::UpdateAvailable,
+        );
+        let current = software_qa_item(
+            "Current package",
+            "Example.Current",
+            "1.0",
+            None,
+            SoftwareStatus::Current,
+        );
+        let snapshot = SoftwareSnapshot {
+            items: vec![
+                visible_update.clone(),
+                filtered_update.clone(),
+                current.clone(),
+            ],
+            registration_issues: Vec::new(),
+        };
+        let eligible = batch_eligible_keys(&snapshot);
+        let group_visible = visible_eligible_keys(&[visible_update.clone(), current], &eligible);
+        let mut selected = HashSet::new();
+
+        set_visible_update_selection(&mut selected, &group_visible, true);
+
+        assert_eq!(group_visible, vec![visible_update.row_key()]);
+        assert_eq!(selected, HashSet::from([visible_update.row_key()]));
+        assert!(!selected.contains(&filtered_update.row_key()));
+
+        set_visible_update_selection(&mut selected, &group_visible, false);
+        assert!(selected.is_empty());
+    }
 }
 
 fn format_date(date: &str) -> String {
@@ -2897,6 +3217,7 @@ fn software_sort_name(sort: SoftwareSort) -> &'static str {
         SoftwareSort::Name => "Software",
         SoftwareSort::Installed => "Current version",
         SoftwareSort::Available => "New version",
+        SoftwareSort::Importance => "Importance",
         SoftwareSort::Status => "Status",
     }
 }

@@ -85,7 +85,7 @@ fn navigation_pages(prefs: &Preferences) -> Vec<Page> {
 impl Page {
     fn icon(self) -> theme::Icon {
         match self {
-            Self::Overview => theme::Icon::Home,
+            Self::Overview => theme::Icon::Heart,
             Self::Clean => theme::Icon::Brush,
             Self::Disk => theme::Icon::Disk,
             Self::Duplicates => theme::Icon::Duplicate,
@@ -203,6 +203,8 @@ pub struct App {
     privacy_ui: view_privacy::PrivacyUi,
     recycle_bin_ui: view_recycle_bin::RecycleBinUi,
     clean_browser: bool,
+    clean_registry: bool,
+    sidebar_collapsed: Option<bool>,
     clean_bin: bool,
     page: Page,
     prefs: Preferences,
@@ -219,7 +221,6 @@ pub struct App {
     error: Option<String>,
     notice: Option<String>,
     search: String,
-    group: String,
     confirm: bool,
     settings_readable: bool,
     history_readable: bool,
@@ -398,6 +399,8 @@ impl App {
             privacy_ui: Default::default(),
             recycle_bin_ui: Default::default(),
             clean_browser,
+            clean_registry: false,
+            sidebar_collapsed: None,
             clean_bin,
             page: initial_page,
             prefs,
@@ -418,11 +421,6 @@ impl App {
             error,
             notice: None,
             search: String::new(),
-            group: if cfg!(windows) {
-                "Windows".into()
-            } else {
-                "macOS".into()
-            },
             confirm: false,
             settings_readable,
             history_readable,
@@ -1057,6 +1055,7 @@ impl App {
                 self.page = page;
                 if page == Page::Clean {
                     self.clean_browser = browser;
+                    self.clean_registry = false;
                 }
             }
             ui.add_space(6.);
@@ -1076,7 +1075,7 @@ impl App {
             ui.add_enabled_ui(!self.busy(), |ui| {
                 if theme::tab_with_icon_count(
                     ui,
-                    !self.clean_browser,
+                    !self.clean_browser && !self.clean_registry,
                     theme::Icon::Trash,
                     "Junk",
                     None,
@@ -1085,6 +1084,7 @@ impl App {
                 .clicked()
                 {
                     self.clean_browser = false;
+                    self.clean_registry = false;
                     self.clean_bin = false;
                 }
                 if theme::tab_with_icon_count(
@@ -1098,10 +1098,37 @@ impl App {
                 .clicked()
                 {
                     self.clean_browser = true;
+                    self.clean_registry = false;
+                }
+                if theme::tab_with_icon_count(
+                    ui,
+                    self.clean_registry,
+                    theme::Icon::Registry,
+                    "Registry",
+                    None,
+                    t,
+                )
+                .clicked()
+                {
+                    self.clean_browser = false;
+                    self.clean_registry = true;
+                    self.clean_bin = false;
                 }
             });
         });
         ui.add_space(16.);
+        if self.clean_registry {
+            ui.add_space(32.);
+            ui.vertical_centered(|ui| {
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(40.), egui::Sense::hover());
+                theme::paint_icon(ui.painter(), rect, theme::Icon::Registry, t.primary);
+                ui.add_space(16.);
+                ui.label(RichText::new("Registry analysis is unavailable").size(theme::FONT_TITLE).family(theme::semibold()));
+                ui.add_space(8.);
+                theme::muted(ui, "The registry rule catalogue and verified cleanup owner are not implemented. No registry entries have been analyzed or selected.", t);
+            });
+            return;
+        }
         if self.clean_browser {
             self.privacy_page(ui, t, ctx);
             return;
@@ -1200,123 +1227,9 @@ impl App {
                     .corner_radius(12),
             )
             .show(ui, |ui| {
-                theme::tabs(ui, |ui| {
-                    let os = if cfg!(windows) { "Windows" } else { "macOS" };
-                    for group in [os, "Applications"] {
-                        if theme::tab(ui, self.group == group, group).clicked() {
-                            self.group = group.into();
-                        }
-                    }
-                });
-                ui.add_space(12.);
-                theme::muted(
-                    ui,
-                    format!("Files at least {} days old", self.prefs.minimum_age_days),
-                    t,
-                );
-                ui.add_space(12.);
-                egui::Frame::new().show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.label(RichText::new("What to clean").family(theme::semibold()));
-                    ui.add_space(8.);
-                    let categories = self.categories.clone();
-                    let busy = self.busy();
-                    let mut changed = false;
-                    for category in categories.iter().filter(|c| c.group == self.group) {
-                        let mut checked = self.prefs.selected_categories.contains(&category.id);
-                        let text_width =
-                            (ui.available_width() - ui.spacing().icon_width - 8.).max(80.);
-                        let title_height = ui
-                            .painter()
-                            .layout(
-                                category.name.clone(),
-                                ui.style().text_styles[&egui::TextStyle::Body].clone(),
-                                t.foreground,
-                                text_width,
-                            )
-                            .size()
-                            .y;
-                        let detail_height = ui
-                            .painter()
-                            .layout(
-                                category.description.clone(),
-                                egui::FontId::proportional(theme::FONT_CAPTION),
-                                t.muted,
-                                text_width,
-                            )
-                            .size()
-                            .y;
-                        let row_height = title_height + 4. + detail_height;
-                        let mut row_changed = false;
-                        ui.allocate_ui_with_layout(
-                            Vec2::new(ui.available_width(), row_height),
-                            Layout::left_to_right(Align::Center),
-                            |ui| {
-                                ui.set_min_height(row_height);
-                                let check = theme::checkbox_widget(ui, &mut checked, !busy)
-                                    .on_hover_text(&category.name);
-                                check.widget_info(|| {
-                                    egui::WidgetInfo::selected(
-                                        egui::WidgetType::Checkbox,
-                                        !busy,
-                                        checked,
-                                        &category.name,
-                                    )
-                                });
-                                row_changed |= check.changed();
-                                ui.vertical(|ui| {
-                                    ui.set_width(text_width);
-                                    ui.spacing_mut().item_spacing.y = 4.;
-                                    let title = ui.add_enabled(
-                                        !busy,
-                                        egui::Label::new(&category.name)
-                                            .sense(egui::Sense::click()),
-                                    );
-                                    let detail = ui.add_enabled(
-                                        !busy,
-                                        egui::Label::new(
-                                            RichText::new(&category.description)
-                                                .size(theme::FONT_CAPTION)
-                                                .color(t.muted),
-                                        )
-                                        .sense(egui::Sense::click()),
-                                    );
-                                    if title.clicked() || detail.clicked() {
-                                        checked = !checked;
-                                        row_changed = true;
-                                    }
-                                });
-                            },
-                        );
-                        if row_changed {
-                            changed = true;
-                            if checked {
-                                self.prefs.selected_categories.push(category.id.clone());
-                            } else {
-                                self.prefs
-                                    .selected_categories
-                                    .retain(|id| id != &category.id);
-                            }
-                        }
-                        ui.add_space(8.);
-                    }
-                    if changed {
-                        self.invalidate();
-                    }
-                    if cfg!(windows) && self.group == "Windows" {
-                        ui.add_space(12.);
-                        ui.separator();
-                        ui.add_space(12.);
-                        ui.label(RichText::new("Recycle Bin").family(theme::semibold()));
-                        theme::muted(ui, "Review items already in the Recycle Bin.", t);
-                        if theme::row_action(ui, "Review", !busy).clicked() {
-                            self.clean_bin = true;
-                            self.recycle_bin_entered(ctx);
-                        }
-                    }
-                });
+                self.clean_category_tree(ui, t, ctx);
             });
-        theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);
+        theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());if self.analysis.is_some(){ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);}
             if let Some(analysis)=self.analysis.clone(){
                 ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(theme::FONT_DISPLAY).family(theme::semibold()));theme::muted(ui,format!("{} · {:.1}s elapsed{}",theme::counted_label(analysis.count(),"file","files"),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
                 let search_width=ui.available_width();
@@ -1334,10 +1247,228 @@ impl App {
                             if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
                         });});ui.separator();
                 }
-            }else{ui.add_space(30.);ui.vertical_centered(|ui|{ui.label(RichText::new("Analyze first. Decide what to clean.").size(theme::FONT_TITLE));ui.add_space(8.);theme::muted(ui,"Analysis only reads files; it does not change them.",t);});ui.add_space(35.);}
+            }else{
+                ui.add_space(32.);
+                ui.vertical_centered(|ui|{
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(36.), egui::Sense::hover());
+                    theme::paint_icon(ui.painter(), rect, theme::Icon::Trash, t.primary);
+                    ui.add_space(20.);
+                    ui.label(RichText::new("Clean up system clutter").size(theme::FONT_TITLE).family(theme::semibold()));
+                    ui.add_space(12.);
+                    theme::muted(ui,"Temporary files, logs and application caches can accumulate. Choose supported categories, scan, then review the files to remove.",t);
+                });
+                ui.add_space(32.);
+            }
+
         });
     }
+    fn clean_category_tree(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        let categories = self.categories.clone();
+        let busy = self.busy();
+        let mut changed = false;
+        let selected_count = categories
+            .iter()
+            .filter(|category| self.prefs.selected_categories.contains(&category.id))
+            .count();
+        let mut all = !categories.is_empty() && selected_count == categories.len();
+        let mixed = selected_count > 0 && !all;
+        theme::control_row(ui, |ui| {
+            if theme::checkbox_named(
+                ui,
+                &mut all,
+                mixed,
+                "Select all custom categories",
+                !busy && !categories.is_empty(),
+            )
+            .changed()
+            {
+                self.prefs
+                    .selected_categories
+                    .retain(|id| !categories.iter().any(|category| &category.id == id));
+                if all {
+                    self.prefs
+                        .selected_categories
+                        .extend(categories.iter().map(|category| category.id.clone()));
+                }
+                changed = true;
+            }
+            ui.label("Select all");
+            if theme::icon_action(ui, theme::Icon::Refresh, "Reset", !busy) {
+                let defaults = Preferences::default();
+                self.prefs.selected_categories = defaults
+                    .selected_categories
+                    .into_iter()
+                    .filter(|id| categories.iter().any(|category| &category.id == id))
+                    .collect();
+                changed = true;
+            }
+        });
+        ui.separator();
+        let mut groups = Vec::new();
+        for category in &categories {
+            if !groups.contains(&category.group) {
+                groups.push(category.group.clone());
+            }
+        }
+        for group in groups {
+            let members = categories
+                .iter()
+                .filter(|category| category.group == group)
+                .collect::<Vec<_>>();
+            let selected = members
+                .iter()
+                .filter(|category| self.prefs.selected_categories.contains(&category.id))
+                .count();
+            let mut checked = selected == members.len();
+            let mixed = selected > 0 && !checked;
+            let state_id = egui::Id::new(("custom-clean-group", &group));
+            let mut open = ui
+                .ctx()
+                .data(|data| data.get_temp::<bool>(state_id).unwrap_or(true));
+            ui.allocate_ui_with_layout(
+                Vec2::new(ui.available_width(), 40.),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_min_height(40.);
+                    if theme::checkbox_named(
+                        ui,
+                        &mut checked,
+                        mixed,
+                        &format!("Select custom group {group}"),
+                        !busy,
+                    )
+                    .changed()
+                    {
+                        self.prefs
+                            .selected_categories
+                            .retain(|id| !members.iter().any(|category| &category.id == id));
+                        if checked {
+                            self.prefs
+                                .selected_categories
+                                .extend(members.iter().map(|category| category.id.clone()));
+                        }
+                        changed = true;
+                    }
+                    let (icon_rect, _) =
+                        ui.allocate_exact_size(Vec2::splat(18.), egui::Sense::hover());
+                    theme::paint_icon(
+                        ui.painter(),
+                        icon_rect,
+                        match group.as_str() {
+                            "Windows" => theme::Icon::Windows,
+                            "Applications" => theme::Icon::Applications,
+                            _ => theme::Icon::Folder,
+                        },
+                        t.muted,
+                    );
+                    let name_width = (ui.available_width() - 30.).max(40.);
+                    theme::table_cell(
+                        ui,
+                        RichText::new(&group).family(theme::semibold()),
+                        name_width,
+                        40.,
+                    );
+                    if theme::disclosure(
+                        ui,
+                        &format!(
+                            "{} custom group {group}",
+                            if open { "Collapse" } else { "Expand" }
+                        ),
+                        open,
+                    )
+                    .clicked()
+                    {
+                        open = !open;
+                        ui.ctx().data_mut(|data| data.insert_temp(state_id, open));
+                    }
+                },
+            );
+            if open {
+                ui.indent((&group, "custom-clean-leaves"), |ui| {
+                    for category in members {
+                        let mut checked = self.prefs.selected_categories.contains(&category.id);
+                        let response = ui
+                            .horizontal(|ui| {
+                                let mut response = theme::checkbox_named(
+                                    ui,
+                                    &mut checked,
+                                    false,
+                                    &category.name,
+                                    !busy,
+                                );
+                                let (icon_rect, _) =
+                                    ui.allocate_exact_size(Vec2::splat(16.), egui::Sense::hover());
+                                theme::paint_icon(
+                                    ui.painter(),
+                                    icon_rect,
+                                    match category.id.as_str() {
+                                        "chrome" | "edge" | "firefox" => theme::Icon::Browser,
+                                        "temp" => theme::Icon::Trash,
+                                        "crash" => theme::Icon::Info,
+                                        _ => theme::Icon::Folder,
+                                    },
+                                    t.muted,
+                                );
+                                let name = ui
+                                    .add_enabled(
+                                        !busy,
+                                        egui::Label::new(&category.name)
+                                            .truncate()
+                                            .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_text(&category.description);
+                                if name.clicked() {
+                                    checked = !checked;
+                                    response.mark_changed();
+                                }
+                                response
+                            })
+                            .inner
+                            .on_hover_text(&category.description);
+                        if response.changed() {
+                            self.prefs
+                                .selected_categories
+                                .retain(|id| id != &category.id);
+                            if checked {
+                                self.prefs.selected_categories.push(category.id.clone());
+                            }
+                            changed = true;
+                        }
+                    }
+                });
+            }
+            ui.separator();
+        }
+        if categories.is_empty() {
+            theme::muted(ui, "No supported file categories are available.", t);
+        }
+        ui.add_space(8.);
+        theme::muted(
+            ui,
+            format!("Files at least {} days old", self.prefs.minimum_age_days),
+            t,
+        );
+        if cfg!(windows) {
+            ui.add_space(12.);
+            if theme::row_action(ui, "Review Recycle Bin", !busy).clicked() {
+                self.clean_bin = true;
+                self.recycle_bin_entered(ctx);
+            }
+        }
+        if changed {
+            self.invalidate();
+        }
+    }
+
     fn clean_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
+        if self.clean_registry {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                theme::primary(ui, "Clean and fix", t, false);
+                theme::secondary(ui, "Scan now", false);
+                theme::muted(ui, "Registry analysis unavailable", t);
+            });
+            return;
+        }
         ui.with_layout(
             Layout::right_to_left(Align::Center).with_main_wrap(true),
             |ui| {
@@ -1469,6 +1600,51 @@ impl App {
         label: &str,
         ctx: &egui::Context,
     ) -> Result<(), String> {
+        if label.starts_with("Navigate ")
+            || matches!(
+                label,
+                "Expand menu"
+                    | "Collapse menu"
+                    | "More tools"
+                    | "Disk Analyzer"
+                    | "Cleanup History"
+            )
+        {
+            let valid = if let Some(name) = label.strip_prefix("Navigate ") {
+                PAGES.iter().any(|page| page.name() == name)
+            } else {
+                match label {
+                    "Expand menu" | "Collapse menu" => true,
+                    "More tools" | "Disk Analyzer" | "Cleanup History" => self.page == Page::Clean,
+                    _ => false,
+                }
+            };
+            return if valid && !self.busy() {
+                Ok(())
+            } else {
+                Err(format!("Navigation action is unavailable: {label}"))
+            };
+        }
+        if self.page == Page::Clean && self.clean_browser && matches!(label, "Select all" | "Clear")
+        {
+            return self.qa_privacy_profile_action(label, false).map(|_| ());
+        }
+        if self.page == Page::Clean
+            && (matches!(
+                label,
+                "Junk" | "Browser" | "Registry" | "Select all custom categories" | "Reset"
+            ) || label.starts_with("Select custom group ")
+                || label.starts_with("Collapse custom group ")
+                || label.starts_with("Expand custom group "))
+        {
+            ctx.data_mut(|data| {
+                data.insert_temp(
+                    egui::Id::new("qa-custom-categories-before"),
+                    self.prefs.selected_categories.clone(),
+                )
+            });
+            return Ok(());
+        }
         if self.page == Page::Optimizer && !matches!(label, "Start now" | "Scan now") {
             return self.qa_optimizer_precondition(label);
         }
@@ -1491,6 +1667,7 @@ impl App {
             && matches!(
                 label,
                 "Enable startup item"
+                    | "Close"
                     | "Disable startup item"
                     | "More"
                     | "Show details"
@@ -1552,6 +1729,119 @@ impl App {
         if !self.qa_fixture_mode() {
             return Err("UI action verification requires isolated fixture mode.".into());
         }
+        if label.starts_with("Navigate ")
+            || matches!(
+                label,
+                "Expand menu"
+                    | "Collapse menu"
+                    | "More tools"
+                    | "Disk Analyzer"
+                    | "Cleanup History"
+            )
+        {
+            let valid = if let Some(name) = label.strip_prefix("Navigate ") {
+                self.page.name() == name
+            } else {
+                match label {
+                    "Expand menu" => self.sidebar_collapsed == Some(false),
+                    "Collapse menu" => self.sidebar_collapsed == Some(true),
+                    "More tools" => ctx
+                        .data(|data| data.get_temp::<bool>(egui::Id::new("qa-more-tools-open")))
+                        .unwrap_or(false),
+                    "Disk Analyzer" => self.page == Page::Disk,
+                    "Cleanup History" => self.page == Page::History,
+                    _ => false,
+                }
+            };
+            return if valid {
+                Ok(
+                    serde_json::json!({"page": self.page.name(), "sidebar_collapsed":self.sidebar_collapsed, "native_effects":false}),
+                )
+            } else {
+                Err(format!(
+                    "Navigation action did not reach its expected state: {label}"
+                ))
+            };
+        }
+        if self.page == Page::Clean && self.clean_browser && matches!(label, "Select all" | "Clear")
+        {
+            return self.qa_privacy_profile_action(label, true);
+        }
+        if self.page == Page::Clean
+            && (matches!(
+                label,
+                "Junk" | "Browser" | "Registry" | "Select all custom categories" | "Reset"
+            ) || label.starts_with("Select custom group ")
+                || label.starts_with("Collapse custom group ")
+                || label.starts_with("Expand custom group "))
+        {
+            let before = ctx
+                .data(|data| {
+                    data.get_temp::<Vec<String>>(egui::Id::new("qa-custom-categories-before"))
+                })
+                .unwrap_or_default();
+            let known = self
+                .categories
+                .iter()
+                .map(|category| category.id.clone())
+                .collect::<Vec<_>>();
+            let valid = match label {
+                "Junk" => !self.clean_registry && !self.clean_browser,
+                "Browser" => self.clean_browser && !self.clean_registry,
+                "Registry" => self.clean_registry && !self.clean_browser,
+                "Reset" => {
+                    self.prefs.selected_categories
+                        == Preferences::default()
+                            .selected_categories
+                            .into_iter()
+                            .filter(|id| known.contains(id))
+                            .collect::<Vec<_>>()
+                        && self.analysis.is_none()
+                }
+                _ if label.starts_with("Collapse custom group ")
+                    || label.starts_with("Expand custom group ") =>
+                {
+                    let (prefix, expected) = if label.starts_with("Collapse") {
+                        ("Collapse custom group ", false)
+                    } else {
+                        ("Expand custom group ", true)
+                    };
+                    let group = label.trim_start_matches(prefix);
+                    ctx.data(|data| {
+                        data.get_temp::<bool>(egui::Id::new(("custom-clean-group", group)))
+                    }) == Some(expected)
+                }
+                _ => {
+                    let members = if label == "Select all custom categories" {
+                        known.clone()
+                    } else {
+                        self.categories
+                            .iter()
+                            .filter(|category| {
+                                category.group == label.trim_start_matches("Select custom group ")
+                            })
+                            .map(|category| category.id.clone())
+                            .collect()
+                    };
+                    let previously_all =
+                        !members.is_empty() && members.iter().all(|id| before.contains(id));
+                    !members.is_empty()
+                        && members
+                            .iter()
+                            .all(|id| self.prefs.selected_categories.contains(id) != previously_all)
+                        && self.analysis.is_none()
+                }
+            };
+            return if valid {
+                Ok(
+                    serde_json::json!({"tab": if self.clean_registry {"Registry"} else if self.clean_browser {"Browser"} else {"Junk"}, "selected_categories": self.prefs.selected_categories, "known_categories": known, "analysis_present": self.analysis.is_some(), "registry_effects_available": false}),
+                )
+            } else {
+                Err(format!(
+                    "Custom Clean action did not reach its expected state: {label}"
+                ))
+            };
+        }
         if self.page == Page::Optimizer && !matches!(label, "Start now" | "Scan now") {
             return self.qa_optimizer_action_state(label);
         }
@@ -1574,6 +1864,7 @@ impl App {
             && matches!(
                 label,
                 "Enable startup item"
+                    | "Close"
                     | "Disable startup item"
                     | "More"
                     | "Show details"
@@ -1600,7 +1891,7 @@ impl App {
                     "Scheduling" => settings["tab"] == "scheduling",
                     "Updates" => settings["tab"] == "updates",
                     "Privacy" => settings["tab"] == "privacy",
-                    "Menu Layout" => settings["tab"] == "menu-layout",
+                    "Menu" | "Menu Layout" => settings["tab"] == "menu-layout",
                     "My Subscription" => settings["tab"] == "my-subscription",
                     "About" => settings["tab"] == "about",
                     "Light" => settings["appearance"] == "Light" && settings["dark"] == false,
@@ -1701,27 +1992,32 @@ impl App {
         if ctx.input(|i| i.viewport().close_requested()) {
             self.cancel.store(true, Ordering::Relaxed);
         }
-        // The supplied desktop reference keeps both navigation columns at
-        // roughly 920 px. Collapse only below that composition's usable width.
-        let narrow = root.available_width() < 900.;
-        let navigation_pages = navigation_pages(&self.prefs);
-        egui::Panel::left("icon-rail")
+        let narrow = self
+            .sidebar_collapsed
+            .unwrap_or(root.available_width() < 900.);
+        let primary_pages = navigation_pages(&self.prefs)
+            .into_iter()
+            .filter(|page| {
+                !matches!(
+                    page,
+                    Page::Disk | Page::History | Page::Settings | Page::Help
+                )
+            })
+            .collect::<Vec<_>>();
+        egui::Panel::left("main-navigation")
             .resizable(false)
-            .exact_size(64.)
+            .exact_size(if narrow { 64. } else { 228. })
             .frame(
                 egui::Frame::new()
-                    .fill(t.rail)
+                    .fill(t.sidebar)
                     .inner_margin(egui::Margin::symmetric(
-                        10,
+                        if narrow { 10 } else { 12 },
                         if cfg!(windows) { 4 } else { 20 },
                     )),
             )
             .show(root, |ui| {
-                ui.vertical_centered(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(
-                        Vec2::splat(if cfg!(windows) { 28. } else { 36. }),
-                        egui::Sense::hover(),
-                    );
+                ui.horizontal(|ui| {
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(28.), egui::Sense::hover());
                     if let Some(logo) = self.logo_texture.as_ref() {
                         ui.painter().image(
                             logo.id(),
@@ -1730,86 +2026,50 @@ impl App {
                             Color32::WHITE,
                         );
                     }
-                });
-                ui.add_space(if cfg!(windows) { 26. } else { 28. });
-                let rail_pages: &[Page] = if narrow {
-                    &navigation_pages
-                } else {
-                    &[Page::Overview, Page::Settings, Page::Help]
-                };
-                egui::ScrollArea::vertical()
-                    .id_salt("rail-destinations")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for &page in rail_pages {
-                            if theme::navigation(
-                                ui,
-                                if !narrow && page == Page::Overview {
-                                    "Maintenance"
-                                } else {
-                                    page.name()
-                                },
-                                page.icon(),
-                                self.page == page
-                                    || (!narrow
-                                        && page == Page::Overview
-                                        && !matches!(self.page, Page::Settings | Page::Help)),
-                                !busy,
-                                true,
-                                t,
-                            ) {
-                                self.page = page;
-                                self.search.clear();
-                            }
-                            ui.add_space(5.);
-                        }
-                    });
-            });
-        if !narrow {
-            egui::Panel::left("section-navigation")
-                .resizable(false)
-                .exact_size(196.)
-                .frame(
-                    egui::Frame::new()
-                        .fill(t.sidebar)
-                        .inner_margin(egui::Margin {
-                            left: 12,
-                            right: 16,
-                            top: if cfg!(windows) { 42 } else { 28 },
-                            bottom: 28,
-                        }),
-                )
-                .show(root, |ui| {
-                    ui.spacing_mut().item_spacing.y = 4.;
-                    egui::Frame::NONE
-                        .inner_margin(egui::Margin {
-                            left: 8,
-                            ..Default::default()
-                        })
-                        .show(ui, |ui| {
-                            ui.label(
-                                RichText::new("DCLEANER")
-                                    .family(theme::semibold())
-                                    .size(theme::FONT_CAPTION)
-                                    .color(t.muted),
-                            );
-                        });
-                    ui.add_space(6.);
-                    for page in navigation_pages.iter().copied() {
-                        if matches!(page, Page::Settings | Page::Help) {
-                            continue;
-                        }
-                        if theme::section_navigation(ui, page.name(), self.page == page, !busy, t) {
-                            self.page = page;
-                            self.search.clear();
-                        }
-                        ui.add_space(2.);
+                    if !narrow {
+                        ui.label(RichText::new("DCleaner").family(theme::semibold()));
                     }
-                    ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
-                        theme::muted(ui, "DCleaner · 0.1.0", t);
-                    });
                 });
-        }
+                ui.add_space(4.);
+                if theme::icon_action(
+                    ui,
+                    theme::Icon::Menu,
+                    if narrow {
+                        "Expand menu"
+                    } else {
+                        "Collapse menu"
+                    },
+                    !busy,
+                ) {
+                    self.sidebar_collapsed = Some(!narrow);
+                }
+                ui.add_space(2.);
+                ui.spacing_mut().item_spacing.y = 2.;
+                for page in primary_pages {
+                    let selected = self.page == page
+                        || (page == Page::Clean && self.page == Page::Disk)
+                        || (page == Page::Overview && self.page == Page::History);
+                    if theme::navigation(ui, page.name(), page.icon(), selected, !busy, narrow, t) {
+                        self.page = page;
+                        self.search.clear();
+                    }
+                }
+                ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
+                    ui.add_space(12.);
+                    if theme::navigation(
+                        ui,
+                        Page::Settings.name(),
+                        theme::Icon::Settings,
+                        matches!(self.page, Page::Settings | Page::Help),
+                        !busy,
+                        narrow,
+                        t,
+                    ) {
+                        self.page = Page::Settings;
+                        self.search.clear();
+                    }
+                });
+            });
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(t.canvas))
             .show(root, |ui| {
@@ -1888,6 +2148,47 @@ impl App {
                                 if self.page == Page::Clean {
                                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                         self.clean_settings_configure_button(ui, t, &ctx);
+                                        let tools =
+                                            theme::row_more(ui, !busy).on_hover_text("More tools");
+                                        #[cfg(debug_assertions)]
+                                        theme::record_fixture_control(ui, "More tools", &tools);
+                                        let popup = egui::Popup::menu(&tools);
+                                        #[cfg(debug_assertions)]
+                                        let popup_id = popup.get_id();
+                                        popup.show(|ui| {
+                                            if theme::menu_action(
+                                                ui,
+                                                theme::Icon::Disk,
+                                                "Disk Analyzer",
+                                                !busy,
+                                            )
+                                            .clicked()
+                                            {
+                                                self.page = Page::Disk;
+                                                ui.close();
+                                            }
+                                            if theme::menu_action(
+                                                ui,
+                                                theme::Icon::History,
+                                                "Cleanup History",
+                                                !busy,
+                                            )
+                                            .clicked()
+                                            {
+                                                self.page = Page::History;
+                                                ui.close();
+                                            }
+                                        });
+                                        #[cfg(debug_assertions)]
+                                        {
+                                            let open = egui::Popup::is_id_open(&ctx, popup_id);
+                                            ctx.data_mut(|data| {
+                                                data.insert_temp(
+                                                    egui::Id::new("qa-more-tools-open"),
+                                                    open,
+                                                )
+                                            });
+                                        }
                                     });
                                 }
                                 if status_overview {

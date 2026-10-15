@@ -797,7 +797,7 @@ impl App {
                         "See the detected device, its current driver details, and any offer Windows actually returns.",
                     ),
                     (
-                        theme::Icon::Settings,
+                        theme::Icon::Info,
                         "Check the change first",
                         "Review the exact device and signed offer, plus backup and restart requirements, before confirming a supported update.",
                     ),
@@ -1573,7 +1573,7 @@ impl App {
                     DriverTab::Deferred,
                     "Skipped & Ignored",
                     counts.2,
-                    theme::Icon::History,
+                    theme::Icon::EyeOff,
                 ),
             ] {
                 let response = theme::tab_with_icon_count(

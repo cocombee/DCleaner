@@ -31,8 +31,8 @@ fn startup_section_icon(section: StartupSection) -> theme::Icon {
     match section {
         StartupSection::StartupApps => theme::Icon::Startup,
         StartupSection::ScheduledTasks => theme::Icon::History,
-        StartupSection::ContextMenu => theme::Icon::Programs,
-        StartupSection::WindowsServices => theme::Icon::Optimizer,
+        StartupSection::ContextMenu => theme::Icon::ContextMenu,
+        StartupSection::WindowsServices => theme::Icon::Services,
     }
 }
 
@@ -612,6 +612,7 @@ impl App {
                     && !self.busy()
             }),
             "More" => !entries.is_empty() && !self.startup_ui.qa_more_open && !self.busy(),
+            "Close" => self.startup_ui.details_open,
             "Show details" => self.startup_ui.qa_more_open && !entries.is_empty() && !self.busy(),
             "Remove" => {
                 self.startup_ui.qa_more_open
@@ -647,6 +648,7 @@ impl App {
             "Enable startup item" | "Disable startup item" => state["review_kind"] == "change",
             "More" => state["more_open"] == true,
             "Show details" => state["details_open"] == true,
+            "Close" => state["details_open"] == false,
             "Remove" => state["removal_review_kind"] == "remove",
             "Cancel" => state["review_kind"].is_null() && state["removal_review_kind"].is_null(),
             "Confirm fixture review" => {
@@ -995,12 +997,12 @@ impl App {
                                 "Task Scheduler registrations, with their available trigger and action details.",
                             ),
                             (
-                                theme::Icon::Programs,
+                                theme::Icon::ContextMenu,
                                 "Context menu",
                                 "Shell commands and extensions registered for Windows Explorer menus.",
                             ),
                             (
-                                theme::Icon::Optimizer,
+                                theme::Icon::Services,
                                 "Windows services",
                                 "Service startup configuration and current service state.",
                             ),
@@ -1679,9 +1681,12 @@ impl App {
                                 }
                             }
                             egui::Popup::menu(&more).show(|ui| {
-                                let details = ui.button("Show details");
-                                #[cfg(debug_assertions)]
-                                theme::record_fixture_control(ui, "Show details", &details);
+                                let details = theme::menu_action(
+                                    ui,
+                                    theme::Icon::Info,
+                                    "Show details",
+                                    true,
+                                );
                                 if details.clicked() {
                                     detail_selection = Some(entry.id.clone());
                                     #[cfg(debug_assertions)]
@@ -1694,12 +1699,12 @@ impl App {
                                     dcleaner::startup_removal::supports_run_value_removal(
                                         &entry.identity,
                                     );
-                                let remove = ui.add_enabled(
+                                let remove = theme::menu_action(
+                                    ui,
+                                    theme::Icon::Trash,
+                                    "Remove",
                                     remove_supported && !busy && !checking_state,
-                                    egui::Button::new("Remove"),
                                 );
-                                #[cfg(debug_assertions)]
-                                theme::record_fixture_control(ui, "Remove", &remove);
                                 if remove_supported {
                                     if remove
                                         .on_hover_text(
@@ -1719,32 +1724,34 @@ impl App {
                                         "Removal is supported only for exact current-user Run values with a known 32-bit or 64-bit registry view.",
                                     );
                                 }
-                                let save_to_text = ui.add_enabled(
+                                let save_to_text = theme::menu_action(
+                                    ui,
+                                    theme::Icon::Export,
+                                    "Save to text file",
                                     !busy
                                         && !checking_state
                                         && inventory.quality != InventoryQuality::Unavailable,
-                                    egui::Button::new("Save to text file"),
-                                );
-                                #[cfg(debug_assertions)]
-                                theme::record_fixture_control(
-                                    ui,
-                                    "Save to text file",
-                                    &save_to_text,
                                 );
                                 if save_to_text.clicked() {
                                     save_text = true;
                                     ui.close();
                                 }
-                                ui.add_enabled(false, egui::Button::new("Open in RegEdit"))
-                                    .on_hover_text("A safe Registry Editor handoff is not implemented for startup entries.");
+                                theme::menu_action(
+                                    ui,
+                                    theme::Icon::Registry,
+                                    "Open in RegEdit",
+                                    false,
+                                )
+                                .on_hover_text("A safe Registry Editor handoff is not implemented for startup entries.");
                                 if let FieldValue::Known { value } = &entry.file_path {
                                     if !value.is_empty()
-                                        && ui
-                                            .add_enabled(
-                                                !busy && !self.qa_fixture_mode(),
-                                                egui::Button::new("Open in folder"),
-                                            )
-                                            .clicked()
+                                        && theme::menu_action(
+                                            ui,
+                                            theme::Icon::Folder,
+                                            "Open in folder",
+                                            !busy && !self.qa_fixture_mode(),
+                                        )
+                                        .clicked()
                                     {
                                         open_location = Some(value.clone());
                                         ui.close();

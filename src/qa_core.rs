@@ -26,6 +26,7 @@ impl App {
         }
 
         self.clean_browser = false;
+        self.clean_registry = false;
         self.clean_bin = false;
         self.custom_partial_acknowledged = false;
         self.selected.clear();
@@ -39,7 +40,6 @@ impl App {
             "clean-empty" | "clean-populated" | "clean-selected" | "clean-details"
             | "clean-error" => {
                 self.page = Page::Clean;
-                self.group = "Applications".into();
                 let report = match case {
                     "clean-empty" => custom_clean::CustomCleanReport::visual_fixture_empty(),
                     "clean-populated" | "clean-selected" => {
@@ -50,6 +50,18 @@ impl App {
                     _ => unreachable!(),
                 };
                 self.analysis = Some(report.to_analysis());
+                self.categories = self
+                    .analysis
+                    .iter()
+                    .flat_map(|analysis| &analysis.categories)
+                    .map(|category| dcleaner::domain::Category {
+                        id: category.id.clone(),
+                        name: category.name.clone(),
+                        group: "Applications".into(),
+                        description: "Disposable fixture files for visual review.".into(),
+                        roots: Vec::new(),
+                    })
+                    .collect();
                 if case == "clean-selected" {
                     self.selected = self
                         .analysis

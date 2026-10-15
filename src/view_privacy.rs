@@ -245,6 +245,39 @@ impl App {
         self.privacy_recovery(ui, t, ctx);
     }
 
+    #[cfg(debug_assertions)]
+    pub(super) fn qa_privacy_profile_action(
+        &self,
+        label: &str,
+        after: bool,
+    ) -> Result<serde_json::Value, String> {
+        let profiles = &self.privacy_ui.profiles;
+        let selected = &self.privacy_ui.selected_profiles;
+        let valid = self.qa_fixture_mode()
+            && !profiles.is_empty()
+            && self.privacy_ui.operation == PrivacyOperation::Idle
+            && (!after
+                || (self.privacy_ui.report.is_none()
+                    && self.privacy_ui.selected_ids.is_empty()
+                    && match label {
+                        "Select all" => {
+                            selected.len() == profiles.len()
+                                && profiles
+                                    .iter()
+                                    .all(|profile| selected.contains(&profile.id))
+                        }
+                        "Clear" => selected.is_empty(),
+                        _ => false,
+                    }));
+        if !valid {
+            return Err(format!(
+                "Browser profile action did not reach its expected state: {label}"
+            ));
+        }
+        Ok(
+            serde_json::json!({"profiles": profiles.len(), "selected_profiles": selected.len(), "report_present": self.privacy_ui.report.is_some(), "selected_records": self.privacy_ui.selected_ids.len()}),
+        )
+    }
     pub(super) fn privacy_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let privacy_busy = self.privacy_ui.operation != PrivacyOperation::Idle || self.busy();
         ui.set_min_height(40.);
@@ -629,8 +662,12 @@ impl App {
                     }
                 });
                 ui.add_space(4.);
+                let columns = if ui.available_width() >= 480. { 2 } else { 1 };
+                let column_width = (ui.available_width() - 24. * (columns - 1) as f32) / columns as f32;
                 egui::Grid::new("privacy-profile-choices")
-                    .num_columns(2)
+                    .num_columns(columns)
+                    .min_col_width(column_width)
+                    .max_col_width(column_width)
                     .spacing(Vec2::new(24., 4.))
                     .show(ui, |ui| {
                         for (index, profile) in self.privacy_ui.profiles.iter().enumerate() {
@@ -653,7 +690,7 @@ impl App {
                                 }
                                 inventory_changed = true;
                             }
-                            if index % 2 == 1 {
+                            if index % columns == columns - 1 {
                                 ui.end_row();
                             }
                         }

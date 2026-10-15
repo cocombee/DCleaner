@@ -1472,6 +1472,11 @@ impl App {
         }
         let width = ui.available_width();
         let issue_step = step == HealthStep::ResolveIssues;
+        let row_height = if ui.ctx().content_rect().height() < 680. {
+            64.
+        } else {
+            74.
+        };
         let size_width = if issue_step { 0. } else { 90. };
         let item_width = 70.;
         let name_width =
@@ -1542,7 +1547,7 @@ impl App {
                 .show(ui, |ui| {
                     ui.set_min_width(width);
                     let row = ui.horizontal(|ui| {
-                        ui.set_min_height(74.);
+                        ui.set_min_height(row_height);
                         if theme::checkbox_named(
                             ui,
                             &mut checked,
@@ -1559,10 +1564,10 @@ impl App {
                             }
                         }
                         ui.allocate_ui_with_layout(
-                            egui::vec2(name_width, 74.),
+                            egui::vec2(name_width, row_height),
                             Layout::left_to_right(Align::Center),
                             |ui| {
-                                ui.set_min_size(egui::vec2(name_width, 74.));
+                                ui.set_min_size(egui::vec2(name_width, row_height));
                                 ui.set_max_width(name_width);
                                 let (icon_rect, _) = ui.allocate_exact_size(
                                     egui::Vec2::splat(24.),
@@ -1621,7 +1626,7 @@ impl App {
                                 category.reported_items.to_string()
                             },
                             item_width,
-                            74.,
+                            row_height,
                         );
                         if !issue_step {
                             health_count_cell(
@@ -1631,7 +1636,7 @@ impl App {
                                     .map(format_bytes)
                                     .unwrap_or_else(|| "—".into()),
                                 size_width,
-                                74.,
+                                row_height,
                             );
                         }
                         if theme::disclosure(ui, &expand_label, open).clicked() {
@@ -1830,13 +1835,14 @@ impl App {
             .show(ctx, |ui| {
                 ui.set_width(width);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Please close running browsers").size(theme::FONT_DISPLAY).family(theme::semibold()));
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        close |= theme::close_button(ui, "Cancel browser review", !busy);
+                    ui.allocate_exact_size(egui::Vec2::new(28., 32.), egui::Sense::hover());
+                    ui.allocate_ui_with_layout(egui::Vec2::new(width - 56. - 2. * ui.spacing().item_spacing.x, 32.), Layout::top_down(Align::Center), |ui| {
+                        ui.label(RichText::new("Please close running browsers").size(theme::FONT_DISPLAY).family(theme::semibold()));
                     });
+                    close |= theme::close_button(ui, "Cancel browser review", !busy);
                 });
                 ui.add_space(8.);
-                theme::muted(ui, "Close the browsers you select before continuing. Unselected browsers remain open.", t);
+                ui.vertical_centered(|ui| theme::muted(ui, "Close the browsers you select before continuing. Unselected browsers remain open.", t));
                 ui.add_space(20.);
                 egui::ScrollArea::vertical().max_height((ctx.content_rect().height() - 280.).max(100.)).auto_shrink([false, true]).show(ui, |ui| {
                     if let Some(error) = &unavailable {
@@ -1875,9 +1881,12 @@ impl App {
                 });
                 ui.add_space(20.);
                 let selected_now = running.iter().filter(|process| self.health_ui.selected_processes.contains(&(process.browser, process.pid))).count();
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    proceed = theme::primary(ui, if selected_now == 0 { "Skip closing browsers" } else if selected_now == running.len() { "Close all browsers" } else { "Close selected browsers" }, t, !busy && unavailable.is_none());
+                let proceed_label = if selected_now == 0 { "Skip closing browsers" } else if selected_now == running.len() { "Close all browsers" } else { "Close selected browsers" };
+                let button_width = ["Cancel", proceed_label].into_iter().map(|label| ui.painter().layout_no_wrap(label.into(), egui::FontId::new(theme::FONT_BODY, theme::semibold()), t.foreground).size().x + 2. * theme::CONTROL_PADDING_X).sum::<f32>() + ui.spacing().item_spacing.x;
+                ui.horizontal(|ui| {
+                    ui.add_space(((ui.available_width() - button_width) / 2.).max(0.));
                     close |= theme::secondary(ui, "Cancel", !busy);
+                    proceed = theme::primary(ui, proceed_label, t, !busy && unavailable.is_none());
                 });
             });
         if refresh {

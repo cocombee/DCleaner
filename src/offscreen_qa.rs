@@ -367,6 +367,7 @@ pub fn run() -> Result<(), String> {
                 action.label.as_str(),
                 "Get started"
                     | "Clear selection"
+                    | "Clear"
                     | "Review 1 item"
                     | "Keep items"
                     | "Cleanup history"
@@ -397,6 +398,22 @@ pub fn run() -> Result<(), String> {
                     | "Updates"
                     | "Privacy"
                     | "Menu Layout"
+                    | "Menu"
+                    | "Expand menu"
+                    | "Collapse menu"
+                    | "More tools"
+                    | "Disk Analyzer"
+                    | "Cleanup History"
+                    | "Navigate Health Check"
+                    | "Navigate Custom Clean"
+                    | "Navigate Uninstaller"
+                    | "Navigate Duplicate Finder"
+                    | "Navigate Cloud Drive Cleaner"
+                    | "Navigate Performance Optimizer"
+                    | "Navigate Startup Manager"
+                    | "Navigate Software Updater"
+                    | "Navigate Driver Updater"
+                    | "Navigate Settings"
                     | "My Subscription"
                     | "About"
                     | "Light"
@@ -410,6 +427,17 @@ pub fn run() -> Result<(), String> {
                     | "Open Help"
                     | "Select all"
                     | "Select all eligible updates"
+                    | "Select App updates"
+                    | "Collapse App updates"
+                    | "Expand App updates"
+                    | "Sort Importance"
+                    | "Junk"
+                    | "Browser"
+                    | "Registry"
+                    | "Select all custom categories"
+                    | "Select custom group Applications"
+                    | "Collapse custom group Applications"
+                    | "Expand custom group Applications"
                     | "Skip closing browsers"
                     | "Cancel browser review"
                     | "Enable startup item"
@@ -484,6 +512,8 @@ pub fn run() -> Result<(), String> {
             && !fixture_case.starts_with("disk-")
             && !fixture_case.starts_with("startup-")
             && !fixture_case.starts_with("health-")
+            && !fixture_case.starts_with("clean-")
+            && !fixture_case.starts_with("privacy-")
             && !fixture_case.starts_with("settings-")
             && !fixture_case.starts_with("software-")
             && !fixture_case.starts_with("drivers-")

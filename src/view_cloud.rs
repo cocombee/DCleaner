@@ -525,8 +525,9 @@ impl App {
             && self.cloud_ui.filter != CloudFilter::History
         {
             ui.add_space(24.);
-            if ui.available_width() >= 760. {
-                let text_width = ui.available_width() - 340.;
+            if ui.available_width() >= 580. {
+                let image_width = (ui.available_width() * 0.38).clamp(200., 320.);
+                let text_width = ui.available_width() - image_width - 20.;
                 ui.horizontal_top(|ui| {
                     ui.allocate_ui_with_layout(
                         Vec2::new(text_width, 0.),
@@ -535,7 +536,7 @@ impl App {
                             cloud_intro_steps(ui, t);
                         },
                     );
-                    self.illustrations.cloud(ui, 320.);
+                    self.illustrations.cloud(ui, image_width);
                 });
             } else {
                 ui.vertical_centered(|ui| self.illustrations.cloud(ui, 220.));
@@ -549,7 +550,7 @@ impl App {
                 }
             }
             ui.add_space(12.);
-            if theme::secondary(ui, "Cleanup history", !busy) {
+            if ui.available_width() >= 760. && theme::secondary(ui, "Cleanup history", !busy) {
                 self.cloud_ui.filter = CloudFilter::History;
             }
             return;
@@ -999,28 +1000,23 @@ impl App {
                                         let popup_id = popup.get_id();
                                         let popup_ctx = popup.ctx().clone();
                                         popup.show(|ui| {
-                                            let details = ui.add_enabled(!busy, egui::Button::new("Details"));
-                                            #[cfg(debug_assertions)]
-                                            theme::record_fixture_control(ui, "Details", &details);
+                                            let details = theme::menu_action(ui, theme::Icon::Info, "Details", !busy);
                                             if details.clicked() {
                                                 self.cloud_ui.dialog = Some(CloudDialog::Details(item.clone()));
                                                 ui.close();
                                             }
                                             if self.cloud_ui.filter == CloudFilter::Ignored {
-                                                if ui.add_enabled(!busy, egui::Button::new("Include in results")).clicked() {
+                                                if theme::menu_action(ui, theme::Icon::Check, "Include in results", !busy).clicked() {
                                                     self.cloud_ui.ignored.remove(&item.id());
                                                     ui.close();
                                                 }
                                             } else {
-                                                if ui.add_enabled(!busy, egui::Button::new("Ignore for this scan")).clicked() {
+                                                if theme::menu_action(ui, theme::Icon::EyeOff, "Ignore for this scan", !busy).clicked() {
                                                     self.cloud_ui.ignored.insert(item.id());
                                                     self.cloud_ui.selected.remove(&item.id());
                                                     ui.close();
                                                 }
-                                                if ui.add_enabled(
-                                                    !busy && storage_available && matches!(item.kind(), RemoteItemKind::File | RemoteItemKind::Mail),
-                                                    egui::Button::new("Move to trash…"),
-                                                ).clicked() {
+                                                if theme::menu_action(ui, theme::Icon::Trash, "Move to trash…", !busy && storage_available && matches!(item.kind(), RemoteItemKind::File | RemoteItemKind::Mail)).clicked() {
                                                     self.cloud_ui.dialog = Some(CloudDialog::Trash { ids: vec![item.id()], partial: false, copies: false, race: false });
                                                     ui.close();
                                                 }
@@ -1218,6 +1214,9 @@ impl App {
                     } else if !self.cloud_ui.introduced && compact {
                         if theme::primary(ui, "Get started", t, !busy) {
                             self.cloud_ui.introduced = true;
+                        }
+                        if theme::secondary(ui, "Cleanup history", !busy) {
+                            self.cloud_ui.filter = CloudFilter::History;
                         }
                     } else {
                         theme::muted(ui, "Choose a provider to connect", t);

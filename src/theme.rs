@@ -289,43 +289,63 @@ pub fn tab_with_icon_count(
     painted.response
 }
 
-/// Full-page sections use the same compact rectangular tabs as inventory pages.
-/// Segmented modes continue to use `tab`.
-pub fn page_tab(ui: &mut egui::Ui, selected: bool, label: &str, t: Tokens) -> egui::Response {
+/// Settings sections use the source's icon-over-label tabs and active underline.
+pub fn settings_tab(
+    ui: &mut egui::Ui,
+    selected: bool,
+    icon: Icon,
+    label: &str,
+    t: Tokens,
+) -> egui::Response {
     let width = ui
         .painter()
         .layout_no_wrap(
             label.to_owned(),
-            FontId::new(FONT_BODY, semibold()),
+            FontId::new(FONT_BODY, FontFamily::Proportional),
             t.foreground,
         )
         .size()
         .x
         + 16.;
-    let response = ui
-        .allocate_ui_with_layout(
-            Vec2::new(width, 40.),
-            egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                ui.spacing_mut().button_padding = Vec2::new(8., 6.);
-                ui.add(
-                    egui::Button::new(
-                        RichText::new(label)
-                            .family(semibold())
-                            .size(FONT_BODY)
-                            .color(t.foreground),
-                    )
-                    .selected(selected)
-                    .fill(if selected { t.canvas } else { t.sidebar })
-                    .stroke(Stroke::new(1., if selected { t.primary } else { t.border }))
-                    .corner_radius(4)
-                    .min_size(Vec2::new(width, 40.)),
-                )
-            },
-        )
-        .inner;
-    focus_ring(ui, &response, 6);
-    record_labeled_control(ui, "page-tab", response.rect, 4, label, ui.is_enabled());
+    let response = ui.add_sized(Vec2::new(width, 64.), egui::Button::new("").frame(false));
+    if response.hovered() {
+        ui.painter().rect_filled(response.rect, 4, t.hover);
+    }
+    let colour = if selected { t.foreground } else { t.muted };
+    paint_icon(
+        ui.painter(),
+        egui::Rect::from_center_size(
+            egui::pos2(response.rect.center().x, response.rect.top() + 19.),
+            Vec2::splat(20.),
+        ),
+        icon,
+        colour,
+    );
+    ui.painter().text(
+        egui::pos2(response.rect.center().x, response.rect.top() + 43.),
+        egui::Align2::CENTER_CENTER,
+        label,
+        FontId::new(FONT_BODY, FontFamily::Proportional),
+        colour,
+    );
+    if selected {
+        ui.painter().line_segment(
+            [
+                egui::pos2(response.rect.left(), response.rect.bottom() - 1.),
+                egui::pos2(response.rect.right(), response.rect.bottom() - 1.),
+            ],
+            Stroke::new(2., t.primary),
+        );
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), selected, label)
+    });
+    record_labeled_control(ui, "settings-tab", response.rect, 0, label, ui.is_enabled());
+    #[cfg(debug_assertions)]
+    if label == "Menu" {
+        record_fixture_control(ui, "Menu Layout", &response);
+    }
+    focus_ring(ui, &response, 4);
     response
 }
 
@@ -740,6 +760,44 @@ pub fn close_button(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
     focus_ring(ui, &response, 4);
     response.on_hover_text(label).clicked()
 }
+pub fn icon_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) -> bool {
+    let plain = matches!(icon, Icon::Menu);
+    let response = ui
+        .scope(|ui| {
+            ui.spacing_mut().interact_size = Vec2::splat(28.);
+            ui.spacing_mut().button_padding = Vec2::ZERO;
+            ui.add_enabled(
+                enabled,
+                egui::Button::new("")
+                    .min_size(Vec2::splat(28.))
+                    .frame(!plain)
+                    .corner_radius(if plain { 4 } else { 14 }),
+            )
+        })
+        .inner;
+    let t = tokens(ui.visuals().dark_mode);
+    paint_icon(
+        ui.painter(),
+        response.rect.shrink(6.),
+        icon,
+        if enabled && !plain {
+            t.primary
+        } else {
+            t.muted
+        },
+    );
+    record_labeled_control(
+        ui,
+        "header-icon-action",
+        response.rect,
+        if plain { 4 } else { 14 },
+        label,
+        enabled,
+    );
+    focus_ring(ui, &response, 16);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    response.on_hover_text(label).clicked()
+}
 fn action_button(
     ui: &mut egui::Ui,
     label: &str,
@@ -879,6 +937,37 @@ pub fn table_cell(
     )
     .inner
 }
+pub fn menu_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) -> egui::Response {
+    let t = tokens(ui.visuals().dark_mode);
+    let icon_id = ui.id().with(("option-icon", label));
+    let painted = ui
+        .add_enabled_ui(enabled, |ui| {
+            ui.spacing_mut().button_padding = Vec2::new(8., 5.);
+            egui::Button::new((
+                egui::Atom::custom(icon_id, Vec2::splat(16.)),
+                RichText::new(label).size(FONT_BODY),
+                egui::Atom::grow(),
+            ))
+            .gap(8.)
+            .frame(false)
+            .corner_radius(4)
+            .min_size(Vec2::new(ui.available_width().max(180.), 30.))
+            .atom_ui(ui)
+        })
+        .inner;
+    if let Some(rect) = painted.rect(icon_id) {
+        paint_icon(
+            ui.painter(),
+            rect,
+            icon,
+            if enabled { t.foreground } else { t.muted },
+        );
+    }
+    record_labeled_control(ui, "menu-option", painted.response.rect, 4, label, enabled);
+    focus_ring(ui, &painted.response, 4);
+    painted.response
+}
+
 pub fn row_more(ui: &mut egui::Ui, enabled: bool) -> egui::Response {
     let response = ui
         .scope(|ui| {
@@ -1116,6 +1205,22 @@ fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
 
 #[derive(Clone, Copy)]
 pub enum Icon {
+    Info,
+    EyeOff,
+    Forward,
+    Undo,
+    Check,
+    Calendar,
+    Menu,
+    Account,
+    Heart,
+    Subscription,
+    Windows,
+    Applications,
+    ContextMenu,
+    Services,
+    WindowCheck,
+    Registry,
     Cookie,
     Trash,
     Refresh,
@@ -1137,44 +1242,6 @@ pub enum Icon {
     Help,
 }
 
-pub fn section_navigation(
-    ui: &mut egui::Ui,
-    label: &str,
-    selected: bool,
-    enabled: bool,
-    t: Tokens,
-) -> bool {
-    let response = ui
-        .add_enabled_ui(enabled, |ui| {
-            ui.spacing_mut().button_padding = Vec2::new(8., 6.);
-            ui.add_sized(
-                Vec2::new(ui.available_width(), 30.),
-                egui::Button::new((
-                    RichText::new(label)
-                        .family(if selected {
-                            semibold()
-                        } else {
-                            FontFamily::Proportional
-                        })
-                        .size(FONT_CAPTION)
-                        .color(if selected { t.foreground } else { t.muted }),
-                    egui::Atom::grow(),
-                ))
-                .wrap_mode(egui::TextWrapMode::Truncate)
-                .fill(if selected {
-                    t.tint
-                } else {
-                    Color32::TRANSPARENT
-                })
-                .stroke(Stroke::NONE)
-                .corner_radius(6),
-            )
-        })
-        .inner;
-    focus_ring(ui, &response, 8);
-    response.on_hover_text(label).clicked()
-}
-
 pub fn navigation(
     ui: &mut egui::Ui,
     label: &str,
@@ -1184,61 +1251,61 @@ pub fn navigation(
     compact: bool,
     t: Tokens,
 ) -> bool {
-    let id = ui.make_persistent_id(("navigation-icon", label));
-    let colour = t.foreground;
-    let atoms = (
-        egui::Atom::custom(id, Vec2::splat(20.)),
-        RichText::new(if compact { "" } else { label })
-            .family(semibold())
-            .color(colour),
-        egui::Atom::grow(),
-    );
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            let button = if compact {
-                ui.spacing_mut().button_padding = Vec2::new(6., 6.);
-                egui::Button::new(egui::Atom::custom(id, Vec2::splat(20.))).gap(0.)
-            } else {
-                egui::Button::new(atoms).gap(12.)
-            };
-            button
-                .selected(selected)
-                .fill(if selected {
-                    t.tint
-                } else {
-                    Color32::TRANSPARENT
-                })
-                .stroke(Stroke::NONE)
-                .corner_radius(6)
-                .min_size(Vec2::new(ui.available_width(), CONTROL_HEIGHT))
-                .atom_ui(ui)
+            ui.add_sized(
+                Vec2::new(ui.available_width(), 40.),
+                egui::Button::new("")
+                    .selected(selected)
+                    .fill(Color32::TRANSPARENT)
+                    .stroke(Stroke::NONE)
+                    .corner_radius(4),
+            )
         })
         .inner;
-    if compact {
-        response.widget_info(|| {
-            egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, selected, label)
-        });
+    if selected || (enabled && response.hovered()) {
+        ui.painter()
+            .rect_filled(response.rect, 4, if selected { t.tint } else { t.hover });
     }
-    if let Some(rect) = response.rect(id) {
-        paint_icon(
-            ui.painter(),
-            rect,
-            icon,
-            if enabled { colour } else { t.muted },
+    let colour = if enabled { t.foreground } else { t.muted };
+    let icon_rect = egui::Rect::from_center_size(
+        egui::pos2(
+            if compact {
+                response.rect.center().x
+            } else {
+                response.rect.left() + 18.
+            },
+            response.rect.center().y,
+        ),
+        Vec2::splat(20.),
+    );
+    paint_icon(ui.painter(), icon_rect, icon, colour);
+    if !compact {
+        ui.painter().text(
+            egui::pos2(response.rect.left() + 40., response.rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            label,
+            FontId::new(FONT_BODY, semibold()),
+            colour,
         );
     }
-    focus_ring(ui, &response.response, 8);
-    record_control(
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, selected, label)
+    });
+    focus_ring(ui, &response, 4);
+    record_labeled_control(
         ui,
         if compact {
             "rail-navigation"
         } else {
             "navigation"
         },
-        response.response.rect,
-        6,
+        response.rect,
+        4,
+        &format!("Navigate {label}"),
+        enabled,
     );
-    response.response.on_hover_text(label).clicked()
+    response.on_hover_text(label).clicked()
 }
 
 pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color32) {
@@ -1251,6 +1318,155 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Applications => {
+            line(&[(6., 3.), (18., 3.), (18., 15.)]);
+            line(&[(2., 7.), (14., 7.), (14., 19.), (2., 19.), (2., 7.)]);
+        }
+        Icon::ContextMenu => {
+            line(&[
+                (3., 2.),
+                (3., 15.),
+                (7., 11.),
+                (10., 18.),
+                (13., 16.),
+                (9., 10.),
+                (15., 10.),
+                (3., 2.),
+            ]);
+            line(&[(12., 3.), (18., 3.)]);
+            line(&[(15., 6.), (18., 6.)]);
+        }
+        Icon::Services => {
+            line(&[(2., 2.), (16., 2.), (16., 10.)]);
+            line(&[(2., 2.), (2., 15.), (9., 15.)]);
+            line(&[(4., 5.), (13., 5.)]);
+            line(&[(4., 8.), (9., 8.)]);
+            paint_icon(
+                p,
+                egui::Rect::from_min_size(point(9., 9.), Vec2::splat(rect.width() * 0.5)),
+                Icon::Settings,
+                colour,
+            );
+        }
+        Icon::WindowCheck => {
+            line(&[(2., 3.), (18., 3.), (18., 17.), (2., 17.), (2., 3.)]);
+            line(&[(2., 7.), (18., 7.)]);
+            line(&[(6., 11.), (9., 14.), (15., 9.)]);
+        }
+        Icon::Windows => {
+            for x in [2., 11.] {
+                for y in [2., 11.] {
+                    p.rect_stroke(
+                        egui::Rect::from_two_pos(point(x, y), point(x + 7., y + 7.)),
+                        0,
+                        stroke,
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+        Icon::Subscription => {
+            line(&[(3., 4.), (17., 4.), (17., 15.), (3., 15.), (3., 4.)]);
+            line(&[(1., 18.), (19., 18.)]);
+            line(&[
+                (10., 12.),
+                (6., 8.),
+                (7., 6.),
+                (9., 6.),
+                (10., 8.),
+                (11., 6.),
+                (13., 6.),
+                (14., 8.),
+                (10., 12.),
+            ]);
+        }
+        Icon::Info => {
+            p.circle_stroke(point(10., 10.), rect.width() * 0.4, stroke);
+            line(&[(10., 9.), (10., 14.)]);
+            p.circle_filled(point(10., 6.), rect.width() * 0.04, colour);
+        }
+        Icon::Check => {
+            line(&[(4., 10.), (8., 14.), (16., 6.)]);
+        }
+        Icon::Forward => {
+            line(&[(3., 10.), (16., 10.)]);
+            line(&[(11., 5.), (16., 10.), (11., 15.)]);
+        }
+        Icon::Undo => {
+            line(&[(3., 7.), (12., 7.), (16., 10.), (16., 15.), (12., 18.)]);
+            line(&[(7., 3.), (3., 7.), (7., 11.)]);
+        }
+        Icon::EyeOff => {
+            line(&[
+                (2., 10.),
+                (6., 5.),
+                (11., 4.),
+                (16., 7.),
+                (18., 10.),
+                (14., 15.),
+                (9., 16.),
+                (4., 13.),
+                (2., 10.),
+            ]);
+            line(&[(3., 2.), (17., 18.)]);
+        }
+        Icon::Calendar => {
+            line(&[(3., 5.), (17., 5.), (17., 18.), (3., 18.), (3., 5.)]);
+            line(&[(3., 9.), (17., 9.)]);
+            line(&[(6., 2.), (6., 7.)]);
+            line(&[(14., 2.), (14., 7.)]);
+            for x in [6., 10., 14.] {
+                for y in [12., 15.] {
+                    p.circle_filled(point(x, y), rect.width() * 0.035, colour);
+                }
+            }
+        }
+        Icon::Menu => {
+            for y in [5., 10., 15.] {
+                line(&[(3., y), (17., y)]);
+            }
+        }
+        Icon::Account => {
+            p.circle_stroke(point(10., 6.), rect.width() * 0.18, stroke);
+            line(&[
+                (3., 18.),
+                (3., 15.),
+                (6., 12.),
+                (14., 12.),
+                (17., 15.),
+                (17., 18.),
+                (3., 18.),
+            ]);
+        }
+        Icon::Heart => {
+            for pts in [
+                [(10., 6.), (6., 0.), (0., 4.), (3., 10.)],
+                [(3., 10.), (5., 13.), (8., 15.), (10., 17.)],
+                [(10., 17.), (12., 15.), (15., 13.), (17., 10.)],
+                [(17., 10.), (20., 4.), (14., 0.), (10., 6.)],
+            ] {
+                p.add(egui::epaint::CubicBezierShape::from_points_stroke(
+                    pts.map(|(x, y)| point(x, y)),
+                    false,
+                    Color32::TRANSPARENT,
+                    stroke,
+                ));
+            }
+            line(&[(6., 9.), (9., 12.), (14., 7.)]);
+        }
+
+        Icon::Registry => {
+            for x in [3., 11.] {
+                for y in [3., 11.] {
+                    p.rect_stroke(
+                        egui::Rect::from_two_pos(point(x, y), point(x + 6., y + 6.)),
+                        0,
+                        stroke,
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
         Icon::Cookie => {
             line(&[
                 (17., 10.),
@@ -1319,8 +1535,15 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
                 (16., 15.),
                 (14., 15.),
             ]);
-            p.circle_stroke(point(9.5, 13.), rect.width() * 0.16, stroke);
-            line(&[(12., 15.5), (15., 18.)]);
+            let mut gear = Vec::new();
+            for i in 0..32 {
+                let a = i as f32 * std::f32::consts::TAU / 32.;
+                let r = if i % 4 == 0 || i % 4 == 3 { 3.8 } else { 2.9 };
+                gear.push(point(10. + a.cos() * r, 14. + a.sin() * r));
+            }
+            gear.push(gear[0]);
+            p.add(egui::Shape::line(gear, stroke));
+            p.circle_stroke(point(10., 14.), rect.width() * 0.06, stroke);
         }
         Icon::Optimizer => {
             line(&[
@@ -1344,10 +1567,13 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
             line(&[(6., 13.), (10., 13.)]);
         }
         Icon::Programs => {
-            line(&[(2., 3.), (18., 3.), (18., 15.), (2., 15.), (2., 3.)]);
+            line(&[(2., 3.), (18., 3.), (18., 9.)]);
+            line(&[(2., 3.), (2., 15.), (10., 15.)]);
             line(&[(2., 7.), (18., 7.)]);
-            line(&[(14., 11.), (14., 19.)]);
-            line(&[(11., 16.), (14., 19.), (17., 16.)]);
+            line(&[(12., 11.), (18., 11.)]);
+            line(&[(13., 11.), (13., 18.), (17., 18.), (17., 11.)]);
+            line(&[(14., 9.), (16., 9.)]);
+            line(&[(15., 13.), (15., 16.)]);
         }
         Icon::Browser => {
             line(&[(2., 3.), (18., 3.), (18., 17.), (2., 17.), (2., 3.)]);
@@ -1360,8 +1586,8 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
             line(&[(2., 4.), (18., 4.), (18., 15.), (2., 15.), (2., 4.)]);
             line(&[(5., 18.), (15., 18.)]);
             line(&[(10., 15.), (10., 18.)]);
-            line(&[(5., 12.), (8., 9.), (11., 11.), (15., 7.)]);
-            line(&[(12., 7.), (15., 7.), (15., 10.)]);
+            line(&[(10., 12.), (10., 6.)]);
+            line(&[(6., 10.), (10., 6.), (14., 10.)]);
         }
         Icon::Driver => {
             line(&[(5., 5.), (15., 5.), (15., 15.), (5., 15.), (5., 5.)]);
@@ -1392,16 +1618,25 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
             ]);
         }
         Icon::Brush => {
-            line(&[(6., 9.), (13., 2.), (18., 7.), (11., 14.)]);
+            // Angled broom with a bound head and separate bristles.
+            line(&[(11., 11.), (17., 2.), (19., 3.), (13., 12.)]);
             line(&[
-                (6., 9.),
-                (11., 14.),
-                (7., 18.),
-                (2., 18.),
-                (2., 13.),
-                (6., 9.),
+                (8., 10.),
+                (15., 14.),
+                (12., 18.),
+                (6., 19.),
+                (2., 16.),
+                (6., 14.),
+                (8., 10.),
             ]);
-            line(&[(4., 16.), (6., 14.)]);
+            line(&[(7., 12.), (14., 16.)]);
+            line(&[(6., 15.), (4., 17.)]);
+            line(&[(9., 16.), (7., 18.)]);
+            // Cleaning sparkles distinguish this from a generic pencil.
+            line(&[(4., 2.), (4., 7.)]);
+            line(&[(1.5, 4.5), (6.5, 4.5)]);
+            line(&[(9., 1.), (9., 4.)]);
+            line(&[(7.5, 2.5), (10.5, 2.5)]);
         }
         Icon::Disk => {
             p.circle_stroke(point(10., 10.), rect.width() * 0.4, stroke);
@@ -1426,19 +1661,15 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
             p.circle_filled(point(10., 15.), rect.width() * 0.045, colour);
         }
         Icon::Settings => {
-            p.circle_stroke(point(10., 10.), rect.width() * 0.15, stroke);
-            p.circle_stroke(point(10., 10.), rect.width() * 0.33, stroke);
-            for angle in 0..8 {
-                let a = angle as f32 * std::f32::consts::FRAC_PI_4;
-                let direction = Vec2::angled(a);
-                p.line_segment(
-                    [
-                        point(10., 10.) + direction * 7.,
-                        point(10., 10.) + direction * 9.,
-                    ],
-                    stroke,
-                );
+            let mut gear = Vec::new();
+            for i in 0..32 {
+                let a = i as f32 * std::f32::consts::TAU / 32.;
+                let r = if i % 4 == 0 || i % 4 == 3 { 8. } else { 6.2 };
+                gear.push(point(10. + a.cos() * r, 10. + a.sin() * r));
             }
+            gear.push(gear[0]);
+            p.add(egui::Shape::line(gear, stroke));
+            p.circle_stroke(point(10., 10.), rect.width() * 0.15, stroke);
         }
     }
 }
