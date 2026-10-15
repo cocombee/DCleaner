@@ -939,6 +939,9 @@ pub fn table_cell(
 }
 pub fn menu_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) -> egui::Response {
     let t = tokens(ui.visuals().dark_mode);
+    // Popup UIs initially inherit a wide layout bound. Keep contextual options
+    // compact instead of allowing a grow atom to claim the entire page width.
+    ui.set_max_width(224.);
     let icon_id = ui.id().with(("option-icon", label));
     let painted = ui
         .add_enabled_ui(enabled, |ui| {
@@ -951,7 +954,7 @@ pub fn menu_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) ->
             .gap(8.)
             .frame(false)
             .corner_radius(4)
-            .min_size(Vec2::new(ui.available_width().max(180.), 30.))
+            .min_size(Vec2::new(ui.available_width().clamp(180., 224.), 30.))
             .atom_ui(ui)
         })
         .inner;
