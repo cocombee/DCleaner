@@ -29,3 +29,4 @@ pub mod scanner;
 pub mod software;
 pub mod startup;
 pub mod store;
+pub mod support;

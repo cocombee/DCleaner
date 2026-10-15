@@ -17,6 +17,7 @@ Consequences: shared core contracts across Windows/macOS; native builds on each 
 | `src/scanner.rs` | Bounded traversal, file eligibility, canonical containment, snapshots | Read files/metadata |
 | `src/cleanup.rs` | Validate IDs against the analysis, recheck eligibility, journal intent/outcome, coordinate Trash | Only selected current candidates through Trash adapter |
 | `src/store.rs` | Versioned settings and append-only cleanup journal, interrupted-operation projection | DCleaner app-data writes |
+| `src/support.rs`, `src/view_help.rs` | Fixed documentation/support destinations, explicit browser-handoff acknowledgement and bounded reviewed diagnostic metadata | User-triggered browser handoff and synced new-file report export only; no arbitrary URI, automatic upload, raw user paths/errors or vendor support-tool execution |
 | `src/effects.rs` | Synced typed native intents and receipts; uncertain restart history | DCleaner app-data writes; no automatic replay |
 | `src/duplicates.rs` | Bounded fingerprinting, exact-content verification, group metadata and selected candidate IDs | File/metadata reads; delegates reviewed removal to cleanup |
 | `src/programs.rs` | Native registered-program inventory and current-identity uninstall requests | Registry reads; reviewed direct registered-uninstaller handoff |

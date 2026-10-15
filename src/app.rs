@@ -27,6 +27,8 @@ mod view_drivers;
 mod view_duplicates;
 #[path = "view_health.rs"]
 mod view_health;
+#[path = "view_help.rs"]
+mod view_help;
 #[path = "view_optimizer.rs"]
 mod view_optimizer;
 #[path = "view_privacy.rs"]
@@ -53,6 +55,7 @@ enum Page {
     Drivers,
     History,
     Settings,
+    Help,
 }
 impl Page {
     fn icon(self) -> theme::Icon {
@@ -68,6 +71,7 @@ impl Page {
             Self::Drivers => theme::Icon::Driver,
             Self::History => theme::Icon::History,
             Self::Settings => theme::Icon::Settings,
+            Self::Help => theme::Icon::Help,
         }
     }
     fn description(self) -> &'static str {
@@ -85,6 +89,7 @@ impl Page {
             Self::Drivers => "Review present devices and exact driver offers from Windows Update.",
             Self::History => "Review confirmed changes and interrupted operations.",
             Self::Settings => "Set your cleaning preferences and appearance.",
+            Self::Help => "Find guidance, contact support and review local diagnostics.",
         }
     }
     fn name(self) -> &'static str {
@@ -100,10 +105,11 @@ impl Page {
             Self::Drivers => "Driver Updater",
             Self::History => "Cleanup History",
             Self::Settings => "Settings",
+            Self::Help => "Help",
         }
     }
 }
-const PAGES: [Page; 11] = [
+const PAGES: [Page; 12] = [
     Page::Overview,
     Page::Clean,
     Page::Programs,
@@ -115,11 +121,13 @@ const PAGES: [Page; 11] = [
     Page::Disk,
     Page::History,
     Page::Settings,
+    Page::Help,
 ];
 enum Event {
     CleanSettings(view_clean_settings::CleanSettingsEvent),
     ConfiguredScanned(Result<custom_clean::CustomCleanReport, String>),
     Health(view_health::HealthEvent),
+    Help(view_help::HelpEvent),
     RecycleBin(view_recycle_bin::RecycleBinEvent),
     Privacy(view_privacy::PrivacyEvent),
     Software(view_software::SoftwareEvent),
@@ -146,6 +154,7 @@ pub struct App {
     custom_analysis: Option<custom_clean::CustomCleanReport>,
     custom_partial_acknowledged: bool,
     health_ui: view_health::HealthUi,
+    help_ui: view_help::HelpUi,
     app_icons: crate::app_icons::IconCache,
     #[cfg(debug_assertions)]
     visual_capture: Option<crate::visual_qa::Capture>,
@@ -260,6 +269,7 @@ impl App {
                 Ok("disk") => Page::Disk,
                 Ok("history") => Page::History,
                 Ok("settings") => Page::Settings,
+                Ok("help") => Page::Help,
                 _ => Page::Overview,
             }
         } else {
@@ -279,6 +289,7 @@ impl App {
             custom_analysis: None,
             custom_partial_acknowledged: false,
             health_ui: Default::default(),
+            help_ui: Default::default(),
             #[cfg(debug_assertions)]
             visual_capture,
             software_ui: Default::default(),
@@ -498,6 +509,7 @@ impl App {
                 Event::Startup(event) => self.startup_event(event),
                 Event::Drivers(event) => self.drivers_event(event),
                 Event::Health(event) => self.health_event(event),
+                Event::Help(event) => self.help_event(event),
                 Event::Privacy(event) => self.privacy_event(event),
                 Event::RecycleBin(event) => self.recycle_bin_event(event),
                 Event::Progress(text) => self.progress = text,
@@ -1126,7 +1138,7 @@ impl App {
                 let rail_pages: &[Page] = if narrow {
                     &PAGES
                 } else {
-                    &[Page::Overview, Page::Settings]
+                    &[Page::Overview, Page::Settings, Page::Help]
                 };
                 egui::ScrollArea::vertical()
                     .id_salt("rail-destinations")
@@ -1144,7 +1156,7 @@ impl App {
                                 self.page == page
                                     || (!narrow
                                         && page == Page::Overview
-                                        && self.page != Page::Settings),
+                                        && !matches!(self.page, Page::Settings | Page::Help)),
                                 !busy,
                                 true,
                                 t,
@@ -1187,7 +1199,7 @@ impl App {
                         });
                     ui.add_space(6.);
                     for page in PAGES {
-                        if page == Page::Settings {
+                        if matches!(page, Page::Settings | Page::Help) {
                             continue;
                         }
                         if theme::section_navigation(ui, page.name(), self.page == page, !busy, t) {
@@ -1319,6 +1331,7 @@ impl App {
                                     Page::Drivers => self.drivers_page(ui, t, &ctx),
                                     Page::History => self.history_page(ui, t),
                                     Page::Settings => self.settings_page(ui, t, &ctx),
+                                    Page::Help => self.help_page(ui, t, &ctx),
                                 }
                                 ui.add_space(24.);
                             });
@@ -1336,6 +1349,7 @@ impl App {
         self.privacy_dialog(&ctx);
         self.recycle_bin_dialog(&ctx);
         self.clean_settings_dialog(&ctx);
+        self.help_dialog(&ctx);
         #[cfg(debug_assertions)]
         {
             let capture_busy = self.busy() || self.app_icons.is_loading();

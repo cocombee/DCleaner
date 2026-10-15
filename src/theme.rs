@@ -729,6 +729,7 @@ pub enum Icon {
     Startup,
     History,
     Settings,
+    Help,
 }
 
 pub fn section_navigation(
@@ -934,6 +935,19 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         Icon::History => {
             p.circle_stroke(point(10., 10.), rect.width() * 0.4, stroke);
             line(&[(10., 5.), (10., 10.), (14., 12.)]);
+        }
+        Icon::Help => {
+            p.circle_stroke(point(10., 10.), rect.width() * 0.4, stroke);
+            line(&[
+                (7., 7.),
+                (8., 5.5),
+                (11., 5.5),
+                (13., 7.),
+                (13., 9.),
+                (10., 11.),
+                (10., 12.),
+            ]);
+            p.circle_filled(point(10., 15.), rect.width() * 0.045, colour);
         }
         Icon::Settings => {
             p.circle_stroke(point(10., 10.), rect.width() * 0.15, stroke);

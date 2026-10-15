@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "evidence_kind": "Focused inert REA, source wiring, headless fixtures and an uninstalled Windows release; not full parity or runtime/visual acceptance",
+  "captured_utc": "2026-10-15T06:31:51.523Z",
+  "reference": {
+    "product": "CCleaner Windows 7.12.1526",
+    "gui_inventory_sha256": "ab7c068440e5afbae365ada04a8b2c79446fdf546515a42d6aca6188019fdcb4",
+    "inputs": [
+      {
+        "path": "chunks/Help.js",
+        "bytes": 2009,
+        "sha256": "dfd05e5643c6c7b28931a8853777faea243ad13a12f4f373bb515702ab8df634"
+      },
+      {
+        "path": "chunks/webview.js",
+        "bytes": 2676,
+        "sha256": "7adef99d34ef6da70fe79f108cce4af9306441dbd27d324e1491aa4dc14b0350"
+      },
+      {
+        "path": "chunks/analytics.js",
+        "bytes": 381834,
+        "sha256": "5f6b15cdb29f94d3fbc4c431c28153c8c6caa60e21cec537c5e145fe8055778a"
+      },
+      {
+        "path": "assets/Help.css",
+        "bytes": 169,
+        "sha256": "4a7cad9346ba61298e9dbdec5e932d200484e556bbca6f27704d938b9b7aa695"
+      }
+    ],
+    "focused_analysis": {
+      "parent_evidence_id": "ev_7f68c558f011403b9bfa4ee781464a6095ceeecd0d270cf28986f9fd6ba1e4cb",
+      "summary_evidence_id": "ev_b3060a46ca37375f0ce8850bff81d2a5e74d6c1ae1ece377126f91045239ba6c",
+      "selected": [
+        "chunks/Help.js",
+        "chunks/webview.js"
+      ],
+      "parsed_javascript_files": 2,
+      "text_bytes_read": 4685,
+      "visited_ast_nodes": 1467,
+      "findings": 62,
+      "parse_failures": 0,
+      "unselected_files": 236,
+      "semantic_truncated": false,
+      "application_coverage": "partial",
+      "semantic_coverage": "partial",
+      "application_unknowns": 236,
+      "semantic_unknowns": 3089
+    },
+    "earlier_analysis": {
+      "parent_evidence_id": "ev_9ae04440cac33526859147b620813e253557678a0e4dd8b82bd26e1f75930063",
+      "summary_evidence_id": "ev_9acfc9f32505a2b5e5fdb5e3f0474c767303c54ecb4509d6367705eb5f943e6a",
+      "selected": [
+        "chunks/Help.js",
+        "chunks/webview.js",
+        "chunks/analytics.js"
+      ],
+      "parsed_javascript_files": 3,
+      "parse_failures": 0,
+      "semantic_truncated": true,
+      "limit": "Large analytics dependency exceeded per-file/total graph budgets; superseded only for the focused Help/bridge scope."
+    },
+    "private_bundle": {
+      "path": "reference/rea/help-evidence-bundle.json",
+      "bytes": 490959346,
+      "sha256": "9a021cf46eb1c171dd32d7cc2f2e6c4b764c5f56e202de587853a454b38950ec",
+      "records": 33,
+      "scope": "Contains retained prior analyses as well as this Help analysis; proprietary content stays ignored and is not published."
+    },
+    "observed_contract": {
+      "help_centre_url": "https://www.ccleaner.com/go/app_cc_help_center",
+      "support_tool_url": "https://www.ccleaner.com/go/app_cc_support_tool",
+      "support_tool_visibility": "Truthy $licenseInfo binding; actual licence-store initialization and production reachability remain unresolved.",
+      "bridge": "Rejects controls, parses URL, admits http/https/mailto and emits open-browser/href to native webview. No browser-load acknowledgement observed.",
+      "layout": "Help content width 555; source layout only, navy screenshot and Designer remain visual authority."
+    },
+    "limits": [
+      "No target/bootstrap execution, browser launch, support-tool download or native support-tool inspection.",
+      "Static candidates do not establish runtime execution or whole-application completeness.",
+      "Unselected dependencies and dynamic bindings remain unknown; zero graph truncation is not semantic completeness.",
+      "Vendor analytics and support services are not reused."
+    ]
+  },
+  "dcleaner": {
+    "source": [
+      {
+        "path": "src/app.rs",
+        "sha256": "60b3b3d2c82604fca7227feb81e2986f792011b0c4385fba8c48d1ae48a6ad88"
+      },
+      {
+        "path": "src/lib.rs",
+        "sha256": "e56d58b297a55b8b69287d96ba6f06855f25343b42d546faa580f89eafc9f3f6"
+      },
+      {
+        "path": "src/theme.rs",
+        "sha256": "aae1f25f3016b76ba2c073e422099e9dec6774c5d36ad800b9f52383a727d4b1"
+      },
+      {
+        "path": "src/support.rs",
+        "sha256": "5d27f577db99303ee48f15aba0fceed5b07ca09b83d13d3398a0416a59eb0428"
+      },
+      {
+        "path": "src/view_help.rs",
+        "sha256": "574d0013c14afb7793754f3e1c3baa379b09932f26ca3fc0a24965df20c0be96"
+      },
+      {
+        "path": "Cargo.toml",
+        "sha256": "166d58062a1749b071571e6b31b6720b6005bfc2d322e10cf6d4bfaf8bd443e2"
+      },
+      {
+        "path": "Cargo.lock",
+        "sha256": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "sha256": "13a04461bb832b9da2f1ee2d3395d286eb612e259c24e4e0096a9a00f5c809be"
+      },
+      {
+        "path": "scripts/build.ps1",
+        "sha256": "22fb727c9b63c365c9c779dbe32b4302eccb8ae88079b3e54ca319705dd86bb4"
+      }
+    ],
+    "destinations": {
+      "help_centre": "https://github.com/cocombee/DCleaner/blob/main/docs/PLAN.md#user-guide",
+      "support": "https://github.com/cocombee/DCleaner/issues"
+    },
+    "native_browser": "Fixed enum destination only; Windows ShellExecuteW return-code check, macOS /usr/bin/open exit-status check and child reaping. Acknowledges OS handoff only. Not executed in this batch.",
+    "diagnostics": {
+      "schema": 1,
+      "max_bytes": 16384,
+      "fields": [
+        "schema",
+        "product",
+        "version",
+        "operating_system",
+        "architecture",
+        "generated_at_utc",
+        "preferences_available",
+        "history_available"
+      ],
+      "preview": "Complete JSON before saving; availability reflects the loaded app state.",
+      "export": "Absolute user-selected new filename, create_new, full write and sync. Existing paths are preserved. Failure can leave a partial new file, with no automatic removal or retry.",
+      "upload": "None",
+      "limitation": "Independent local support feature; not proof of parity with the uninspected CCleaner external support tool."
+    },
+    "ui_wiring": [
+      "Single Help utility destination in wide/narrow navigation; Maintenance is not selected while Help or Settings is selected.",
+      "Two stacked sections with existing heading/secondary-action owners.",
+      "Explicit browser worker result; reviewed diagnostic modal; native Save only after user action; cancel leaves preview and creates no file.",
+      "Save success/failure stays visible within the modal; workers catch unexpected unwinds and clear busy through terminal events."
+    ],
+    "headless_verification": {
+      "tests": {
+        "passed": 288,
+        "failed": 0,
+        "ignored": 7,
+        "suites": 15,
+        "log": {
+          "path": "reference/rea/help-full-test.log",
+          "bytes": 30317,
+          "sha256": "0b3c6192ba4e4a9cacba5182dd3fda251103c14e0286312b261dd51766e6c017"
+        },
+        "support_fixtures": [
+          "destinations_use_only_the_fixed_urls_and_return_handoff_acknowledgements",
+          "browser_failure_returns_no_success_acknowledgement",
+          "report_has_only_the_fixed_non_sensitive_fields_and_is_complete",
+          "export_creates_a_new_complete_file_and_preserves_existing_bytes",
+          "export_rejects_relative_destinations_without_creating_files"
+        ]
+      },
+      "release": {
+        "result": "passed",
+        "installed": false,
+        "bytes": 15054336,
+        "sha256": "10da6c110d6e499c07dbbe81c5cc91d70bc16061fa74f6f996558e87e367c883",
+        "log": {
+          "path": "reference/rea/help-release.log",
+          "bytes": 136,
+          "sha256": "c866b5bb1a3244c38c0b7c82fa02236b4394e0fd6232d566c53c3adcfb691c46"
+        }
+      },
+      "tested_source_snapshot": {
+        "path": "reference/rea/help-tested-source.json",
+        "bytes": 1360,
+        "sha256": "4c31ab87115bfaa2d06139bea6868caec79aeeb24ac59b665b581a691b725921"
+      },
+      "formatting": "cargo fmt --all -- --check passed",
+      "installed_binary_sha256_unchanged": "8def17865f859f2b1119c6c52d1bdf5bdd8d2d6f7d71f86dddb40cce3509b9bf"
+    },
+    "design_evidence": {
+      "saved_reference_sha256": "af5b6490b261c82bdd812eef98628c002aa81db84fb8ae7fb85574c76fd82eb1",
+      "historical_frame": {
+        "path": "docs/design/evidence/health-wide-dark-v11.png",
+        "bytes": 167932,
+        "sha256": "be62fa3279fad4dbc924c138b02fdf4ec08ea7ed143f283842e67a87ef5f0455"
+      },
+      "inspection": "Only saved images viewed. Neither image captures the newly wired Help page.",
+      "shared_owners": [
+        "Existing navy/blue tokens",
+        "20px glyph canvas and 1.6px stroke",
+        "Secondary action and wrapped action-row owners",
+        "Bounded modal frame and scrolling body"
+      ],
+      "acceptance": "Pending user-approved inspection: current Help pixels, both sizes/themes, all focus/hover/disabled states, native save/browser dialogs."
+    },
+    "still_open": [
+      "Original external support-tool behavior and licence-dependent reachability",
+      "Actual Windows/macOS browser handoff and save-dialog interaction",
+      "Current Help visual/accessibility acceptance and all original material Help states",
+      "Full CCleaner functional/section parity; other ledger gaps remain active"
+    ]
+  }
+}
