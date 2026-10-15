@@ -495,6 +495,8 @@ pub fn run() -> Result<(), String> {
                     | "Disabled · unavailable"
                     | "Uninstall"
                     | "Row details"
+                    | "Search software"
+                    | "Close search"
                     | "Row uninstall"
                     | "Close finding details"
                     | "Scan details"

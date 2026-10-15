@@ -824,8 +824,7 @@ impl App {
             self.driver_results_heading(ui, t);
             ui.add_space(7.);
         }
-        self.driver_search(ui, t);
-        ui.add_space(6.);
+        self.driver_problem_category_filter(ui, t);
 
         if self.drivers_ui.loading {
             ui.horizontal(|ui| {
@@ -1669,19 +1668,7 @@ impl App {
         theme::muted(ui, subtitle, t);
     }
 
-    fn driver_search(&mut self, ui: &mut egui::Ui, t: Tokens) {
-        theme::control_row(ui, |ui| {
-            ui.label(RichText::new("Search").color(t.muted));
-            ui.add_space(8.);
-            let width = (ui.available_width() - 8.).clamp(150., 360.);
-            theme::input(
-                ui,
-                &mut self.drivers_ui.query,
-                width,
-                "Device, class, provider or offer…",
-                true,
-            );
-        });
+    fn driver_problem_category_filter(&mut self, ui: &mut egui::Ui, t: Tokens) {
         if let Some(categories) = self.drivers_ui.problem_category_filter.as_ref() {
             let categories = match self.drivers_ui.problem_history_result.as_ref() {
                 Some(
@@ -1971,9 +1958,9 @@ impl App {
             {
                 "Windows Update Agent did not return a result, so offer state remains unknown."
             } else if self.drivers_ui.problem_category_filter.is_some() {
-                "No matching device remains in the loaded recent update history and current inventory for this search. This does not mean a device is current."
+                "No matching device remains in the loaded recent update history and current inventory for these categories. This does not mean a device is current."
             } else {
-                "No devices match this tab and search."
+                "No devices match this tab."
             };
             theme::card(t).show(ui, |ui| theme::muted(ui, message, t));
             return;

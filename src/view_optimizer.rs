@@ -305,21 +305,6 @@ impl App {
             theme::primary(ui, "Activate all", t, false);
             return;
         }
-        theme::control_row(ui, |ui| {
-            ui.label(RichText::new("Search").color(t.muted));
-            let width = ui.available_width().min(300.);
-            theme::input(
-                ui,
-                &mut self.optimizer_ui.query,
-                width,
-                "Name or publisher…",
-                true,
-            );
-            if !self.optimizer_ui.query.is_empty() && theme::field_action(ui, "Clear", true) {
-                self.optimizer_ui.query.clear();
-            }
-        });
-        ui.add_space(8.);
         let Some(snapshot) = self.optimizer_ui.snapshot.clone() else {
             if !self.optimizer_ui.loading {
                 theme::muted(ui, "No inventory loaded. Choose Scan again to retry.", t);

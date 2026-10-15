@@ -513,17 +513,7 @@ impl App {
             }
         });
         ui.add_space(12.);
-        theme::control_row(ui, |ui| {
-            ui.label(RichText::new("Search").color(t.muted));
-            ui.add_space(8.);
-            let search_width = (ui.available_width() - 8.).clamp(150., 360.);
-            theme::input(
-                ui,
-                &mut self.software_ui.query,
-                search_width,
-                "Name, publisher, package ID…",
-                true,
-            );
+        theme::action_row(ui, |ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let response = theme::header_action(ui, "Rescan", !self.busy());
                 rescan = response;
@@ -1800,7 +1790,7 @@ impl App {
         });
         if items.is_empty() {
             ui.add_space(8.);
-            theme::muted(ui, "No packages match this view and search.", t);
+            theme::muted(ui, "No packages match this view.", t);
         }
         if !snapshot.registration_issues.is_empty() {
             ui.add_space(8.);

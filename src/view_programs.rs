@@ -13,6 +13,8 @@ pub(super) struct ProgramsUi {
     load_error: Option<String>,
     loading: bool,
     search: String,
+    search_open: bool,
+    search_focus: bool,
     tab: ProgramTab,
     sort: ProgramSort,
     descending: bool,
@@ -148,6 +150,8 @@ impl App {
         let selected = self.selected_program();
         match action {
             "Installed" | "Disabled · unavailable" => Ok(()),
+            "Search software" if !self.program_ui.search_open && has_program => Ok(()),
+            "Close search" if self.program_ui.search_open => Ok(()),
             "Sort Program" | "Sort Installed" | "Sort Size" if has_program => Ok(()),
             "Details" if has_program && self.program_ui.dialog.is_none() => Ok(()),
             "Uninstall"
@@ -199,10 +203,14 @@ impl App {
             "sort": program_sort_label(self.program_ui.sort),
             "descending": self.program_ui.descending,
             "dialog": dialog,
+            "search_open": self.program_ui.search_open,
+            "search_empty": self.program_ui.search.is_empty(),
             "programs": self.program_ui.inventory.as_ref().map(|inventory| inventory.programs.len()),
         });
         let valid = match action {
             "Installed" | "Disabled · unavailable" => state["tab"] == action,
+            "Search software" => state["search_open"] == true,
+            "Close search" => state["search_open"] == false && state["search_empty"] == true,
             "Sort Program" => state["sort"] == "Program",
             "Sort Installed" => state["sort"] == "Installed",
             "Sort Size" => state["sort"] == "Size",
@@ -669,19 +677,6 @@ impl App {
     }
 
     fn program_inventory_panel(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        theme::control_row(ui, |ui| {
-            let search_width = (ui.available_width() - 58.).clamp(150., 480.);
-            ui.label(RichText::new("Search").color(t.muted));
-            theme::input(
-                ui,
-                &mut self.program_ui.search,
-                search_width,
-                "Name, publisher, version, location or registration…",
-                true,
-            );
-        });
-        ui.add_space(6.);
-
         if self.program_ui.loading && self.program_ui.inventory.is_none() {
             ui.horizontal(|ui| {
                 ui.spinner();
@@ -735,10 +730,62 @@ impl App {
             ui.spacing_mut().item_spacing.y = 0.;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
-                for (sort, label, width) in [
-                    (ProgramSort::Name, "Program", name_width),
-                    (ProgramSort::InstallDate, "Installed", installed_width),
-                ] {
+                ui.allocate_ui_with_layout(
+                    Vec2::new(name_width, theme::FIELD_HEIGHT),
+                    Layout::left_to_right(Align::Center),
+                    |cell| {
+                        cell.set_min_width(name_width);
+                        cell.set_max_width(name_width);
+                        let content_width = (name_width - 36.).max(1.);
+                        if self.program_ui.search_open {
+                            let input = theme::input(
+                                cell,
+                                &mut self.program_ui.search,
+                                content_width,
+                                "Search...",
+                                !busy,
+                            );
+                            if std::mem::take(&mut self.program_ui.search_focus) {
+                                input.request_focus();
+                            }
+                            if theme::close_button(cell, "Close search", !busy) {
+                                self.program_ui.search.clear();
+                                self.program_ui.search_open = false;
+                            }
+                        } else {
+                            if program_sort_header(
+                                cell,
+                                "Program",
+                                "Sort Program",
+                                content_width,
+                                self.program_ui.sort == ProgramSort::Name,
+                                self.program_ui.descending,
+                                t,
+                            )
+                            .clicked()
+                            {
+                                if self.program_ui.sort == ProgramSort::Name {
+                                    self.program_ui.descending = !self.program_ui.descending;
+                                } else {
+                                    self.program_ui.sort = ProgramSort::Name;
+                                    self.program_ui.descending = false;
+                                }
+                            }
+                            if theme::icon_action(
+                                cell,
+                                theme::Icon::Search,
+                                "Search software",
+                                !busy,
+                            ) {
+                                self.program_ui.search_open = true;
+                                self.program_ui.search_focus = true;
+                            }
+                        }
+                    },
+                );
+                for (sort, label, width) in
+                    [(ProgramSort::InstallDate, "Installed", installed_width)]
+                {
                     let accessible = format!("Sort {label}");
                     if program_sort_header(
                         ui,

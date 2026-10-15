@@ -1269,6 +1269,7 @@ fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
 
 #[derive(Clone, Copy)]
 pub enum Icon {
+    Search,
     Info,
     EyeOff,
     Forward,
@@ -1389,6 +1390,10 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Search => {
+            p.circle_stroke(point(8., 8.), rect.width() * 0.275, stroke);
+            line(&[(12., 12.), (18., 18.)]);
+        }
         Icon::Applications => {
             line(&[(6., 3.), (18., 3.), (18., 15.)]);
             line(&[(2., 7.), (14., 7.), (14., 19.), (2., 19.), (2., 7.)]);

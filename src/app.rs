@@ -1114,6 +1114,22 @@ impl App {
                     self.clean_bin = false;
                 }
             });
+            if !self.clean_browser
+                && !self.clean_registry
+                && !self.clean_bin
+                && self.analysis.is_some()
+            {
+                ui.add_space(8.);
+                let width = (ui.available_width() - 8.).clamp(160., 260.);
+                let enabled = !self.busy();
+                theme::input(
+                    ui,
+                    &mut self.search,
+                    width,
+                    "Search files or categories…",
+                    enabled,
+                );
+            }
         });
         ui.add_space(16.);
         if self.clean_registry {
@@ -1228,11 +1244,10 @@ impl App {
             .show(ui, |ui| {
                 self.clean_category_tree(ui, t, ctx);
             });
-        theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());if self.analysis.is_some(){ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);}
+        theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());
             if let Some(analysis)=self.analysis.clone(){
+                ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);
                 ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(theme::FONT_DISPLAY).family(theme::semibold()));theme::muted(ui,format!("{} · {:.1}s elapsed{}",theme::counted_label(analysis.count(),"file","files"),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
-                let search_width=ui.available_width();
-                theme::input(ui,&mut self.search,search_width,"Search file paths or categories…",true);ui.add_space(10.);
                 let query=self.search.to_lowercase();let busy=self.busy();
                 for category in &analysis.categories{
                     if !query.is_empty()&&!category.name.to_lowercase().contains(&query)&&!category.files.iter().any(|f|f.path.to_string_lossy().to_lowercase().contains(&query)){continue;}
@@ -1261,6 +1276,7 @@ impl App {
 
         });
     }
+
     fn clean_category_tree(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let categories = self.categories.clone();
         let busy = self.busy();

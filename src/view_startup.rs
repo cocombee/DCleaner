@@ -483,8 +483,6 @@ impl App {
             .inventories
             .get(&self.startup_ui.section)
             .cloned();
-        self.startup_search_and_sort(ui);
-        ui.add_space(6.);
 
         if let Some(inventory) = inventory {
             if inventory.quality != InventoryQuality::Complete {
@@ -1397,23 +1395,6 @@ impl App {
                         self.startup_ui.qa_more_open = false;
                     }
                 }
-            }
-        });
-    }
-
-    fn startup_search_and_sort(&mut self, ui: &mut egui::Ui) {
-        let has_query = !self.startup_ui.query.is_empty();
-        let width = (ui.available_width() - if has_query { 60. } else { 0. }).clamp(140., 560.);
-        theme::control_row(ui, |ui| {
-            theme::input(
-                ui,
-                &mut self.startup_ui.query,
-                width,
-                "Search name, publisher, path or identity",
-                true,
-            );
-            if has_query && theme::field_action(ui, "Clear", true) {
-                self.startup_ui.query.clear();
             }
         });
     }
