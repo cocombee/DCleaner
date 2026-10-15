@@ -41,6 +41,7 @@ Consequences: shared core contracts across Windows/macOS; native builds on each 
 | `src/instance.rs`, `scripts/install.ps1` | One interactive process per Windows session and one stable user install/shortcut path | Session mutex/window activation; scoped executable/shortcut replacement; preserves app data |
 | `src/view_duplicates.rs`, `src/view_programs.rs`, `src/view_startup.rs`, `src/view_software.rs`, `src/view_privacy.rs`, `src/view_recycle_bin.rs` | Feature state, actual result tables and review dialogs | Typed service requests; journal must succeed before native effect |
 | `src/theme.rs` | Semantic colours, font, spacing, frame/row/button tokens | Paint only |
+| `src/illustrations.rs` | Decode embedded flat DCleaner artwork once and paint it in its owning introduction state | Embedded PNG bytes only; no filesystem, browser, provider or native reads |
 | `src/app_icons.rs` | Bounded asynchronous application artwork cache | Reads local registered icon resources/executables only; never launches a locator, invokes a shell or downloads guessed artwork; absent artwork preserves the column slot |
 | `src/app.rs` | Navigation, selection, review, native dialogs and background-worker messages | Calls services; no unrestricted deletion |
 | `src/main.rs` | Native startup and read-only diagnostic entry point | Window creation / explicitly requested diagnostics |

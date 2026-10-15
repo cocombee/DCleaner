@@ -6,6 +6,35 @@ pub(super) struct DiskUi {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_disk_qa(&mut self, case: &str) {
+        let root = PathBuf::from(r"C:\__dcleaner_visual_fixture__");
+        let files = if case == "disk-empty" {
+            Vec::new()
+        } else {
+            (0..24).map(|index| dcleaner::domain::Candidate {
+                id: Uuid::from_u128(0xD15C_0000 + index),
+                path: root.join(format!("Projects/Reference materials/Long directory name for column clipping checks/Archive-{index:02}-with-a-deliberately-long-filename-for-table-width-review.bin")),
+                root: root.clone(),
+                size: 31_244_000_000 / (index as u64 + 1),
+                modified_ns: 0,
+                created_ns: None,
+            }).collect::<Vec<_>>()
+        };
+        self.disk_ui.details = if case == "disk-details" {
+            files.first().map(|file| file.id)
+        } else {
+            None
+        };
+        self.disk = Some(DiskReport {
+            root,
+            count: files.len(),
+            bytes: files.iter().map(|file| file.size).sum(),
+            files,
+            skipped: if case == "disk-partial" { 4 } else { 0 },
+            partial: case == "disk-partial",
+        });
+    }
     pub(super) fn disk_page(&mut self, ui: &mut egui::Ui, t: Tokens, _ctx: &egui::Context) {
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());

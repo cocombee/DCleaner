@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 360 260" fill="none">
+  <title>Review and clean cloud files</title>
+  <path d="M30 205C18 157 29 117 73 105C112 94 134 107 160 85C196 54 252 62 282 92C315 125 343 169 330 205H30Z" fill="#3999D9" opacity=".12"/>
+  <path d="M45 194L34 152C30 133 36 117 50 113L75 111C94 113 101 128 105 144L113 194H45Z" fill="#3999D9"/>
+  <path d="M56 102L58 121C65 128 75 126 80 119L72 98" fill="#EDF2F5"/>
+  <path d="M48 75C46 57 63 51 76 61L83 82C87 98 75 109 63 105C55 102 50 89 48 75Z" fill="#EDF2F5"/>
+  <path d="M48 85C39 79 37 66 44 58C47 45 71 43 80 56C84 62 82 67 78 71L64 66L55 72L56 88L48 85Z" fill="#092535"/>
+  <path d="M68 83L70 82M77 81L79 80M71 94C74 96 78 94 79 92" stroke="#092535" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M39 139L57 162L101 148" stroke="#EDF2F5" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="98" y="90" width="210" height="132" rx="10" fill="#EDF2F5"/>
+  <rect x="107" y="99" width="192" height="111" rx="4" fill="#092535"/>
+  <path d="M111 206V103H295V206H111Z" fill="#3999D9" opacity=".24"/>
+  <path d="M107 194L234 99H295V210H107V194Z" fill="#3999D9" opacity=".35"/>
+  <path d="M98 222H308L327 239C329 242 326 246 321 246H84C79 246 76 242 79 239L98 222Z" fill="#EDF2F5"/>
+  <path d="M181 222H227L232 229H176L181 222Z" fill="#092535" opacity=".18"/>
+  <path d="M103 147L149 169" stroke="#092535" stroke-width="9" stroke-linecap="round"/>
+  <path d="M144 166L166 143" stroke="#092535" stroke-width="9" stroke-linecap="round"/>
+  <path d="M151 137L197 96L225 126L178 168L151 137Z" fill="#3999D9"/>
+  <path d="M151 137L178 168" stroke="#092535" stroke-width="5"/>
+  <path d="M89 146L101 140L112 145L109 152L98 155L89 151" fill="#EDF2F5"/>
+  <path d="M314 157H332L337 164H308L314 157Z" fill="#3999D9"/>
+  <path d="M314 163L310 173M329 164L338 193V211C338 216 332 219 324 219C316 219 311 216 311 211V193L317 178V164" fill="#3999D9"/>
+  <path d="M279 51V65M272 58H286M323 84V96M317 90H329" stroke="#3999D9" stroke-width="3" stroke-linecap="round"/>
+</svg>

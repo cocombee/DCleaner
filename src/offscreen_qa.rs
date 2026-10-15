@@ -265,8 +265,10 @@ pub fn run() -> Result<(), String> {
     } else {
         [1240, 820]
     };
+    let fixture_case = std::env::var("DCLEANER_QA_CASE")
+        .map_err(|_| "Offscreen QA requires an explicit supported DCLEANER_QA_CASE; host inventories are never loaded.".to_string())?;
     let context = egui::Context::default();
-    let mut app = crate::app::App::new_with_context(&context);
+    let mut app = crate::app::App::new_fixture_with_context(&context, &fixture_case)?;
     let mut textures = Textures::default();
     let started = Instant::now();
     let mut idle_frames = 0;
@@ -307,7 +309,7 @@ pub fn run() -> Result<(), String> {
                     .map_err(|error| error.to_string())?,
             )
             .map_err(|error| error.to_string())?;
-            std::fs::write(destination.with_extension("renderer.json"), serde_json::to_vec_pretty(&serde_json::json!({"renderer":"CPU rasterization of actual egui meshes; no OS window", "native_framebuffer":false,"physical_input":false,"installed_acceptance":false,"size":dimensions,"scale":output.pixels_per_point})).map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
+            std::fs::write(destination.with_extension("renderer.json"), serde_json::to_vec_pretty(&serde_json::json!({"renderer":"CPU rasterization of actual egui meshes; no OS window", "fixture":fixture_case,"synthetic_data":true,"host_inventory":false,"native_framebuffer":false,"physical_input":false,"installed_acceptance":false,"size":dimensions,"scale":output.pixels_per_point})).map_err(|error| error.to_string())?).map_err(|error| error.to_string())?;
             return Ok(());
         }
         textures.finish_frame();

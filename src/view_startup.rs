@@ -763,6 +763,7 @@ impl App {
         let mut prepare_change = None;
         let mut open_location = None;
         let mut detail_selection = None;
+        let mut save_text = false;
         let busy = self.busy();
         egui::Frame::NONE.show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -850,7 +851,6 @@ impl App {
                             field_cell(ui, path_width, &entry.file_path);
                         }
 
-                        let identity = identity_summary(&entry.identity);
                         let state = enabled_label(&entry.enabled);
                         theme::table_cell(ui, state.clone(), state_width, 36.)
                         .on_hover_text(enabled_tooltip(&entry.enabled));
@@ -886,16 +886,22 @@ impl App {
                             egui::Popup::menu(&more).show(|ui| {
                                 if ui.button("Show details").clicked() {
                                     detail_selection = Some(entry.id.clone());
+                                    ui.close();
+                                }
+                                if ui
+                                    .add_enabled(!busy, egui::Button::new("Save to text file"))
+                                    .clicked()
+                                {
+                                    save_text = true;
+                                    ui.close();
                                 }
                                 if let FieldValue::Known { value } = &entry.file_path {
                                     if !value.is_empty()
-                                        && ui.button("Open file location").clicked()
+                                        && ui.button("Open in folder").clicked()
                                     {
                                         open_location = Some(value.clone());
+                                        ui.close();
                                     }
-                                }
-                                if ui.button("Copy native identity").clicked() {
-                                    ui.ctx().copy_text(identity.clone());
                                 }
                             });
                         });
@@ -907,6 +913,9 @@ impl App {
             });
             ui.spacing_mut().item_spacing.y = previous_y_spacing;
         });
+        if save_text {
+            self.export_startup_text(inventory);
+        }
         if let Some(id) = detail_selection {
             self.startup_ui.selected = Some(id);
             self.startup_ui.details_open = true;
@@ -1054,6 +1063,73 @@ impl App {
             }
         }
     }
+
+    fn export_startup_text(&mut self, inventory: &StartupInventory) {
+        if matches!(&inventory.quality, InventoryQuality::Unavailable) {
+            self.error = Some(
+                "This tab has no usable inventory to export. Refresh the native sources first."
+                    .into(),
+            );
+            return;
+        }
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("Save Startup Manager entries")
+            .set_file_name("startup.txt")
+            .add_filter("Text files", &["txt"])
+            .save_file()
+        else {
+            return;
+        };
+
+        let contents = inventory
+            .entries
+            .iter()
+            .map(|entry| {
+                [
+                    startup_export_enabled(&entry.enabled).to_owned(),
+                    startup_export_field(&entry.program),
+                    startup_export_field(&entry.publisher),
+                    startup_export_field(&entry.file_path),
+                ]
+                .join("\t")
+            })
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        match std::fs::write(path, contents) {
+            Ok(()) => {
+                self.notice = Some(if matches!(&inventory.quality, InventoryQuality::Partial) {
+                    "Text file saved. It includes only entries from sources Windows allowed DCleaner to read.".into()
+                } else {
+                    "Startup entries saved to a text file.".into()
+                });
+            }
+            Err(error) => {
+                self.error = Some(format!(
+                    "The Startup Manager text file could not be saved: {error}"
+                ));
+            }
+        }
+    }
+}
+
+fn startup_export_enabled(state: &EnabledState) -> &'static str {
+    match state {
+        EnabledState::Enabled => "Yes",
+        EnabledState::Disabled => "No",
+        EnabledState::Unknown { .. } => "Unknown",
+    }
+}
+
+fn startup_export_field(field: &FieldValue<String>) -> String {
+    let value = match field {
+        FieldValue::Known { value } => value.as_str(),
+        FieldValue::Unknown { .. } => "Unknown",
+        FieldValue::NotApplicable => "",
+    };
+    value
+        .replace('\t', " ")
+        .replace('\r', " ")
+        .replace('\n', " ")
 }
 
 fn apply_startup_change(

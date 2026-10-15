@@ -160,6 +160,8 @@ struct DiskReport {
     partial: bool,
 }
 pub struct App {
+    illustrations: crate::illustrations::Illustrations,
+    qa_fixture_mode: bool,
     logo_texture: Option<egui::TextureHandle>,
     cloud_ui: view_cloud::CloudUi,
     clean_settings_ui: view_clean_settings::CleanSettingsUi,
@@ -205,6 +207,9 @@ impl App {
         Self::new_with_context(&cc.egui_ctx)
     }
     pub(crate) fn new_with_context(context: &egui::Context) -> Self {
+        Self::construct(context, false)
+    }
+    fn construct(context: &egui::Context, fixture: bool) -> Self {
         let mut fonts = egui::FontDefinitions::default();
         fonts.font_data.insert(
             "Inter".into(),
@@ -238,33 +243,52 @@ impl App {
                 egui::TextureOptions::LINEAR,
             )
         });
-        let (data_dir, mut error) = match platform::data_directory() {
-            Ok(p) => (p, None),
-            Err(e) => (PathBuf::new(), Some(e)),
-        };
-        let (prefs, settings_readable) = match store::load_preferences(&data_dir) {
-            Ok(p) => (p, true),
-            Err(e) => {
-                error = Some(e);
-                (Preferences::default(), false)
+        let (data_dir, mut error) = if fixture {
+            (PathBuf::from("__dcleaner_in_memory_fixture__"), None)
+        } else {
+            match platform::data_directory() {
+                Ok(p) => (p, None),
+                Err(e) => (PathBuf::new(), Some(e)),
             }
         };
-        let (history, history_readable) = match store::history(&data_dir) {
-            Ok(h) => (h, true),
-            Err(e) => {
-                error = Some(e);
-                (vec![], false)
+        let (prefs, settings_readable) = if fixture {
+            (Preferences::default(), true)
+        } else {
+            match store::load_preferences(&data_dir) {
+                Ok(p) => (p, true),
+                Err(e) => {
+                    error = Some(e);
+                    (Preferences::default(), false)
+                }
             }
         };
-        let clean_settings_result =
-            clean_settings::load_settings(&data_dir).map_err(|failure| failure.to_string());
+        let (history, history_readable) = if fixture {
+            (Vec::new(), true)
+        } else {
+            match store::history(&data_dir) {
+                Ok(h) => (h, true),
+                Err(e) => {
+                    error = Some(e);
+                    (vec![], false)
+                }
+            }
+        };
+        let clean_settings_result = if fixture {
+            Ok(Default::default())
+        } else {
+            clean_settings::load_settings(&data_dir).map_err(|failure| failure.to_string())
+        };
         if let Err(failure) = &clean_settings_result {
             error = Some(failure.clone());
         }
         let clean_settings_ui =
             view_clean_settings::CleanSettingsUi::from_saved(clean_settings_result);
         #[cfg(debug_assertions)]
-        let visual_capture = crate::visual_qa::Capture::from_environment();
+        let visual_capture = if fixture {
+            None
+        } else {
+            crate::visual_qa::Capture::from_environment()
+        };
         #[cfg(debug_assertions)]
         let qa_mode =
             visual_capture.is_some() || std::env::args().any(|arg| arg == "--render-offscreen-qa");
@@ -308,6 +332,8 @@ impl App {
         #[cfg(not(debug_assertions))]
         let (clean_browser, clean_bin) = (false, false);
         Self {
+            illustrations: Default::default(),
+            qa_fixture_mode: fixture,
             logo_texture,
             clean_settings_ui,
             custom_analysis: None,
@@ -330,7 +356,11 @@ impl App {
             clean_bin,
             page: initial_page,
             prefs,
-            categories: platform::categories(),
+            categories: if fixture {
+                Vec::new()
+            } else {
+                platform::categories()
+            },
             analysis: None,
             selected: HashSet::new(),
             history,
@@ -355,6 +385,35 @@ impl App {
     }
     fn busy(&self) -> bool {
         self.worker.is_some()
+    }
+    fn qa_fixture_mode(&self) -> bool {
+        self.qa_fixture_mode
+    }
+    #[cfg(debug_assertions)]
+    pub(crate) fn new_fixture_with_context(
+        context: &egui::Context,
+        case: &str,
+    ) -> Result<Self, String> {
+        if !matches!(
+            case,
+            "cloud-intro"
+                | "cloud-providers"
+                | "disk-results"
+                | "disk-partial"
+                | "disk-details"
+                | "disk-empty"
+        ) {
+            return Err(format!("Unsupported isolated visual fixture: {case}"));
+        }
+        let mut app = Self::construct(context, true);
+        if case.starts_with("cloud-") {
+            app.page = Page::Cloud;
+            app.seed_cloud_qa(case);
+        } else {
+            app.page = Page::Disk;
+            app.seed_disk_qa(case);
+        }
+        Ok(app)
     }
     fn begin_scan(&mut self, ctx: &egui::Context) {
         if self.busy() {
@@ -459,7 +518,7 @@ impl App {
         });
     }
     fn begin_disk(&mut self, ctx: &egui::Context) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         let Some(root) = rfd::FileDialog::new()
@@ -1082,7 +1141,9 @@ impl App {
         let ctx = root.ctx().clone();
         #[cfg(debug_assertions)]
         theme::begin_geometry_frame(&ctx);
-        self.startup_refresh_external_state(&ctx);
+        if !self.qa_fixture_mode() {
+            self.startup_refresh_external_state(&ctx);
+        }
         let t = theme::tokens(self.prefs.dark);
         let busy = self.busy();
         if busy {

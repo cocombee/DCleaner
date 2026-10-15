@@ -108,6 +108,24 @@ pub(super) enum CloudEvent {
 }
 
 impl App {
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_cloud_qa(&mut self, case: &str) {
+        self.cloud_ui = CloudUi {
+            attempted: true,
+            introduced: case == "cloud-providers",
+            workspace: Some(Workspace {
+                registrations: Vec::new(),
+                registration_error: None,
+                accounts: Vec::new(),
+                history: dcleaner::cloud_store::OperationPage {
+                    records: Vec::new(),
+                    next_cursor: None,
+                },
+                restore_attempts: HashSet::new(),
+            }),
+            ..Default::default()
+        };
+    }
     fn begin_cloud_job(
         &mut self,
         label: &str,
@@ -116,7 +134,7 @@ impl App {
         + Send
         + 'static,
     ) {
-        if self.busy() {
+        if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.error = None;
@@ -321,7 +339,10 @@ impl App {
         if self.cloud_ui.older_days == 0 {
             self.cloud_ui.older_days = 365;
         }
-        if (!self.cloud_ui.attempted || self.cloud_ui.reload) && !self.busy() {
+        if !self.qa_fixture_mode()
+            && (!self.cloud_ui.attempted || self.cloud_ui.reload)
+            && !self.busy()
+        {
             // No cloud worker is active while loading, so interrupted journal
             // rows can be safely recovered as uncertain after worker failure.
             let recover = true;
@@ -377,42 +398,25 @@ impl App {
             && accounts.is_empty()
             && self.cloud_ui.filter != CloudFilter::History
         {
-            ui.add_space(18.);
-            ui.label(
-                RichText::new("Make room in your cloud")
-                    .family(theme::semibold())
-                    .size(23.),
-            );
-            ui.add_space(22.);
-            for (number, title, description) in [
-                (
-                    "01",
-                    "Sign in to your cloud account",
-                    "Connect Google Drive, Gmail, OneDrive or Dropbox through your provider account.",
-                ),
-                (
-                    "02",
-                    "Scan your files",
-                    "Review possible duplicates, large files and older items. Scanning reads metadata and leaves your content in place.",
-                ),
-                (
-                    "03",
-                    "Choose what to clean",
-                    "Inspect each item before moving it to provider trash. Review confirmed and uncertain outcomes in cleanup history.",
-                ),
-            ] {
+            ui.add_space(24.);
+            if ui.available_width() >= 760. {
+                let text_width = ui.available_width() - 340.;
                 ui.horizontal_top(|ui| {
-                    ui.allocate_ui(Vec2::new(42., 64.), |ui| {
-                        ui.label(RichText::new(number).color(t.primary).size(20.));
-                    });
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(title).family(theme::semibold()).size(15.));
-                        ui.add_space(6.);
-                        ui.add(egui::Label::new(RichText::new(description).color(t.muted)).wrap());
-                    });
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(text_width, 0.),
+                        Layout::top_down(Align::Min),
+                        |ui| {
+                            cloud_intro_steps(ui, t);
+                        },
+                    );
+                    self.illustrations.cloud(ui, 320.);
                 });
-                ui.add_space(22.);
+            } else {
+                ui.vertical_centered(|ui| self.illustrations.cloud(ui, 220.));
+                ui.add_space(16.);
+                cloud_intro_steps(ui, t);
             }
+            ui.add_space(16.);
             if theme::primary(ui, "Get started", t, !busy) {
                 self.cloud_ui.introduced = true;
             }
@@ -536,73 +540,115 @@ impl App {
         }
     }
     fn cloud_providers(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
-        let busy = self.busy();
-        ui.label(
-            RichText::new("Connect your cloud storage")
-                .family(theme::semibold())
-                .size(19.),
-        );
-        ui.add_space(16.);
-        for provider in cloud::PROVIDERS {
-            if provider == Provider::Gmail {
-                ui.add_space(20.);
-                ui.label(
-                    RichText::new("Organize your mailbox")
-                        .family(theme::semibold())
-                        .size(19.),
-                );
-                ui.add_space(16.);
-            }
-            let account_saved = self.cloud_ui.workspace.as_ref().is_some_and(|workspace| {
-                workspace
-                    .accounts
-                    .iter()
-                    .any(|account| account.scope().provider() == provider)
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new("Clean your cloud storage account")
+                    .family(theme::semibold())
+                    .size(22.),
+            );
+            ui.add_space(8.);
+            theme::muted(ui, "Connect an account to scan and review its files.", t);
+        });
+        ui.add_space(24.);
+
+        let columns = if ui.available_width() >= 720. { 3 } else { 2 };
+        let storage = [Provider::GoogleDrive, Provider::OneDrive, Provider::Dropbox];
+        for providers in storage.chunks(columns) {
+            ui.columns(columns, |cells| {
+                for (cell, provider) in cells.iter_mut().zip(providers) {
+                    self.cloud_provider_card(cell, t, ctx, *provider);
+                }
             });
-            theme::card(t).show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(36.), egui::Sense::hover());
-                    paint_provider(ui.painter(), rect, provider);
-                    ui.add_space(12.);
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new(provider.label())
-                                .family(theme::semibold())
-                                .size(15.),
-                        );
-                        theme::muted(
-                            ui,
-                            if account_saved {
-                                "Account saved on this device"
-                            } else {
-                                "Not connected"
-                            },
-                            t,
-                        );
-                    });
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if theme::row_action(ui, "Connect", !busy).clicked() {
-                            self.begin_cloud_job(
-                                "Connecting to provider…",
-                                ctx,
-                                move |path, cancel, progress| {
-                                    CloudEvent::Connected(cloud::connect(
-                                        path, provider, cancel, progress,
-                                    ))
-                                },
-                            );
-                        }
-                    });
-                });
-            });
-            ui.add_space(12.);
+            ui.add_space(16.);
         }
+
+        ui.add_space(16.);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new("Organize and clean your mailbox")
+                    .family(theme::semibold())
+                    .size(22.),
+            );
+            ui.add_space(8.);
+            theme::muted(
+                ui,
+                "Connect your mailbox to review messages before cleanup.",
+                t,
+            );
+        });
+        ui.add_space(24.);
+        let card_width = (ui.available_width()
+            - ui.spacing().item_spacing.x * (columns - 1) as f32)
+            / columns as f32;
+        ui.horizontal(|ui| {
+            ui.add_space(((ui.available_width() - card_width) / 2.).max(0.));
+            ui.allocate_ui_with_layout(
+                Vec2::new(card_width, 224.),
+                Layout::top_down(Align::Min),
+                |ui| self.cloud_provider_card(ui, t, ctx, Provider::Gmail),
+            );
+        });
+        ui.add_space(16.);
         theme::muted(
             ui,
             "Connecting requires account authorization. DCleaner never uses CCleaner's service credentials.",
             t,
         );
+    }
+
+    fn cloud_provider_card(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: Tokens,
+        ctx: &egui::Context,
+        provider: Provider,
+    ) {
+        let busy = self.busy();
+        let account_saved = self.cloud_ui.workspace.as_ref().is_some_and(|workspace| {
+            workspace
+                .accounts
+                .iter()
+                .any(|account| account.scope().provider() == provider)
+        });
+        ui.push_id(provider.label(), |ui| {
+            theme::card(t).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.set_min_height(192.);
+                ui.vertical_centered(|ui| {
+                    ui.add_space(10.);
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(52.), egui::Sense::hover());
+                    paint_provider(ui.painter(), rect, provider);
+                    ui.add_space(16.);
+                    ui.label(
+                        RichText::new(provider.label())
+                            .family(theme::semibold())
+                            .size(15.),
+                    );
+                    ui.add_space(6.);
+                    theme::muted(
+                        ui,
+                        if account_saved {
+                            "Account saved on this device"
+                        } else {
+                            "Not connected"
+                        },
+                        t,
+                    );
+                    ui.add_space(16.);
+                    if theme::primary(ui, "Connect", t, !busy) {
+                        self.begin_cloud_job(
+                            "Connecting to provider…",
+                            ctx,
+                            move |path, cancel, progress| {
+                                CloudEvent::Connected(cloud::connect(
+                                    path, provider, cancel, progress,
+                                ))
+                            },
+                        );
+                    }
+                });
+            });
+        });
     }
     fn cloud_results(
         &mut self,
@@ -1186,6 +1232,54 @@ fn restore_unavailable_reason(record: &OperationRecord, restore_attempted: bool)
 }
 
 /// Provider marks are vector geometry, kept separate from the navigation icon.
+fn cloud_intro_steps(ui: &mut egui::Ui, t: Tokens) {
+    for (index, icon, title, description) in [
+        (
+            0,
+            theme::Icon::Cloud,
+            "Sign in to your cloud account",
+            "Connect Google Drive, Gmail, OneDrive or Dropbox through your provider account.",
+        ),
+        (
+            1,
+            theme::Icon::Duplicate,
+            "Scan your files",
+            "Review possible duplicates, large files and older items. Scanning leaves your content in place.",
+        ),
+        (
+            2,
+            theme::Icon::Brush,
+            "Choose what to clean",
+            "Inspect each item before moving it to provider trash. Check the outcome in cleanup history.",
+        ),
+    ] {
+        ui.horizontal_top(|ui| {
+            let text_width = (ui.available_width() - 44.).max(120.);
+            let (rect, _) = ui.allocate_exact_size(Vec2::splat(28.), egui::Sense::hover());
+            theme::paint_icon(ui.painter(), rect, icon, t.primary);
+            ui.add_space(8.);
+            ui.vertical(|ui| {
+                ui.set_width(text_width);
+                ui.label(RichText::new(title).family(theme::semibold()).size(15.));
+                ui.add_space(6.);
+                ui.add(egui::Label::new(RichText::new(description).color(t.muted)).wrap());
+                if index == 0 {
+                    ui.add_space(10.);
+                    ui.horizontal(|ui| {
+                        for provider in cloud::PROVIDERS {
+                            let (rect, response) =
+                                ui.allocate_exact_size(Vec2::splat(22.), egui::Sense::hover());
+                            paint_provider(ui.painter(), rect, provider);
+                            response.on_hover_text(provider.label());
+                        }
+                    });
+                }
+            });
+        });
+        ui.add_space(20.);
+    }
+}
+
 fn paint_provider(p: &egui::Painter, rect: egui::Rect, provider: Provider) {
     let point = |x: f32, y: f32| rect.min + Vec2::new(x, y) * (rect.width() / 36.);
     let polygon = |xy: &[(f32, f32)], color| {

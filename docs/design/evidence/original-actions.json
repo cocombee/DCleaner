@@ -1133,6 +1133,93 @@
     "limitations": "Keys/imports do not establish full text, control order, exact asset files, rendered appearance, runtime reachability, menu visibility, transitions or native effects. All require visual inspection.",
     "visually_verified": false
   },
+  "authored_action_artwork_update": {
+    "authority": "Installed authored UI source and separately viewed local SVG pixels; not a native action replay",
+    "optimizer": {
+      "empty_active_sleeping_excluded": {
+        "asset": "LaptopRocket.svg",
+        "sha256": "7ceae9eb21cfb7cac5c39f99e3518919465e7e9e40bb389a23df06feb8b03407",
+        "asset_pixels_inspected": true,
+        "source": "chunks/Results3.js",
+        "source_offsets_utf16": [
+          14865,
+          15665,
+          16486
+        ]
+      },
+      "sleep": "Row handler dispatches sleep then marks deactivating. A completed result containing a sleep option can show the later Sleep dialog, subject to its skip preference. No pre-effect Sleep confirmation was found in this handler.",
+      "sleep_dialog": {
+        "source": "chunks/results2.js",
+        "offset_utf16": 9838,
+        "icon": "circle-ok",
+        "action": "Done",
+        "runtime_verified": false
+      },
+      "ignore_unignore_activate_all": {
+        "source": "chunks/results2.js",
+        "offset_utf16": 4451,
+        "icon": "circle-attention",
+        "controls": [
+          "Cancel",
+          "type-specific confirmation",
+          "Do not show again"
+        ],
+        "runtime_verified": false
+      },
+      "detail_dialog": {
+        "source": "chunks/results2.js",
+        "offset_utf16": 8702,
+        "artwork": "program.icon_path or inline fallback",
+        "runtime_verified": false
+      }
+    },
+    "cloud": {
+      "intro": {
+        "asset": "PersonCleaning.svg",
+        "sha256": "57ba40c96c30321b31b9cd61c214d83b3f37b05a28556009de39ac37f75135aa",
+        "asset_pixels_inspected": true,
+        "source": "chunks/CloudDriveCleaner.js",
+        "component_name": "PersonCleaning",
+        "runtime_verified": false
+      },
+      "dcleaner": {
+        "asset": "assets/illustrations/cloud-cleanup.svg",
+        "authorship": "New flat DCleaner vector artwork; no original SVG paths copied",
+        "purpose": "Person cleaning a laptop in the introduction; provider choices retain provider logos",
+        "blue": "#3999D9",
+        "placement_runtime_verified": false
+      }
+    },
+    "startup": {
+      "source": "chunks/Results4.js",
+      "source_sha256": "8f6573298f6b2f188b760d26c61a82dc9ae33b23fb58748b9984bf8c20c7472c",
+      "menu_actions": [
+        "Remove (type-gated; not Windows services)",
+        "Save to text file",
+        "Open in RegEdit (registry identity required)",
+        "Open in folder (path required)"
+      ],
+      "dcleaner_implemented_this_batch": [
+        "Per-tab text export from each row menu",
+        "Open in folder label",
+        "Close row popup after dispatch"
+      ],
+      "remaining": [
+        "Original Remove and RegEdit effect owners",
+        "Original welcome/progress flow",
+        "Tab counts/icons and row switches",
+        "Native click-through of every menu/dialog"
+      ],
+      "runtime_verified": false
+    },
+    "execution_boundary": {
+      "headless_original_launch": "Rejected by automatic approval review; did not execute",
+      "explicit_headless_approval": "pending",
+      "dcleaner_cpu_fixture_render": "not executed",
+      "mouse_input": false,
+      "installation_changed": false
+    }
+  },
   "summary": {
     "visible_control_groups": 60,
     "action_groups": 64,
