@@ -2128,6 +2128,7 @@ fn digest(bytes: &[u8]) -> String {
 #[cfg(windows)]
 mod native {
     use super::*;
+    use crate::native_hash::{HashError, Sha256};
     use std::mem::size_of;
     use std::{
         ffi::OsString,
@@ -2164,12 +2165,6 @@ mod native {
                 },
             },
             Foundation::{DEVPROPKEY, ERROR_NO_MORE_ITEMS, GetLastError, VARIANT_BOOL},
-            Security::Cryptography::{
-                BCRYPT_ALG_HANDLE, BCRYPT_HASH_HANDLE, BCRYPT_OBJECT_LENGTH,
-                BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS, BCRYPT_SHA256_ALGORITHM,
-                BCryptCloseAlgorithmProvider, BCryptCreateHash, BCryptDestroyHash,
-                BCryptFinishHash, BCryptGetProperty, BCryptHashData, BCryptOpenAlgorithmProvider,
-            },
             System::{
                 Com::{
                     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
@@ -2957,7 +2952,7 @@ mod native {
             hash.update(file.sha256.as_bytes())?;
             hash.update(&[b'\n'])?;
         }
-        hash.finish()
+        Ok(hash.finish()?)
     }
 
     fn hash_package_file(path: &Path) -> Result<(u64, String), DriverOperationError> {
@@ -3231,106 +3226,13 @@ mod native {
         }
     }
 
-    struct Sha256 {
-        algorithm: BCRYPT_ALG_HANDLE,
-        hash: BCRYPT_HASH_HANDLE,
-        object: Vec<u8>,
-    }
-
-    impl Sha256 {
-        fn new() -> Result<Self, DriverOperationError> {
-            let mut algorithm = BCRYPT_ALG_HANDLE::default();
-            let status = unsafe {
-                BCryptOpenAlgorithmProvider(
-                    &mut algorithm,
-                    BCRYPT_SHA256_ALGORITHM,
-                    PCWSTR::null(),
-                    BCRYPT_OPEN_ALGORITHM_PROVIDER_FLAGS(0),
-                )
-            };
-            if status.0 < 0 {
-                return Err(DriverOperationError::NativeFailure {
-                    native_code: Some(status.0 as u32),
-                });
-            }
-            let mut property = [0u8; 4];
-            let mut returned = 0u32;
-            let status = unsafe {
-                BCryptGetProperty(
-                    algorithm.into(),
-                    BCRYPT_OBJECT_LENGTH,
-                    Some(&mut property),
-                    &mut returned,
-                    0,
-                )
-            };
-            if status.0 < 0 || returned != 4 {
-                let _ = unsafe { BCryptCloseAlgorithmProvider(algorithm, 0) };
-                return Err(DriverOperationError::NativeFailure {
-                    native_code: Some(status.0 as u32),
-                });
-            }
-            let object_length = u32::from_le_bytes(property) as usize;
-            if object_length == 0 || object_length > 1_048_576 {
-                let _ = unsafe { BCryptCloseAlgorithmProvider(algorithm, 0) };
-                return Err(DriverOperationError::NativeUpdateBoundaryUnavailable);
-            }
-            let mut object = vec![0u8; object_length];
-            let mut hash = BCRYPT_HASH_HANDLE::default();
-            let status =
-                unsafe { BCryptCreateHash(algorithm, &mut hash, Some(&mut object), None, 0) };
-            if status.0 < 0 {
-                let _ = unsafe { BCryptCloseAlgorithmProvider(algorithm, 0) };
-                return Err(DriverOperationError::NativeFailure {
-                    native_code: Some(status.0 as u32),
-                });
-            }
-            Ok(Self {
-                algorithm,
-                hash,
-                object,
-            })
-        }
-
-        fn update(&mut self, bytes: &[u8]) -> Result<(), DriverOperationError> {
-            let status = unsafe { BCryptHashData(self.hash, bytes, 0) };
-            if status.0 < 0 {
-                Err(DriverOperationError::NativeFailure {
-                    native_code: Some(status.0 as u32),
-                })
-            } else {
-                Ok(())
-            }
-        }
-
-        fn finish(mut self) -> Result<String, DriverOperationError> {
-            let mut output = [0u8; 32];
-            let status = unsafe { BCryptFinishHash(self.hash, &mut output, 0) };
-            unsafe {
-                let _ = BCryptDestroyHash(self.hash);
-                let _ = BCryptCloseAlgorithmProvider(self.algorithm, 0);
-            }
-            self.hash = BCRYPT_HASH_HANDLE::default();
-            self.algorithm = BCRYPT_ALG_HANDLE::default();
-            self.object.clear();
-            if status.0 < 0 {
-                return Err(DriverOperationError::NativeFailure {
-                    native_code: Some(status.0 as u32),
-                });
-            }
-            Ok(output.iter().map(|byte| format!("{byte:02x}")).collect())
-        }
-    }
-
-    impl Drop for Sha256 {
-        fn drop(&mut self) {
-            unsafe {
-                if !self.hash.is_invalid() {
-                    let _ = BCryptDestroyHash(self.hash);
-                }
-                if !self.algorithm.is_invalid() {
-                    let _ = BCryptCloseAlgorithmProvider(self.algorithm, 0);
-                }
+    impl From<HashError> for DriverOperationError {
+        fn from(error: HashError) -> Self {
+            match error {
+                HashError::NativeFailure(native_code) => Self::NativeFailure {
+                    native_code: Some(native_code),
+                },
+                HashError::InvalidObjectLength => Self::NativeUpdateBoundaryUnavailable,
             }
         }
     }

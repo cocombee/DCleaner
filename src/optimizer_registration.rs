@@ -563,7 +563,7 @@ fn malformed_validation(reason: &str) -> ValueValidation {
     }
 }
 
-fn image_name_from_absolute_path(path: &std::path::Path) -> Option<String> {
+pub(crate) fn image_name_from_absolute_path(path: &std::path::Path) -> Option<String> {
     let path_text = path.to_str()?;
     let path_units_over_limit = path_text
         .encode_utf16()

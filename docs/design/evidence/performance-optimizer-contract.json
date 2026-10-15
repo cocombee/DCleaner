@@ -1122,5 +1122,56 @@
       "No new service procedure dossier or REA Evidence ID was produced. Do not repeat either unchanged request or count these probes as full service analysis.",
       "The successful standalone bounded procedure evidence and the earlier nine REA helper dossiers remain separate evidence."
     ]
+  },
+  "dcleaner_image_identity": {
+    "source": "src/optimizer_identity.rs",
+    "source_sha256": "e9049ff819ae25648807caba7b16e9d62c44f4e8f6e94779e1c5722b3c4751d9",
+    "shared_hash_source": "src/native_hash.rs",
+    "shared_hash_source_sha256": "c893bc84562d9eea2d2e691d18320ed8d95b316177f1a62113dd67066b520b38",
+    "api": [
+      "inspect(path: &Path, cancel: &AtomicBool)",
+      "revalidate(expected: &ImageSnapshot, cancel: &AtomicBool)"
+    ],
+    "evidence_kind": "Independent Rust implementation and temporary-fixture tests; not recovered vendor behavior or optimizer runtime parity",
+    "windows_observations": [
+      "Requested and normalized final path",
+      "Volume serial and 128-bit file ID",
+      "Size, creation/write times, attributes and hard-link count",
+      "Bounded PE header fields checked against the hash pass",
+      "Complete BCrypt SHA-256"
+    ],
+    "bounds": {
+      "max_image_bytes": 536870912,
+      "max_header_bytes": 1048576,
+      "hash_chunk_bytes": 65536,
+      "growth_probe_bytes": 1,
+      "max_sections": 96,
+      "cancellation": "Between synchronous calls; no wall-clock guarantee"
+    },
+    "tested": {
+      "windows_identity_tests_passed": 8,
+      "shared_hash_known_vector_tests_passed": 2,
+      "integrated_tests_passed": 193,
+      "opt_in_tests_excluded": 7,
+      "release_build": "passed",
+      "fixture_only": true,
+      "private_integrated_log_sha256": "f9a0520663bf1c5a559f6d958c26706f0a042e0250c8cd9221a4070767426bea",
+      "private_release_log_sha256": "537fc786d51143bb3654b88c19d1869d3a80e8313036ee8d2e54db3dfc3c360e"
+    },
+    "non_windows_behavior": "Explicit UnsupportedPlatform; pure PE parser remains fixture-tested",
+    "references": [
+      "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew",
+      "https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info",
+      "https://learn.microsoft.com/en-us/windows/win32/debug/pe-format"
+    ],
+    "limitations": [
+      "No image execution, registry mutation or optimizer effects",
+      "Not publisher trust, signature verification, app/component association, ownership or complete loader validation",
+      "Snapshot grants no authority or reservation after return; not a filesystem transaction",
+      "Parent redirection is retained as resolved path, not certified absent",
+      "Long-path prefix slack reviewed; near-limit native filesystem case not exercised",
+      "Reparse rejection implemented but leaf-symlink fixture not exercised",
+      "Not connected to a GUI optimizer action; Sleep/Wake/re-sleep and recovery remain open"
+    ]
   }
 }
