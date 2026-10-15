@@ -35,6 +35,7 @@ pub(crate) mod optimizer_registry_tx;
 pub(crate) mod optimizer_requests;
 pub mod platform;
 pub mod privacy;
+pub mod program_uninstall_batch;
 pub mod programs;
 pub mod recycle_bin;
 pub mod scanner;
