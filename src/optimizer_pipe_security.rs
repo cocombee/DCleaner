@@ -871,6 +871,89 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_wire_ids_and_command_are_bound_to_durable_admission() {
+        use crate::optimizer_requests::{
+            Admission, Caller, LeasePreflight, Ledger, LedgerError, Phase,
+        };
+        let (policy, name) = fixture();
+        let cancel = AtomicBool::new(false);
+        let server = policy.create_first(&name).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let client = policy.connect_at(&name, deadline, &cancel).unwrap();
+        let mut server = unsafe { PipeIo::from_overlapped_byte_pipe(server, deadline, &cancel) };
+        let mut client = unsafe { PipeIo::from_overlapped_byte_pipe(client, deadline, &cancel) };
+        server.accept().unwrap();
+        let mut receive = |command| {
+            let envelope = codec::RequestEnvelope {
+                request_id: Uuid::new_v4(),
+                request: command,
+            };
+            codec::write_request(&mut client, &envelope).unwrap();
+            policy
+                .read_authenticated_request(&mut server)
+                .unwrap()
+                .unwrap()
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let mut ledger =
+            Ledger::open(rusqlite::Connection::open(directory.path().join("requests.db")).unwrap())
+                .unwrap();
+        let readiness = receive(codec::HelperRequest::QueryReadiness {});
+        let owner = Caller::authenticated(&readiness).unwrap();
+        let lease = Uuid::new_v4();
+        let revision = Uuid::new_v4();
+        let invocation = Uuid::new_v4();
+        let preflight =
+            || LeasePreflight::from_owner_observation(owner.clone(), lease, revision).unwrap();
+        assert!(matches!(
+            ledger.admit_authenticated(&readiness, preflight()),
+            Err(LedgerError::RequestMismatch)
+        ));
+        let query = receive(codec::HelperRequest::QueryInvocation {
+            invocation_id: invocation,
+        });
+        assert!(
+            matches!(ledger.query_authenticated(&query).unwrap(),codec::ServiceResponse::Invocation {invocation_id,state:codec::InvocationState::Unknown} if invocation_id==invocation)
+        );
+        assert!(matches!(
+            ledger.admit_authenticated(&query, preflight()),
+            Err(LedgerError::RequestMismatch)
+        ));
+        let request = receive(codec::HelperRequest::Reactivate {
+            lease_id: lease,
+            invocation_id: invocation,
+        });
+        let wrong = LeasePreflight::from_owner_observation(owner.clone(), Uuid::new_v4(), revision)
+            .unwrap();
+        assert!(matches!(
+            ledger.admit_authenticated(&request, wrong),
+            Err(LedgerError::RequestMismatch)
+        ));
+        assert!(matches!(
+            ledger.query_authenticated(&request),
+            Err(LedgerError::RequestMismatch)
+        ));
+        let ticket = match ledger.admit_authenticated(&request, preflight()).unwrap() {
+            Admission::New(ticket) => ticket,
+            other => panic!("Unexpected native admission result {other:?}"),
+        };
+        assert_eq!(ticket.invocation(), invocation);
+        assert_eq!(ticket.lease(), lease);
+        let changed =
+            LeasePreflight::from_owner_observation(owner.clone(), lease, Uuid::new_v4()).unwrap();
+        assert!(matches!(
+            ledger.admit_authenticated(&request, changed).unwrap(),
+            Admission::Existing(Phase::Queued)
+        ));
+        let query = receive(codec::HelperRequest::QueryInvocation {
+            invocation_id: invocation,
+        });
+        assert!(
+            matches!(ledger.query_authenticated(&query).unwrap(),codec::ServiceResponse::Invocation {invocation_id,state:codec::InvocationState::Queued} if invocation_id==invocation)
+        );
+    }
+
+    #[test]
     fn production_bind_requires_unimpersonated_system_identity() {
         let policy = Policy::local_system(Principal::current().unwrap()).unwrap();
         if policy.client.user == Sid::parse("S-1-5-18").unwrap() {

@@ -2505,11 +2505,11 @@
       "precancelled_and_expired_exchanges_do_not_start_connect"
     ],
     "local_windows_full_suite": {
-      "passed": 221,
+      "passed": 233,
       "failed": 0,
       "ignored": 7
     },
-    "private_test_log_sha256": "5ae9e471943747faee4a804d2fc3b2153fb3d4a6c6cd9d163a59129dbc9972c9",
+    "private_test_log_sha256": "c8a840e23239eb7e02d36734475125b1ef03b08f12bdff75c990cffd74bf1c74",
     "production_endpoint_connected": false,
     "peer_authentication_implemented": false,
     "service_instance_pinning_implemented": false,
@@ -2529,31 +2529,33 @@
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.1",
       "source_files_lf_sha256": {
+        "src/optimizer_requests.rs": "649d942424a55a65731efdf7c84ee2c0d4675f01c02f2c88eed89d1d14c5fcba",
+        "src/optimizer_pipe_security.rs": "7d8bbfa1d63ae3a8eac016f70fd9f80bc238b92bb93400f0ec4c30be52c0cd8d",
         "src/optimizer_pipe_io.rs": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
-        "src/optimizer_pipe_security.rs": "acf156a2621d67a16d8baaaa8fdebcb0ecaca6b6b9ea12662294f8ef82f442ba",
-        "src/lib.rs": "372bc83b2d59c22fe44d677f228d02c9c0ebdd0d235b07710dbfde0b47dd829b",
+        "src/optimizer_protocol.rs": "278130548592ab3b42d5e21358379342ea44d8f39b38014a20c4203e4a659ee8",
+        "src/lib.rs": "7686feace816804ebca3389d43a37f356fdaec0bea3eed3805ba711db6bc276d",
         "Cargo.toml": "b17f9acf09d3e5d8248708be26bacd36b9fc755a4ce9fe2a24144f9a1699a1d0",
         "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
       },
       "release_build": "passed",
-      "exe_sha256": "9d402a213dfe0cb9eaba54924b91ff1f1471641c5d72fb1553dc2f6d895ed659",
-      "private_log_sha256": "1c8073dfe6348795b612c3a2e6ba7ac712ddfda5fdd49e14ed6adad979a6a070",
+      "exe_sha256": "26c5bcb9734d8046cd2266eb84d764a88011cf3ccb5ae98690a1f4e82d7c674e",
+      "private_log_sha256": "b1b950df40de2c6e663269719b4fa0e783b7cd8d65bc636ac63b19723be4b1fc",
       "installed": false,
       "launched": false
     },
     "preceding_source_native_ci": {
-      "tested_commit": "ecc15ea224457c975292e45ff928e411eaad41e9",
-      "run_id": 38678803290,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38678803290",
+      "tested_commit": "48a8d26f8a6f1366920c9b5bfbcc07fe700323cb",
+      "run_id": 38680474900,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38680474900",
       "conclusion": "success",
-      "windows_passed": 211,
+      "windows_passed": 221,
       "macos_passed": 193,
-      "scope": "Previous I/O source; does not verify the newer security module or source changes."
+      "scope": "Previous security source; does not verify the newer ledger or native frame-to-ledger case."
     }
   },
   "dcleaner_pipe_security": {
     "source": "src/optimizer_pipe_security.rs",
-    "source_lf_sha256": "acf156a2621d67a16d8baaaa8fdebcb0ecaca6b6b9ea12662294f8ef82f442ba",
+    "source_lf_sha256": "7d8bbfa1d63ae3a8eac016f70fd9f80bc238b92bb93400f0ec4c30be52c0cd8d",
     "visibility": "crate-private Windows-only; no application startup/production endpoint integration",
     "trusted_service_account": "S-1-5-18 (LocalSystem)",
     "client_access_mask": "0x00120083",
@@ -2577,7 +2579,7 @@
     ],
     "read_boundary": "Bounded frame and native caller token on the same PipeIo; private-fields AuthenticatedRequest only after success and budget checkpoint; failures end exchange",
     "impersonation": "Reject pre-existing thread token; identification-level client SQOS; OpenAsSelf token reads; revert before returning; abort on failed revert",
-    "fixture_tests_passed": 10,
+    "fixture_tests_passed": 11,
     "fixture_cases": [
       "native_principal_is_owned_canonical_and_session_scoped",
       "exact_descriptor_rejects_extra_generic_null_and_unprotected_permissions",
@@ -2587,29 +2589,32 @@
       "existing_impersonation_is_preserved_and_never_replaced",
       "unauthorized_request_never_escapes_and_ends_the_connection",
       "malformed_frame_never_becomes_an_authenticated_request",
+      "authenticated_wire_ids_and_command_are_bound_to_durable_admission",
       "production_bind_requires_unimpersonated_system_identity",
       "connect_cancel_deadline_and_busy_endpoint_are_bounded"
     ],
     "local_windows_full_suite": {
-      "passed": 221,
+      "passed": 233,
       "failed": 0,
       "ignored": 7
     },
-    "private_test_log_sha256": "5ae9e471943747faee4a804d2fc3b2153fb3d4a6c6cd9d163a59129dbc9972c9",
+    "private_test_log_sha256": "c8a840e23239eb7e02d36734475125b1ef03b08f12bdff75c990cffd74bf1c74",
     "private_minimal_mask_failure_log_sha256": "749774ed0de8e088ddc663d3403358abf24c067de5fa218f4b7d7e5e4e0bdc8b",
     "local_release": {
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.1",
       "source_files_lf_sha256": {
+        "src/optimizer_requests.rs": "649d942424a55a65731efdf7c84ee2c0d4675f01c02f2c88eed89d1d14c5fcba",
+        "src/optimizer_pipe_security.rs": "7d8bbfa1d63ae3a8eac016f70fd9f80bc238b92bb93400f0ec4c30be52c0cd8d",
         "src/optimizer_pipe_io.rs": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
-        "src/optimizer_pipe_security.rs": "acf156a2621d67a16d8baaaa8fdebcb0ecaca6b6b9ea12662294f8ef82f442ba",
-        "src/lib.rs": "372bc83b2d59c22fe44d677f228d02c9c0ebdd0d235b07710dbfde0b47dd829b",
+        "src/optimizer_protocol.rs": "278130548592ab3b42d5e21358379342ea44d8f39b38014a20c4203e4a659ee8",
+        "src/lib.rs": "7686feace816804ebca3389d43a37f356fdaec0bea3eed3805ba711db6bc276d",
         "Cargo.toml": "b17f9acf09d3e5d8248708be26bacd36b9fc755a4ce9fe2a24144f9a1699a1d0",
         "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
       },
       "release_build": "passed",
-      "exe_sha256": "9d402a213dfe0cb9eaba54924b91ff1f1471641c5d72fb1553dc2f6d895ed659",
-      "private_log_sha256": "1c8073dfe6348795b612c3a2e6ba7ac712ddfda5fdd49e14ed6adad979a6a070",
+      "exe_sha256": "26c5bcb9734d8046cd2266eb84d764a88011cf3ccb5ae98690a1f4e82d7c674e",
+      "private_log_sha256": "b1b950df40de2c6e663269719b4fa0e783b7cd8d65bc636ac63b19723be4b1fc",
       "installed": false,
       "launched": false
     },
@@ -2631,6 +2636,100 @@
       "https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights",
       "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openthreadtoken",
       "https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-reverttoself"
+    ],
+    "preceding_source_native_ci": {
+      "tested_commit": "48a8d26f8a6f1366920c9b5bfbcc07fe700323cb",
+      "run_id": 38680474900,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38680474900",
+      "conclusion": "success",
+      "windows_passed": 221,
+      "macos_passed": 193,
+      "scope": "Previous security source; does not verify the newer ledger or native frame-to-ledger case."
+    }
+  },
+  "dcleaner_requests": {
+    "source": "src/optimizer_requests.rs",
+    "source_lf_sha256": "649d942424a55a65731efdf7c84ee2c0d4675f01c02f2c88eed89d1d14c5fcba",
+    "visibility": "crate-private service infrastructure, not connected to installed runtime",
+    "sqlite": {
+      "application_id": "0x44434F50",
+      "schema": 1,
+      "mode_required": "DELETE; never changed by opener",
+      "synchronous": "EXTRA, verified 3",
+      "busy_timeout_ms": 250,
+      "file_backed_only": true,
+      "maximum_accepted_bytes": 16777216,
+      "maximum_invocations": 4096,
+      "maximum_review_batch": 64,
+      "strict_schema": true
+    },
+    "idempotency_key": [
+      "native canonical account SID",
+      "native Windows session ID",
+      "invocation UUID"
+    ],
+    "admission": "Authenticated Reactivate exact lease/invocation IDs; same-lease retry returns existing phase without another ticket or generation replacement; different lease conflicts",
+    "claim": "Fresh consumed trusted-owner lease/generation preflight; Queued-to-Running CAS; committed private claim binds service instance and nonce",
+    "query": "Authenticated QueryInvocation scoped to its native caller; foreign-owner records are not disclosed",
+    "recovery": "Opening never replays or recovers; external stopped-owner proof is required before Running-to-Uncertain; queued hints need explicit fresh review; stale claims cannot finish",
+    "fixture_tests_passed": 11,
+    "fixture_cases": [
+      "lost_queue_hint_survives_reopen_without_readmission_or_automatic_claim",
+      "caller_scope_prevents_state_disclosure_and_conflicting_ids_do_not_requeue",
+      "concurrent_duplicate_admission_yields_exactly_one_new_ticket",
+      "competing_claims_commit_only_one_running_owner",
+      "failed_admission_statement_never_yields_a_ticket_or_partial_row",
+      "claim_and_finish_commit_failures_never_escape_as_durable_success",
+      "recovery_invalidates_old_claims_and_leaves_queued_work_unscheduled",
+      "terminal_receipts_survive_reopen_and_cannot_be_overwritten",
+      "unknown_future_and_corrupt_closed_databases_are_not_replaced",
+      "capacity_preserves_dedupe_and_review_batches_are_bounded",
+      "busy_and_readonly_admission_failures_never_leave_authorized_work"
+    ],
+    "native_frame_integration_case": "optimizer_pipe_security::tests::authenticated_wire_ids_and_command_are_bound_to_durable_admission",
+    "local_windows_full_suite": {
+      "passed": 233,
+      "failed": 0,
+      "ignored": 7
+    },
+    "private_test_log_sha256": "c8a840e23239eb7e02d36734475125b1ef03b08f12bdff75c990cffd74bf1c74",
+    "local_release": {
+      "host": "x86_64-pc-windows-msvc",
+      "rust": "1.98.1",
+      "source_files_lf_sha256": {
+        "src/optimizer_requests.rs": "649d942424a55a65731efdf7c84ee2c0d4675f01c02f2c88eed89d1d14c5fcba",
+        "src/optimizer_pipe_security.rs": "7d8bbfa1d63ae3a8eac016f70fd9f80bc238b92bb93400f0ec4c30be52c0cd8d",
+        "src/optimizer_pipe_io.rs": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
+        "src/optimizer_protocol.rs": "278130548592ab3b42d5e21358379342ea44d8f39b38014a20c4203e4a659ee8",
+        "src/lib.rs": "7686feace816804ebca3389d43a37f356fdaec0bea3eed3805ba711db6bc276d",
+        "Cargo.toml": "b17f9acf09d3e5d8248708be26bacd36b9fc755a4ce9fe2a24144f9a1699a1d0",
+        "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+      },
+      "release_build": "passed",
+      "exe_sha256": "26c5bcb9734d8046cd2266eb84d764a88011cf3ccb5ae98690a1f4e82d7c674e",
+      "private_log_sha256": "b1b950df40de2c6e663269719b4fa0e783b7cd8d65bc636ac63b19723be4b1fc",
+      "installed": false,
+      "launched": false
+    },
+    "protected_storage_factory_implemented": false,
+    "owner_death_or_singleton_proof_implemented": false,
+    "native_lease_authorization_implemented": false,
+    "worker_native_verification_implemented": false,
+    "service_runtime_connected": false,
+    "automatic_replay": false,
+    "native_optimizer_effects_implemented": false,
+    "limitations": [
+      "The trusted native lease owner must authorize before admission and again before claim; the ledger does not establish native resource ownership or effects.",
+      "The runtime must provision protected exclusive storage and prove a prior owner stopped; SQLite alone proves neither condition.",
+      "Recorded worker outcomes are assertions supplied by the trusted worker, not observations made by this module.",
+      "Closed-file corruption/mode and transaction-fault fixtures do not prove power-loss or storage-hardware durability; SQLite may perform its own hot-journal recovery when opening a database.",
+      "Capacity refuses new requests without pruning history; a complete long-term retention/admission policy remains required.",
+      "Service lifecycle, scheduling, readiness/fallback, reconciliation, installation, native optimizer effects and visual acceptance remain open."
+    ],
+    "sources": [
+      "https://www.sqlite.org/lang_transaction.html",
+      "https://www.sqlite.org/pragma.html#pragma_synchronous",
+      "https://www.sqlite.org/atomiccommit.html"
     ]
   }
 }

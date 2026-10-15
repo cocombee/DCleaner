@@ -16,6 +16,7 @@ pub(crate) mod optimizer_pipe_io;
 pub(crate) mod optimizer_pipe_security;
 pub mod optimizer_protocol;
 pub mod optimizer_registration;
+pub(crate) mod optimizer_requests;
 pub mod platform;
 pub mod privacy;
 pub mod programs;
