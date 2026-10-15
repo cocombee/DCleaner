@@ -298,6 +298,7 @@ pub struct Tokens {
     pub hover: Color32,
 }
 pub fn tokens(dark: bool) -> Tokens {
+    let blue = dcleaner::brand::BLUE;
     if dark {
         Tokens {
             rail: Color32::from_rgb(8, 29, 46),
@@ -308,10 +309,10 @@ pub fn tokens(dark: bool) -> Tokens {
             card: Color32::from_rgb(13, 45, 68),
             muted: Color32::from_rgb(165, 182, 191),
             border: Color32::from_rgb(37, 65, 81),
-            primary: Color32::from_rgb(0, 113, 246),
-            primary_text: Color32::WHITE,
-            tint: Color32::from_rgb(17, 74, 109),
-            hover: Color32::from_rgb(18, 56, 75),
+            primary: blue,
+            primary_text: Color32::from_rgb(7, 29, 43),
+            tint: Color32::from_rgba_unmultiplied(blue.r(), blue.g(), blue.b(), 76),
+            hover: Color32::from_rgba_unmultiplied(blue.r(), blue.g(), blue.b(), 36),
         }
     } else {
         Tokens {
@@ -323,10 +324,10 @@ pub fn tokens(dark: bool) -> Tokens {
             card: Color32::WHITE,
             muted: Color32::from_rgb(77, 104, 120),
             border: Color32::from_rgb(217, 227, 233),
-            primary: Color32::from_rgb(7, 109, 224),
-            primary_text: Color32::WHITE,
-            tint: Color32::from_rgb(224, 238, 252),
-            hover: Color32::from_rgb(232, 241, 247),
+            primary: blue,
+            primary_text: Color32::from_rgb(7, 29, 43),
+            tint: Color32::from_rgba_unmultiplied(blue.r(), blue.g(), blue.b(), 38),
+            hover: Color32::from_rgba_unmultiplied(blue.r(), blue.g(), blue.b(), 20),
         }
     }
 }
@@ -343,6 +344,7 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.visuals.window_fill = t.card;
     style.visuals.extreme_bg_color = t.card;
     style.visuals.selection.bg_fill = t.primary;
+    style.visuals.hyperlink_color = t.primary;
     style.visuals.selection.stroke = Stroke::new(1., t.primary_text);
     for state in [
         &mut style.visuals.widgets.inactive,

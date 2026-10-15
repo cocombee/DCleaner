@@ -466,5 +466,83 @@
       "No new native app screenshot or pixel acceptance was performed; installation did not launch the app",
       "macOS native account, credential and visual runtime acceptance remain open"
     ]
+  },
+  "brand_update": {
+    "status": "Source-only logo and palette update; not installed",
+    "color": {
+      "hex": "#3999D9",
+      "rgb": [
+        57,
+        153,
+        217
+      ],
+      "swatch_pixels": 2100,
+      "swatch_sha256": "36cb672a80e6a5646442dad74848f6d4af42bfd9a7147e5e60bff32a729b5275"
+    },
+    "logo": {
+      "source": "User-supplied DC Logo.svg",
+      "source_sha256": "0fe688be6f61c3c12318922af2978d86878b63bb75681f288c554b9b38374a83",
+      "paths": 2,
+      "geometry": "Both paths preserved exactly; uniform scale and centered transparent square",
+      "master": "assets/brand/dcleaner-dc.svg"
+    },
+    "scope": [
+      "Logo",
+      "Primary buttons",
+      "Selection and check marks",
+      "Progress and focus accents",
+      "Links",
+      "Derived hover/selected tints in both themes"
+    ],
+    "button_text_contrast": 5.52,
+    "source_hashes": [
+      {
+        "path": "src/brand.rs",
+        "sha256": "d6bbddf8b1036af986ca04bd55f657077f771d3476e9b140131eb0e8674724dd"
+      },
+      {
+        "path": "src/theme.rs",
+        "sha256": "a011cb2f17c9327c576a44f0884fbaa62cecac67721066f4d06e9a52b3aa892c"
+      },
+      {
+        "path": "build.rs",
+        "sha256": "7dfb61a1d02ee96dfc13b9e810b8d50e9d192995ff84351acb5520c5b37b8365"
+      },
+      {
+        "path": "assets/brand/windows.rc",
+        "sha256": "abfa2b978a7ea990dbfdefaeb9e686e6865cf9bc3bc3fde8a65e3b3e4fa70a3a"
+      },
+      {
+        "path": "assets/brand/dcleaner-dc.svg",
+        "sha256": "918451d8739fc2575803eda47154eaab9b65b9b26bf23155a6e9ebb6b38c9169"
+      },
+      {
+        "path": "assets/brand/dcleaner-dc.png",
+        "sha256": "5f0efe147c0ac86d1eb9ec376a32a7a5d473aae52011630a916b34f22dda35e3"
+      },
+      {
+        "path": "assets/brand/dcleaner-dc.ico",
+        "sha256": "a3c837f42c98e2302e93c7d8f272f35a77c246cedf186c24f8bd94fd276fb380"
+      },
+      {
+        "path": "assets/brand/dcleaner-dc.icns",
+        "sha256": "174708b93e5c86bf392a273561cd6aaaa2ad4690f73095d278e2c2b58e382aa1"
+      }
+    ],
+    "validation": {
+      "asset_tests": {
+        "passed": 2,
+        "failed": 0
+      },
+      "compile": "passed",
+      "exact_path_geometry": "passed",
+      "opaque_png_rgb": "57,153,217 only",
+      "native_app_launch": false,
+      "mouse_control": false,
+      "new_installation": false,
+      "pixel_acceptance": false
+    },
+    "test_log_sha256": "aa41e9190af3406aae5580cc3d81ee2c47564bed3b7b021ffbf78e04ce9460bb",
+    "compile_log_sha256": "88a0153c832be113744b3a2127b5d0a261c11778d6fe21c38b4750ce59652aff"
   }
 }

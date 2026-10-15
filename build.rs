@@ -5,7 +5,7 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=assets/brand/windows.rc");
-    println!("cargo:rerun-if-changed=assets/brand/dcleaner.ico");
+    println!("cargo:rerun-if-changed=assets/brand/dcleaner-dc.ico");
     for name in [
         "WindowsSdkDir",
         "WindowsSDKVersion",

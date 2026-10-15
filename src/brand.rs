@@ -1,9 +1,12 @@
 use std::fmt;
 use std::io::Cursor;
 
-const ICON_PNG: &[u8] = include_bytes!("../assets/brand/dcleaner.png");
+/// Sampled exactly from the user's supplied brand swatch.
+pub const BLUE: eframe::egui::Color32 = eframe::egui::Color32::from_rgb(57, 153, 217);
+
+const ICON_PNG: &[u8] = include_bytes!("../assets/brand/dcleaner-dc.png");
 #[cfg(test)]
-const ICON_ICO: &[u8] = include_bytes!("../assets/brand/dcleaner.ico");
+const ICON_ICO: &[u8] = include_bytes!("../assets/brand/dcleaner-dc.ico");
 const ICON_WIDTH: u32 = 1024;
 const ICON_HEIGHT: u32 = 1024;
 

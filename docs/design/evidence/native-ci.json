@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "evidence_kind": "Remote compiler/test evidence; not installed, visual or full functional acceptance",
-  "tested_commit": "4d5afda4c2d25041be4a50e8738da66bdd3d6bb9",
+  "tested_commit": "b39c1e8a3bf365ba14d89f6c9bda06675aba502a",
   "tested_trees": {
-    "src": "90b8c509456345ff08ec3884ea18b513891d0c01",
+    "src": "7fcbabe1da4dbfad5145f22e00f8c38120987ea5",
     "tests": "04eb2422b75ec32fca6bb31f902dc12ba9a398fa",
-    "Cargo.toml": "d028b1318bdaab6654800268b44a748f77eb9770",
-    "Cargo.lock": "70e89afb81a322d7730dc15b3cc762f0cb1518d8",
+    "Cargo.toml": "f84d297942d4a35e366a41a8679cf35f3c37de57",
+    "Cargo.lock": "6e2a1eb1d1adc26b9d399d95b17d69e2ef0db8f0",
     ".github/workflows": "9c728c0e6a6d85c0d41af93d1ca011af908a805a",
     "scripts": "80a6f24bf388825c926183d631b4e5ab9f29903c"
   },
-  "run_id": 38695435325,
-  "url": "https://github.com/cocombee/DCleaner/actions/runs/38695435325",
+  "run_id": 38705228933,
+  "url": "https://github.com/cocombee/DCleaner/actions/runs/38705228933",
   "conclusion": "success",
   "workflow": ".github/workflows/ci.yml",
   "commands": [
@@ -22,35 +22,35 @@
   "jobs": [
     {
       "runner": "windows-2025",
-      "job_id": 116290782202,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38695435325/job/116290782202",
+      "job_id": 116322884843,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38705228933/job/116322884843",
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 317,
+        "passed": 372,
         "failed": 0,
         "ignored": 7,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "840b21bb22e65f0cbf7a71079c02cdab5a8620ef893de35e8a4ddd2e00769bba"
+      "private_log_sha256": "394727c6bf50ab3f0b3e30e8d2403ba9d2619113ca7654835803ae8cef4afc2a"
     },
     {
       "runner": "macos-15",
-      "job_id": 116290781927,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38695435325/job/116290781927",
+      "job_id": 116322884626,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38705228933/job/116322884626",
       "host": "aarch64-apple-darwin",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 273,
+        "passed": 329,
         "failed": 0,
         "ignored": 0,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "06c423e452dd25d9cdabe4d252800fdb1b3aa9f8a7236329cbbe81e78a2fe976"
+      "private_log_sha256": "ece4538f9882776143a1a88265bd5a06a2e6fefa3d9d684af19097aa00669163"
     }
   ],
   "changes_verified": [
@@ -59,7 +59,7 @@
     "All eleven file-backed invocation-ledger fixtures pass on both hosts; Windows also passes the native authenticated-frame-to-ledger case. This proves transaction/API fixtures, not protected storage, owner-death proof, native lease authority, installed service/effects or visual acceptance.",
     "Registered-application inventory/exclusion source compiles on both native hosts; sixteen inventory/preference tests (including one child helper) and two producer-budget tests pass. These are fixture and compiler checks, not actual inventory/UI interaction, Active/Sleeping classification, impact measurement, native Sleep/Wake or visual acceptance.",
     "Help source and native browser/export adapters compile on both hosts; five fake-browser and new-file export fixtures pass. No native browser/save-dialog interaction, vendor external support-tool parity or current Help pixel acceptance is established.",
-    "Cloud metadata source compiles on both hosts; nineteen provider-neutral fixtures and ten fake-HTTP Drive fixtures pass, including scan-wide expiry. No account authorization, live provider access, native Cloud UI, remote cleanup/recovery or visual acceptance is established."
+    "Native cloud UI, four provider metadata adapters, app-owned OAuth/refresh and protected vault source, reviewed trash/restore and durable recovery owners compile on both native hosts. Fixed-route fake-provider and local journal fixtures pass. This does not establish live cloud sign-in/effects, complete CCleaner parity or native pixel acceptance."
   ],
   "acceptance": {
     "gui_launched": false,
