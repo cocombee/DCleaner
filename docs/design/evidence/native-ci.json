@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "evidence_kind": "Remote compiler/test evidence; not installed, visual or full functional acceptance",
+  "tested_commit": "84fdb7675bfc8f8a9062a3991e0eba82b285b8c2",
+  "tested_trees": {
+    "src": "3c07c3b64c579116ecbca7945bb8e882c56cfe3c",
+    "tests": "04eb2422b75ec32fca6bb31f902dc12ba9a398fa",
+    "Cargo.toml": "46b36c8f565f24479529401fb4a472c14de6f244",
+    "Cargo.lock": "8262c88990a9e6d2282d25485d49a0ca466382de",
+    ".github/workflows": "9c728c0e6a6d85c0d41af93d1ca011af908a805a",
+    "scripts": "80a6f24bf388825c926183d631b4e5ab9f29903c"
+  },
+  "run_id": 38663090927,
+  "url": "https://github.com/cocombee/DCleaner/actions/runs/38663090927",
+  "conclusion": "success",
+  "workflow": ".github/workflows/ci.yml",
+  "commands": [
+    "cargo +1.98.0 fmt --all -- --check",
+    "cargo +1.98.0 test --locked",
+    "cargo +1.98.0 build --locked --release"
+  ],
+  "jobs": [
+    {
+      "runner": "windows-2025",
+      "job_id": 116188684541,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38663090927/job/116188684541",
+      "host": "x86_64-pc-windows-msvc",
+      "rust": "1.98.0",
+      "formatting": "passed",
+      "tests": {
+        "passed": 183,
+        "failed": 0,
+        "ignored": 7,
+        "suites": 15
+      },
+      "release_build": "passed",
+      "private_log_sha256": "c56d2918673150d9c8e2f750b148e4e0176dba31425fd729af76d2b6b7da3964"
+    },
+    {
+      "runner": "macos-15",
+      "job_id": 116188684755,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38663090927/job/116188684755",
+      "host": "aarch64-apple-darwin",
+      "rust": "1.98.0",
+      "formatting": "passed",
+      "tests": {
+        "passed": 181,
+        "failed": 0,
+        "ignored": 0,
+        "suites": 15
+      },
+      "release_build": "passed",
+      "private_log_sha256": "f69906c8f6920987166f983544e183d8ab5ed74e1197085400da53c9ad2b0944"
+    }
+  ],
+  "changes_verified": [
+    "The non-Windows driver adapter implements the shared action boundary and returns NativeUpdateBoundaryUnavailable before update/restore journaling or effects.",
+    "CI supplies canonical native fixture roots while preserving scanner link/redirect rejection."
+  ],
+  "acceptance": {
+    "gui_launched": false,
+    "installed": false,
+    "visual_parity_verified": false,
+    "full_functional_parity_verified": false,
+    "mac_feature_runtime_verified": false
+  },
+  "limitations": [
+    "macOS validation covers Apple Silicon; Intel Mac execution is not covered.",
+    "Release compilation is not packaging, signing, installation, UI inspection or an end-to-end native feature test.",
+    "Explicit opt-in native checks remain excluded; ordinary tests include fixtures and the supported read-only checks declared in source."
+  ]
+}

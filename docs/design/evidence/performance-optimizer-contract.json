@@ -723,7 +723,7 @@
       }
     ],
     "observations": [
-      "The re-enable implementation passes the supplied wide-string wrapper to 0x1408399b0, then passes the returned object and 0x1f40 to 0x140839fd0. Timeout and result branches are visible; helper semantics, time units and OS effects are unproven.",
+      "The re-enable implementation submits request code 4 through 0x1408399b0, then passes a completion object and 0x1f40 to 0x140839fd0. The original PE import table now verifies that helper waits up to 8,000 milliseconds with WaitForSingleObject. Completion of this wait does not establish an OS reactivation effect.",
       "The Clean implementation gates on 0x14082e9a0, calls 0x1408395e0 and conditionally calls 0x140839fd0 with 0xffffffff. This is control-flow evidence, not an implemented Sleep operation.",
       "Scan passes a one-byte output and mode flags to 0x140839bb0. App association and impact classification remain unresolved.",
       "The program-manager constructor stores the separately validated vftable and initializes subobjects. Concrete component ownership remains unresolved."
@@ -733,6 +733,312 @@
       "The decompiler for 0x14082cb20 still follows 66 instruction addresses outside its requested PE range. No chained unwind range was found for that entry; boundary or tail-transfer semantics remain unresolved. The merged pseudocode is not counted as one fully recovered function.",
       "No outside-range p-code addresses were observed for the other four selections; dependencies, indirect dispatch and omitted semantics remain unresolved.",
       "Raw pseudocode, assembly and database content remain private. This fallback creates no canonical REA Evidence ID and establishes no runtime Sleep, Wake, recovery or return-to-sleep outcome."
+    ]
+  },
+  "service_request_pipeline_evidence": {
+    "method": "Bounded standalone headless Ghidra decompilation plus original PE import/unwind tables and selected instruction review; separate from canonical REA provider Evidence",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "global_auto_analysis": false,
+    "target_executed": false,
+    "rea_evidence_ids": [],
+    "selected_procedures": 23,
+    "functions": [
+      {
+        "entry": "0x14082da90",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 111,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x14082e9a0",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 96,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x1408379e0",
+        "record": "optimizer-service-chain-ghidra-functions.json",
+        "decoded_instructions": 63,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original chained PE unwind ranges"
+      },
+      {
+        "entry": "0x140837ac0",
+        "record": "optimizer-service-chain-ghidra-functions.json",
+        "decoded_instructions": 45,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original chained PE unwind ranges"
+      },
+      {
+        "entry": "0x140837e20",
+        "record": "optimizer-service-consumer-ghidra-functions.json",
+        "decoded_instructions": 28,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140838000",
+        "record": "optimizer-service-consumer-ghidra-functions.json",
+        "decoded_instructions": 623,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140838c80",
+        "record": "optimizer-service-dispatch-ghidra-functions.json",
+        "decoded_instructions": 346,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140839260",
+        "record": "optimizer-service-queue-ghidra-functions.json",
+        "decoded_instructions": 54,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140839330",
+        "record": "optimizer-service-queue-ghidra-functions.json",
+        "decoded_instructions": 117,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x1408394b0",
+        "record": "optimizer-service-chain-ghidra-functions.json",
+        "decoded_instructions": 101,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original chained PE unwind ranges"
+      },
+      {
+        "entry": "0x1408395e0",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 106,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x1408398e0",
+        "record": "optimizer-service-queue-ghidra-functions.json",
+        "decoded_instructions": 62,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x1408399b0",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 141,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140839bb0",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 165,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140839e60",
+        "record": "optimizer-service-worker-ghidra-functions.json",
+        "decoded_instructions": 79,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x140839fd0",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 146,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x14083a2f0",
+        "record": "optimizer-service-queue-ghidra-functions.json",
+        "decoded_instructions": 42,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x14083a6a0",
+        "record": "optimizer-service-queue-ghidra-functions.json",
+        "decoded_instructions": 44,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x14083aac0",
+        "record": "optimizer-service-dispatch-ghidra-functions.json",
+        "decoded_instructions": 22,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x14083ab20",
+        "record": "optimizer-service-consumer-ghidra-functions.json",
+        "decoded_instructions": 24,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x14083ab80",
+        "record": "optimizer-service-consumer-ghidra-functions.json",
+        "decoded_instructions": 12,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x1408773d0",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 73,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      },
+      {
+        "entry": "0x141064160",
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "decoded_instructions": 97,
+        "pcode_outside_analyzed_ranges": 0,
+        "range_basis": "Original single PE runtime-function range"
+      }
+    ],
+    "private_records": [
+      {
+        "record": "optimizer-service-manager-ghidra-functions.json",
+        "sha256": "3a52939402a679b87e006b9c96f289185576301ce69a0bbc1837e0042537445d"
+      },
+      {
+        "record": "optimizer-service-queue-ghidra-functions.json",
+        "sha256": "73baedb5b0420e73c96a33671f49a5a4b11d314e795d8e30ee03a4c22b42df5c"
+      },
+      {
+        "record": "optimizer-service-worker-ghidra-functions.json",
+        "sha256": "802c46aa85ea5ae02ed559154f0abca6f5c15d0b0b0668a0c8087ddf645c1008"
+      },
+      {
+        "record": "optimizer-service-consumer-ghidra-functions.json",
+        "sha256": "5caa891e5b4eef3f218363c005df7ab2b52cf5071fd7af0598fc9b61acf430ba"
+      },
+      {
+        "record": "optimizer-service-dispatch-ghidra-functions.json",
+        "sha256": "6047a63ce979dd5cc0ea793314c74d8e7d49a517b9e49e24ef3e1eb13e51db08"
+      },
+      {
+        "record": "optimizer-service-chain-ghidra-functions.json",
+        "sha256": "7ab5a315964b3442a68367bd5f48b9dc26c46a8fdb2e3b8729495d7f481d7cde"
+      },
+      {
+        "record": "optimizer-service-manager-imports.json",
+        "sha256": "4cee8e22c38f02663a4c81eb84bb7a096bbbc1db6fa17312b243aa9be2501681"
+      },
+      {
+        "record": "optimizer-service-manager-review.json",
+        "sha256": "677e5963f6269ff108d22b6b75dde184d200850af21df89f132dc3412947bdae"
+      },
+      {
+        "record": "optimizer-service-manager-selected-review.json",
+        "sha256": "dd9e60d768fa7b2485a2f7add9396fc2f4ad778aa2edb0ea10191460ad8d2764"
+      },
+      {
+        "record": "optimizer-service-queue-review.json",
+        "sha256": "e01fc9fbfeae216735bf087daca8908c7504d319789d7b0e6f45f47d9631d0a2"
+      },
+      {
+        "record": "optimizer-service-chain-supplemental-review.json",
+        "sha256": "ed8868525c112fae2879a3350ea15d61fde507644c4b4eb0a4188d14ee41d341"
+      },
+      {
+        "record": "optimizer-service-consumer-review.json",
+        "sha256": "cefddc675415de1e4b133b27e24acd445447a8b006e831f775d6becbbc618886"
+      },
+      {
+        "record": "optimizer-service-dispatch-review.json",
+        "sha256": "f7c36f964be1c2f8573d8e34bcc680fc6ac4d82fbe08a44bd071b760aa339987"
+      },
+      {
+        "record": "optimizer-service-original-import-table.json",
+        "sha256": "de3da4b6760dd8134c47d7d894e320581cc6432a3c9be52047a62860acb50095"
+      },
+      {
+        "record": "optimizer-service-queue-unwind-groups.json",
+        "sha256": "2ee15a99c5921639e3f5d495e30e4bcf5facd4d0d409092f27333d8eb546c27a"
+      },
+      {
+        "record": "optimizer-service-worker-unwind-groups.json",
+        "sha256": "afcb1643f3ac8c988c56518cffbbf63f9950112240abeb7af85b15dd5ff928f8"
+      }
+    ],
+    "request_routes": [
+      {
+        "producer": "0x1408395e0",
+        "observed_operation": "Clean callback path",
+        "request_code": 1,
+        "dispatcher": "0x140838c80",
+        "dispatch": "Provider virtual slot +0x110 with request key and argument 1",
+        "dynamic_mutation_target_resolved": false
+      },
+      {
+        "producer": "0x140839bb0",
+        "observed_operation": "Scan callback path",
+        "request_code": 3,
+        "dispatcher": "0x140838c80",
+        "dispatch": "Provider virtual slot +0x38 with request flags; returns that status",
+        "dynamic_mutation_target_resolved": false
+      },
+      {
+        "producer": "0x1408399b0",
+        "observed_operation": "Re-enable callback path",
+        "request_code": 4,
+        "dispatcher": "0x140838c80",
+        "dispatch": "Invokes the callable stored at request+0x60 through slot +0x10",
+        "dynamic_mutation_target_resolved": false
+      }
+    ],
+    "queue_observations": [
+      "Conditional no-match branches transfer request ownership into a list node, release the critical section, then call the worker-kick helper.",
+      "The kick helper references original PE IAT slot 0x141646248, kernel32.dll!SetEvent. The worker resets its work event while holding its queue lock, then waits outside that lock.",
+      "The worker removes a queue node, transfers its two-pointer request into the current slot, unlocks and calls dispatcher 0x140838c80; it stores the returned status in a request result object.",
+      "Active and queued duplicate gates compare numeric request code and conditionally the key. Exact key domain, request ordering and full coalescing semantics remain unresolved.",
+      "Three initially partial helper records were reanalyzed using only their original UNW_FLAG_CHAININFO-linked ranges. All 23 final selected records have zero p-code instruction addresses outside their recorded analysis ranges; this does not establish complete service semantics."
+    ],
+    "wait_observations": {
+      "helper": "0x140839fd0",
+      "import_slot": "0x1416463a8",
+      "import": "kernel32.dll!WaitForSingleObject",
+      "reenable_wait_ms": 8000,
+      "clean_synchronous_wait": "INFINITE (0xffffffff)",
+      "signaled_result": 0,
+      "timeout_result": 258,
+      "event_constructor": "0x140839e60",
+      "event": "CreateEventW(NULL, TRUE, FALSE, NULL): unnamed manual-reset event, initially nonsignaled",
+      "meaning_limit": "Handle signaling and a returned request status are distinct from verified component effects; per-request completion signaling through dependencies is not yet resolved."
+    },
+    "thread_observations": {
+      "start_wrapper": "0x14083ab20",
+      "import": "_beginthreadex",
+      "entry": "0x14083aac0",
+      "entry_dispatch": "Receiver virtual slot +8",
+      "rtti_candidate": "CTUDeactivatorThread subobject +8 vftable slot +8 maps to worker 0x140838000",
+      "limit": "The wrapper alone does not establish the dynamic receiver identity for every invocation."
+    },
+    "implementation_implications": [
+      "Keep queued, running, timed-out and verified component outcomes distinct. A timeout must not become a Sleeping or restored receipt.",
+      "Coalesced requests need explicit waiter/result ownership; merely toggling a startup entry does not reproduce the observed worker lifecycle.",
+      "An independent Rust effect owner still needs exact app/component associations, current native state, owned leases, durable intent/outcome and verified recovery before Sleep can be offered."
+    ],
+    "primary_api_references": [
+      "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject",
+      "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createeventw",
+      "https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/beginthread-beginthreadex",
+      "https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64"
+    ],
+    "limitations": [
+      "Underlying mutation targets, app/component association, impact, per-request completion notification, return-to-sleep and recovery are unresolved.",
+      "No original program execution, host optimizer effects, app launch, visual capture or installation was performed for this evidence.",
+      "Raw pseudocode, assembly, imported symbol tables and private review records remain outside the published source."
     ]
   }
 }
