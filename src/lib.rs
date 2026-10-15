@@ -12,6 +12,8 @@ pub(crate) mod native_hash;
 pub mod optimizer_identity;
 #[cfg(windows)]
 pub(crate) mod optimizer_pipe_io;
+#[cfg(windows)]
+pub(crate) mod optimizer_pipe_security;
 pub mod optimizer_protocol;
 pub mod optimizer_registration;
 pub mod platform;

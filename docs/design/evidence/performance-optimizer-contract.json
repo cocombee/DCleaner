@@ -2484,7 +2484,7 @@
   },
   "dcleaner_pipe_io": {
     "source": "src/optimizer_pipe_io.rs",
-    "source_lf_sha256": "9e4f48226dc28ae4e581b83a6f41179d705f9101d0374f8576230a9545eaeced",
+    "source_lf_sha256": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
     "visibility": "crate-private Windows-only; not connected to application",
     "io_chunk_bytes": 8192,
     "deadline": "One absolute Instant across connect/read/write; checks before submission and after completion",
@@ -2505,11 +2505,11 @@
       "precancelled_and_expired_exchanges_do_not_start_connect"
     ],
     "local_windows_full_suite": {
-      "passed": 211,
+      "passed": 221,
       "failed": 0,
       "ignored": 7
     },
-    "private_test_log_sha256": "9bdc28ab1e5d1ec83f67f2230920a7bb0669f99e2ec015878ab41ac889b25579",
+    "private_test_log_sha256": "5ae9e471943747faee4a804d2fc3b2153fb3d4a6c6cd9d163a59129dbc9972c9",
     "production_endpoint_connected": false,
     "peer_authentication_implemented": false,
     "service_instance_pinning_implemented": false,
@@ -2526,21 +2526,111 @@
       "https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex"
     ],
     "local_release": {
-      "tested_source_commit": "ecc15ea224457c975292e45ff928e411eaad41e9",
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.1",
+      "source_files_lf_sha256": {
+        "src/optimizer_pipe_io.rs": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
+        "src/optimizer_pipe_security.rs": "acf156a2621d67a16d8baaaa8fdebcb0ecaca6b6b9ea12662294f8ef82f442ba",
+        "src/lib.rs": "372bc83b2d59c22fe44d677f228d02c9c0ebdd0d235b07710dbfde0b47dd829b",
+        "Cargo.toml": "b17f9acf09d3e5d8248708be26bacd36b9fc755a4ce9fe2a24144f9a1699a1d0",
+        "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+      },
       "release_build": "passed",
-      "exe_sha256": "4bdfdd065f0041ee271613f0d29d94012802f3bf459a50b64f5cb9d1ac1e0c12",
-      "private_log_sha256": "425aa6bfbce6fdb29c4c00e2d485c5b664f524febe2226cb681256d4ed820a2f",
+      "exe_sha256": "9d402a213dfe0cb9eaba54924b91ff1f1471641c5d72fb1553dc2f6d895ed659",
+      "private_log_sha256": "1c8073dfe6348795b612c3a2e6ba7ac712ddfda5fdd49e14ed6adad979a6a070",
       "installed": false,
       "launched": false
     },
-    "pending_native_ci": {
+    "preceding_source_native_ci": {
+      "tested_commit": "ecc15ea224457c975292e45ff928e411eaad41e9",
       "run_id": 38678803290,
       "url": "https://github.com/cocombee/DCleaner/actions/runs/38678803290",
-      "tested_commit": "ecc15ea224457c975292e45ff928e411eaad41e9",
-      "last_observed_status": "in_progress",
-      "acceptance": "No successful remote result claimed until completed logs are verified."
+      "conclusion": "success",
+      "windows_passed": 211,
+      "macos_passed": 193,
+      "scope": "Previous I/O source; does not verify the newer security module or source changes."
     }
+  },
+  "dcleaner_pipe_security": {
+    "source": "src/optimizer_pipe_security.rs",
+    "source_lf_sha256": "acf156a2621d67a16d8baaaa8fdebcb0ecaca6b6b9ea12662294f8ef82f442ba",
+    "visibility": "crate-private Windows-only; no application startup/production endpoint integration",
+    "trusted_service_account": "S-1-5-18 (LocalSystem)",
+    "client_access_mask": "0x00120083",
+    "client_rights": [
+      "FILE_READ_DATA",
+      "FILE_WRITE_DATA",
+      "FILE_READ_ATTRIBUTES",
+      "READ_CONTROL",
+      "SYNCHRONIZE"
+    ],
+    "client_instance_creation_granted": false,
+    "descriptor_checks": [
+      "owner equals SYSTEM in production",
+      "DACL present and non-null",
+      "SE_DACL_PROTECTED",
+      "exact unordered pair of plain allow ACEs with explicit raw masks; no extra/inherited/generic permissions"
+    ],
+    "native_principal": [
+      "canonical owned account SID",
+      "TokenSessionId from the same opened token"
+    ],
+    "read_boundary": "Bounded frame and native caller token on the same PipeIo; private-fields AuthenticatedRequest only after success and budget checkpoint; failures end exchange",
+    "impersonation": "Reject pre-existing thread token; identification-level client SQOS; OpenAsSelf token reads; revert before returning; abort on failed revert",
+    "fixture_tests_passed": 10,
+    "fixture_cases": [
+      "native_principal_is_owned_canonical_and_session_scoped",
+      "exact_descriptor_rejects_extra_generic_null_and_unprotected_permissions",
+      "native_pipe_uses_minimal_client_open_and_rejects_production_owner_spoof",
+      "existing_pipe_name_and_extra_server_instances_are_rejected",
+      "parsed_request_is_bound_to_native_caller_then_thread_reverts",
+      "existing_impersonation_is_preserved_and_never_replaced",
+      "unauthorized_request_never_escapes_and_ends_the_connection",
+      "malformed_frame_never_becomes_an_authenticated_request",
+      "production_bind_requires_unimpersonated_system_identity",
+      "connect_cancel_deadline_and_busy_endpoint_are_bounded"
+    ],
+    "local_windows_full_suite": {
+      "passed": 221,
+      "failed": 0,
+      "ignored": 7
+    },
+    "private_test_log_sha256": "5ae9e471943747faee4a804d2fc3b2153fb3d4a6c6cd9d163a59129dbc9972c9",
+    "private_minimal_mask_failure_log_sha256": "749774ed0de8e088ddc663d3403358abf24c067de5fa218f4b7d7e5e4e0bdc8b",
+    "local_release": {
+      "host": "x86_64-pc-windows-msvc",
+      "rust": "1.98.1",
+      "source_files_lf_sha256": {
+        "src/optimizer_pipe_io.rs": "05d736a55441c64e1316e33c7fa52793b678f01c0b90f8e0fbbd3a61050b20ac",
+        "src/optimizer_pipe_security.rs": "acf156a2621d67a16d8baaaa8fdebcb0ecaca6b6b9ea12662294f8ef82f442ba",
+        "src/lib.rs": "372bc83b2d59c22fe44d677f228d02c9c0ebdd0d235b07710dbfde0b47dd829b",
+        "Cargo.toml": "b17f9acf09d3e5d8248708be26bacd36b9fc755a4ce9fe2a24144f9a1699a1d0",
+        "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+      },
+      "release_build": "passed",
+      "exe_sha256": "9d402a213dfe0cb9eaba54924b91ff1f1471641c5d72fb1553dc2f6d895ed659",
+      "private_log_sha256": "1c8073dfe6348795b612c3a2e6ba7ac712ddfda5fdd49e14ed6adad979a6a070",
+      "installed": false,
+      "launched": false
+    },
+    "production_endpoint_connected": false,
+    "protected_service_installed": false,
+    "durable_lease_authorization_implemented": false,
+    "service_instance_pinning_implemented": false,
+    "service_readiness_implemented": false,
+    "native_optimizer_effects_implemented": false,
+    "limitations": [
+      "Native fixtures use a private test-only current-owner policy; they do not establish deployed LocalSystem/protected-binary isolation.",
+      "SYSTEM/admin actors are within the trusted OS boundary; exact service executable identity is not cryptographically proved.",
+      "Account SID plus session does not distinguish separate logons within one session or authenticate an executable.",
+      "Service ownership/idempotency, lifecycle/admission bounds, protected packaging, ordinary-launch fallback and optimizer Sleep/Wake remain open.",
+      "Cancellation/revert failure injection, malicious other-account native clients and installed visual/runtime acceptance remain unverified.",
+      "Native calls and cancellation drain do not provide a hard wall-clock deadline."
+    ],
+    "sources": [
+      "https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights",
+      "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openthreadtoken",
+      "https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-reverttoself"
+    ]
   }
 }

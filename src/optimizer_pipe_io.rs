@@ -14,7 +14,7 @@
 
 use std::{
     io::{self, Read, Write},
-    os::windows::io::{AsRawHandle, OwnedHandle},
+    os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, OwnedHandle},
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
@@ -183,7 +183,25 @@ pub(crate) struct PipeIo<'a> {
     ended: bool,
 }
 
+impl AsHandle for PipeIo<'_> {
+    fn as_handle(&self) -> BorrowedHandle<'_> {
+        self.pipe.as_handle()
+    }
+}
+
 impl<'a> PipeIo<'a> {
+    /// Protocol/authentication failures also end an exchange, even if the last
+    /// native byte operation succeeded. The owner must then drop the endpoint.
+    pub(crate) fn end_exchange(&mut self) {
+        self.ended = true;
+    }
+
+    /// Checkpoints also cover native authentication between byte operations.
+    /// Failure does not itself claim cancellation/completion of an owned task.
+    pub(crate) fn check_active(&self) -> io::Result<()> {
+        self.check()
+    }
+
     /// # Safety
     /// `pipe` must be an exclusively operated local named-pipe handle opened
     /// with FILE_FLAG_OVERLAPPED, PIPE_WAIT and byte read/type modes. No other
