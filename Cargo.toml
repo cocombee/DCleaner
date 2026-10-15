@@ -18,8 +18,10 @@ rfd = "0.17"
 dunce = "1"
 rusqlite = { version = "0.38", features = ["bundled", "backup"] }
 png = "0.18"
-reqwest = { version = "=0.13.5", default-features = false, features = ["blocking", "json", "native-tls"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["blocking", "form", "json", "native-tls"] }
 zeroize = "=1.9.1"
+oauth2 = { version = "=5.0.0", default-features = false, features = ["timing-resistant-secret-traits"] }
+subtle = "=2.6.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "=0.62.2", features = [
@@ -50,6 +52,9 @@ windows = { version = "=0.62.2", features = [
     "Win32_System_Diagnostics_Debug",
     "Win32_System_ApplicationInstallationAndServicing",
 ] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.7.0"
 
 [dev-dependencies]
 tempfile = "3"

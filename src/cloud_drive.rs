@@ -4,86 +4,34 @@
 //! owner; it is never persisted, logged, serialized or accepted as proof of an
 //! entire-account inventory. Only files visible to its granted scopes are read.
 
+pub use crate::cloud_http::{AccessToken, CloudHttpError as DriveError};
+#[cfg(test)]
+use crate::cloud_http::{DRIVE_FIELDS as LIST_FIELDS, MAX_CURSOR_BYTES, read_bounded};
+use crate::cloud_http::{MAX_RESPONSE_BYTES, MetadataHttp, ReadEndpoint, validate_cursor};
 use crate::cloud_inventory::{
     AccountScope, ContentHash, HashAlgorithm, IncompletePageReason, PageCompleteness, PageCursor,
     Provider, ProviderFailure, RemoteItemDraft, RemoteItemKind, RemotePage, RemotePort,
     SizeAccuracy, SizeObservation, TrashStatus, UnknownFieldReason,
 };
-use reqwest::{Url, blocking::Client, header};
+use crate::cloud_inventory::{ProviderTimestamp, ProviderTimestampBasis};
+#[cfg(test)]
+use reqwest::Url;
 use serde::{
     Deserialize, Deserializer,
     de::{self, SeqAccess, Visitor},
 };
+#[cfg(test)]
+use std::io::Read;
 use std::{
     fmt,
-    io::Read,
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
-use zeroize::Zeroizing;
 
-const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PAGE_ITEMS: usize = 1_000;
-const MAX_CURSOR_BYTES: usize = 2_048;
+#[cfg(test)]
 const MAX_TOKEN_BYTES: usize = 16 * 1024;
-const LIST_FIELDS: &str = "nextPageToken,incompleteSearch,files(id,name,mimeType,size,version,sha256Checksum,md5Checksum,trashed)";
 const VISIBLE_STORAGE: &str = "drive:user:api-visible:untrashed";
-
-/// Deliberately has neither Debug nor Serialize nor a public secret accessor.
-pub struct AccessToken(Zeroizing<String>);
-impl AccessToken {
-    pub fn new(value: String) -> Result<Self, DriveError> {
-        let value = Zeroizing::new(value);
-        let token = value.trim_end_matches('=');
-        if value.is_empty()
-            || value.len() > MAX_TOKEN_BYTES
-            || token.is_empty()
-            || !token
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"-._~+/".contains(&b))
-        {
-            return Err(DriveError::InvalidToken);
-        }
-        Ok(Self(value))
-    }
-}
-
-/// Fixed classifications intentionally exclude response bodies, URLs and tokens.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DriveError {
-    InvalidToken,
-    InvalidCursor,
-    Cancelled,
-    TimedOut,
-    ClientUnavailable,
-    Transport,
-    HttpStatus(u16),
-    ResponseLimit,
-    InvalidResponse,
-}
-impl fmt::Display for DriveError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidToken => f.write_str("Cloud access token is invalid."),
-            Self::InvalidCursor => f.write_str("Cloud continuation token is invalid."),
-            Self::Cancelled => f.write_str("Cloud metadata read was cancelled."),
-            Self::TimedOut => f.write_str("Cloud metadata read exceeded its deadline."),
-            Self::ClientUnavailable => f.write_str("Cloud HTTPS client could not be initialized."),
-            Self::Transport => {
-                f.write_str("Cloud metadata transport failed; no automatic retry was made.")
-            }
-            Self::HttpStatus(code) => write!(
-                f,
-                "Cloud provider returned HTTP {code}; no automatic retry was made."
-            ),
-            Self::ResponseLimit => f.write_str("Cloud metadata response exceeded its bound."),
-            Self::InvalidResponse => {
-                f.write_str("Cloud provider returned invalid or incomplete metadata.")
-            }
-        }
-    }
-}
-impl std::error::Error for DriveError {}
 
 // Callers cannot introduce URLs, query fields, methods, downloads or effects.
 enum MetadataRequest<'a> {
@@ -91,43 +39,12 @@ enum MetadataRequest<'a> {
     Files { cursor: Option<&'a str> },
 }
 
+#[cfg(test)]
 fn request_url(request: &MetadataRequest<'_>) -> Result<Url, DriveError> {
-    let mut url = Url::parse(match request {
-        MetadataRequest::Account => "https://www.googleapis.com/drive/v3/about",
-        MetadataRequest::Files { .. } => "https://www.googleapis.com/drive/v3/files",
+    crate::cloud_http::read_url(&match request {
+        MetadataRequest::Account => ReadEndpoint::GoogleDriveAccount,
+        MetadataRequest::Files { cursor } => ReadEndpoint::GoogleDriveFiles { cursor: *cursor },
     })
-    .map_err(|_| DriveError::ClientUnavailable)?;
-    let mut query = url.query_pairs_mut();
-    match request {
-        MetadataRequest::Account => {
-            query.append_pair("fields", "user(permissionId)");
-        }
-        MetadataRequest::Files { cursor } => {
-            query
-                .append_pair("fields", LIST_FIELDS)
-                .append_pair("pageSize", "1000")
-                .append_pair("corpora", "user")
-                .append_pair("spaces", "drive")
-                .append_pair("includeItemsFromAllDrives", "true")
-                .append_pair("supportsAllDrives", "true")
-                .append_pair("q", "trashed=false");
-            if let Some(cursor) = cursor {
-                validate_cursor(cursor)?;
-                query.append_pair("pageToken", cursor);
-            }
-        }
-    }
-    drop(query);
-    Ok(url)
-}
-
-fn validate_cursor(cursor: &str) -> Result<(), DriveError> {
-    if cursor.is_empty() || cursor.len() > MAX_CURSOR_BYTES || cursor.chars().any(char::is_control)
-    {
-        Err(DriveError::InvalidCursor)
-    } else {
-        Ok(())
-    }
 }
 
 trait MetadataTransport {
@@ -139,26 +56,13 @@ trait MetadataTransport {
 }
 
 struct NativeTransport {
-    client: Client,
-    token: AccessToken,
+    http: MetadataHttp,
 }
 impl NativeTransport {
     fn new(token: AccessToken) -> Result<Self, DriveError> {
-        let client = Client::builder()
-            .https_only(true)
-            .redirect(reqwest::redirect::Policy::none())
-            .retry(reqwest::retry::never())
-            .no_gzip()
-            .no_brotli()
-            .no_zstd()
-            .no_deflate()
-            .referer(false)
-            .no_proxy()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|_| DriveError::ClientUnavailable)?;
-        Ok(Self { client, token })
+        Ok(Self {
+            http: MetadataHttp::new(token)?,
+        })
     }
 }
 impl MetadataTransport for NativeTransport {
@@ -167,83 +71,14 @@ impl MetadataTransport for NativeTransport {
         request: MetadataRequest<'_>,
         cancel: &AtomicBool,
     ) -> Result<Vec<u8>, DriveError> {
-        if cancel.load(Ordering::Relaxed) {
-            return Err(DriveError::Cancelled);
-        }
-        let deadline = Instant::now() + Duration::from_secs(30);
-        let url = request_url(&request)?;
-        let response = self
-            .client
-            .get(url)
-            .bearer_auth(self.token.0.as_str())
-            .header(header::ACCEPT, "application/json")
-            .send();
-        if cancel.load(Ordering::Relaxed) {
-            return Err(DriveError::Cancelled);
-        }
-        if Instant::now() >= deadline {
-            return Err(DriveError::TimedOut);
-        }
-        let mut response = response.map_err(|error| {
-            if error.is_timeout() {
-                DriveError::TimedOut
-            } else {
-                DriveError::Transport
-            }
-        })?;
-        if !response.status().is_success() {
-            return Err(DriveError::HttpStatus(response.status().as_u16()));
-        }
-        if response
-            .content_length()
-            .is_some_and(|size| size > MAX_RESPONSE_BYTES as u64)
-        {
-            return Err(DriveError::ResponseLimit);
-        }
-        // No compression features are enabled; an unexpected encoding is not parsed.
-        if response.headers().contains_key(header::CONTENT_ENCODING) {
-            return Err(DriveError::InvalidResponse);
-        }
-        read_bounded(&mut response, cancel, deadline)
-    }
-}
-
-fn read_bounded(
-    input: &mut impl Read,
-    cancel: &AtomicBool,
-    deadline: Instant,
-) -> Result<Vec<u8>, DriveError> {
-    let mut bytes = Vec::new();
-    let mut chunk = [0u8; 8192];
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            return Err(DriveError::Cancelled);
-        }
-        if Instant::now() >= deadline {
-            return Err(DriveError::TimedOut);
-        }
-        let allowance = (MAX_RESPONSE_BYTES - bytes.len() + 1).min(chunk.len());
-        let read = input.read(&mut chunk[..allowance]);
-        if cancel.load(Ordering::Relaxed) {
-            return Err(DriveError::Cancelled);
-        }
-        if Instant::now() >= deadline {
-            return Err(DriveError::TimedOut);
-        }
-        let count = read.map_err(|error| {
-            if error.kind() == std::io::ErrorKind::TimedOut {
-                DriveError::TimedOut
-            } else {
-                DriveError::Transport
-            }
-        })?;
-        if count == 0 {
-            return Ok(bytes);
-        }
-        if bytes.len().saturating_add(count) > MAX_RESPONSE_BYTES {
-            return Err(DriveError::ResponseLimit);
-        }
-        bytes.extend_from_slice(&chunk[..count]);
+        self.http.read(
+            match request {
+                MetadataRequest::Account => ReadEndpoint::GoogleDriveAccount,
+                MetadataRequest::Files { cursor } => ReadEndpoint::GoogleDriveFiles { cursor },
+            },
+            cancel,
+            Instant::now() + Duration::from_secs(30),
+        )
     }
 }
 
@@ -273,6 +108,7 @@ struct WireFile {
     mime_type: String,
     size: Option<String>,
     version: Option<String>,
+    modified_time: Option<String>,
     sha256_checksum: Option<String>,
     md5_checksum: Option<String>,
     trashed: Option<bool>,
@@ -449,6 +285,16 @@ fn decode_file(file: WireFile) -> Result<RemoteItemDraft, DriveError> {
     let folder = file.mime_type == "application/vnd.google-apps.folder";
     let shortcut = file.mime_type == "application/vnd.google-apps.shortcut";
     let size = file.size.as_deref().map(decimal).transpose()?;
+    let timestamp = file
+        .modified_time
+        .as_deref()
+        .map(|value| {
+            let time = chrono::DateTime::parse_from_rfc3339(value)
+                .map_err(|_| DriveError::InvalidResponse)?;
+            ProviderTimestamp::new(time.timestamp_millis(), ProviderTimestampBasis::Modified)
+                .map_err(|_| DriveError::InvalidResponse)
+        })
+        .transpose()?;
     if let Some(version) = &file.version {
         decimal(version)?;
     }
@@ -477,6 +323,7 @@ fn decode_file(file: WireFile) -> Result<RemoteItemDraft, DriveError> {
     )
     .with_mime_type(Some(file.mime_type))
     .with_provider_revision(file.version)
+    .with_provider_timestamp(timestamp)
     .with_size(size.map(|n| SizeObservation::new(n, SizeAccuracy::ProviderReportedExact)))
     .with_content_hash(hash)
     .with_trash_status(if file.trashed == Some(false) {

@@ -1,7 +1,17 @@
+pub mod brand;
 pub mod clean_settings;
 pub mod cleanup;
+pub mod cloud;
+pub mod cloud_actions;
+pub mod cloud_auth;
 pub mod cloud_drive;
+pub mod cloud_dropbox;
+pub mod cloud_gmail;
+pub mod cloud_http;
 pub mod cloud_inventory;
+pub mod cloud_onedrive;
+pub mod cloud_store;
+pub mod cloud_vault;
 pub mod custom_clean;
 pub mod domain;
 pub mod drivers;

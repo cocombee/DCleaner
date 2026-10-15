@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>DCleaner</title>
+  <desc>A flat blue circular cleaning sweep and a four-point sparkle.</desc>
+  <path fill="#087CFF" d="M174 36C113 17 47 51 29 111c-18 60 15 124 75 142 58 17 121-14 141-71 5-14 1-25-9-28-10-3-17 3-22 15-15 39-58 60-97 47-40-13-61-56-48-96 12-38 53-60 91-49 13 4 25-2 27-12 3-10-2-19-13-23Z" transform="translate(17 1) scale(.86)"/>
+  <path fill="#65BFFF" d="M78 93c-31 33-26 87 11 114 39 29 94 17 118-23 5-9 3-17-4-20-7-4-13 0-19 7-20 23-53 29-78 12-27-18-37-51-28-90Z"/>
+  <path fill="#65BFFF" d="M201 45c-4 26-12 34-38 38 26 4 34 12 38 38 4-26 12-34 38-38-26-4-34-12-38-38Z"/>
+</svg>

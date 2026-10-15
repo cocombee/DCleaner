@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "evidence_kind": "Remote compiler/test evidence; not installed, visual or full functional acceptance",
-  "tested_commit": "781e4c28889043f35b97595707f98e79c460230f",
+  "tested_commit": "4d5afda4c2d25041be4a50e8738da66bdd3d6bb9",
   "tested_trees": {
-    "src": "0bf655b5520b41f3e0cd82485a699e1efa972f7a",
+    "src": "90b8c509456345ff08ec3884ea18b513891d0c01",
     "tests": "04eb2422b75ec32fca6bb31f902dc12ba9a398fa",
-    "Cargo.toml": "a9622ac08e778db7357da350ead9c961b8906cd9",
-    "Cargo.lock": "8262c88990a9e6d2282d25485d49a0ca466382de",
+    "Cargo.toml": "d028b1318bdaab6654800268b44a748f77eb9770",
+    "Cargo.lock": "70e89afb81a322d7730dc15b3cc762f0cb1518d8",
     ".github/workflows": "9c728c0e6a6d85c0d41af93d1ca011af908a805a",
     "scripts": "80a6f24bf388825c926183d631b4e5ab9f29903c"
   },
-  "run_id": 38693011070,
-  "url": "https://github.com/cocombee/DCleaner/actions/runs/38693011070",
+  "run_id": 38695435325,
+  "url": "https://github.com/cocombee/DCleaner/actions/runs/38695435325",
   "conclusion": "success",
   "workflow": ".github/workflows/ci.yml",
   "commands": [
@@ -22,35 +22,35 @@
   "jobs": [
     {
       "runner": "windows-2025",
-      "job_id": 116283041628,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38693011070/job/116283041628",
+      "job_id": 116290782202,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38695435325/job/116290782202",
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 288,
+        "passed": 317,
         "failed": 0,
         "ignored": 7,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "c45f4ca00a125281f36d1d09eb60cb0ac20c641aa13d65db07826af4ae1db988"
+      "private_log_sha256": "840b21bb22e65f0cbf7a71079c02cdab5a8620ef893de35e8a4ddd2e00769bba"
     },
     {
       "runner": "macos-15",
-      "job_id": 116283041471,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38693011070/job/116283041471",
+      "job_id": 116290781927,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38695435325/job/116290781927",
       "host": "aarch64-apple-darwin",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 244,
+        "passed": 273,
         "failed": 0,
         "ignored": 0,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "5c32602c300fe38ffd2645fb425582e2546a210b01c442597074885683125e43"
+      "private_log_sha256": "06c423e452dd25d9cdabe4d252800fdb1b3aa9f8a7236329cbbe81e78a2fe976"
     }
   ],
   "changes_verified": [
@@ -58,7 +58,8 @@
     "CI supplies canonical native fixture roots while preserving scanner link/redirect rejection.",
     "All eleven file-backed invocation-ledger fixtures pass on both hosts; Windows also passes the native authenticated-frame-to-ledger case. This proves transaction/API fixtures, not protected storage, owner-death proof, native lease authority, installed service/effects or visual acceptance.",
     "Registered-application inventory/exclusion source compiles on both native hosts; sixteen inventory/preference tests (including one child helper) and two producer-budget tests pass. These are fixture and compiler checks, not actual inventory/UI interaction, Active/Sleeping classification, impact measurement, native Sleep/Wake or visual acceptance.",
-    "Help source and native browser/export adapters compile on both hosts; five fake-browser and new-file export fixtures pass. No native browser/save-dialog interaction, vendor external support-tool parity or current Help pixel acceptance is established."
+    "Help source and native browser/export adapters compile on both hosts; five fake-browser and new-file export fixtures pass. No native browser/save-dialog interaction, vendor external support-tool parity or current Help pixel acceptance is established.",
+    "Cloud metadata source compiles on both hosts; nineteen provider-neutral fixtures and ten fake-HTTP Drive fixtures pass, including scan-wide expiry. No account authorization, live provider access, native Cloud UI, remote cleanup/recovery or visual acceptance is established."
   ],
   "acceptance": {
     "gui_launched": false,

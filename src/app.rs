@@ -21,6 +21,8 @@ use std::{
 use uuid::Uuid;
 #[path = "view_clean_settings.rs"]
 mod view_clean_settings;
+#[path = "view_cloud.rs"]
+mod view_cloud;
 #[path = "view_drivers.rs"]
 mod view_drivers;
 #[path = "view_duplicates.rs"]
@@ -48,6 +50,7 @@ enum Page {
     Clean,
     Disk,
     Duplicates,
+    Cloud,
     Programs,
     Optimizer,
     Startup,
@@ -64,6 +67,7 @@ impl Page {
             Self::Clean => theme::Icon::Brush,
             Self::Disk => theme::Icon::Disk,
             Self::Duplicates => theme::Icon::Duplicate,
+            Self::Cloud => theme::Icon::Cloud,
             Self::Programs => theme::Icon::Programs,
             Self::Optimizer => theme::Icon::Optimizer,
             Self::Startup => theme::Icon::Startup,
@@ -80,6 +84,7 @@ impl Page {
             Self::Clean => "Choose what to scan, then review the files to remove.",
             Self::Disk => "Find the largest files in a folder.",
             Self::Duplicates => "Find identical files and review which copies to keep.",
+            Self::Cloud => "Review cloud files and mail, then choose what to clean.",
             Self::Programs => "Review installed applications and their registered uninstallers.",
             Self::Optimizer => {
                 "Review applications, background components and optimization exclusions."
@@ -98,6 +103,7 @@ impl Page {
             Self::Clean => "Custom Clean",
             Self::Disk => "Disk Analyzer",
             Self::Duplicates => "Duplicate Finder",
+            Self::Cloud => "Cloud Drive Cleaner",
             Self::Programs => "Uninstaller",
             Self::Optimizer => "Performance Optimizer",
             Self::Startup => "Startup Manager",
@@ -109,11 +115,12 @@ impl Page {
         }
     }
 }
-const PAGES: [Page; 12] = [
+const PAGES: [Page; 13] = [
     Page::Overview,
     Page::Clean,
     Page::Programs,
     Page::Duplicates,
+    Page::Cloud,
     Page::Optimizer,
     Page::Startup,
     Page::Software,
@@ -124,6 +131,7 @@ const PAGES: [Page; 12] = [
     Page::Help,
 ];
 enum Event {
+    Cloud(view_cloud::CloudEvent),
     CleanSettings(view_clean_settings::CleanSettingsEvent),
     ConfiguredScanned(Result<custom_clean::CustomCleanReport, String>),
     Health(view_health::HealthEvent),
@@ -150,6 +158,8 @@ struct DiskReport {
     partial: bool,
 }
 pub struct App {
+    logo_texture: Option<egui::TextureHandle>,
+    cloud_ui: view_cloud::CloudUi,
     clean_settings_ui: view_clean_settings::CleanSettingsUi,
     custom_analysis: Option<custom_clean::CustomCleanReport>,
     custom_partial_acknowledged: bool,
@@ -215,6 +225,16 @@ impl App {
             vec!["Inter Semibold".into(), "Inter".into()],
         );
         context.set_fonts(fonts);
+        let logo_texture = dcleaner::brand::icon().ok().map(|icon| {
+            context.load_texture(
+                "dcleaner-brand",
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [icon.width as usize, icon.height as usize],
+                    &icon.rgba,
+                ),
+                egui::TextureOptions::LINEAR,
+            )
+        });
         let (data_dir, mut error) = match platform::data_directory() {
             Ok(p) => (p, None),
             Err(e) => (PathBuf::new(), Some(e)),
@@ -285,11 +305,13 @@ impl App {
         #[cfg(not(debug_assertions))]
         let (clean_browser, clean_bin) = (false, false);
         Self {
+            logo_texture,
             clean_settings_ui,
             custom_analysis: None,
             custom_partial_acknowledged: false,
             health_ui: Default::default(),
             help_ui: Default::default(),
+            cloud_ui: Default::default(),
             #[cfg(debug_assertions)]
             visual_capture,
             software_ui: Default::default(),
@@ -483,6 +505,7 @@ impl App {
             .unwrap_or_default();
         for event in events {
             match event {
+                Event::Cloud(event) => self.cloud_event(event),
                 Event::CleanSettings(event) => self.clean_settings_event(event),
                 Event::ConfiguredScanned(result) => {
                     self.worker = None;
@@ -1121,18 +1144,14 @@ impl App {
                         Vec2::splat(if cfg!(windows) { 28. } else { 36. }),
                         egui::Sense::hover(),
                     );
-                    ui.painter().circle_filled(
-                        rect.center(),
-                        if cfg!(windows) { 12. } else { 16. },
-                        t.primary,
-                    );
-                    ui.painter().text(
-                        rect.center(),
-                        egui::Align2::CENTER_CENTER,
-                        "D",
-                        egui::FontId::new(if cfg!(windows) { 16. } else { 20. }, theme::semibold()),
-                        Color32::WHITE,
-                    );
+                    if let Some(logo) = self.logo_texture.as_ref() {
+                        ui.painter().image(
+                            logo.id(),
+                            rect,
+                            egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
+                            Color32::WHITE,
+                        );
+                    }
                 });
                 ui.add_space(if cfg!(windows) { 26. } else { 28. });
                 let rail_pages: &[Page] = if narrow {
@@ -1233,6 +1252,7 @@ impl App {
                             Page::Clean if self.clean_bin => self.recycle_bin_footer(ui, t, &ctx),
                             Page::Clean => self.clean_footer(ui, t, &ctx),
                             Page::Duplicates => self.duplicates_footer(ui, t, &ctx),
+                            Page::Cloud => self.cloud_footer(ui, t, &ctx),
                             Page::Programs => self.programs_footer(ui, t, &ctx),
                             Page::Optimizer => self.optimizer_footer(ui, t, &ctx),
                             Page::Startup => self.startup_footer(ui, t, &ctx),
@@ -1301,7 +1321,12 @@ impl App {
                                         });
                                     ui.add_space(12.);
                                 }
-                                if busy && !matches!(self.page, Page::Overview | Page::Optimizer) {
+                                if busy
+                                    && !matches!(
+                                        self.page,
+                                        Page::Overview | Page::Optimizer | Page::Cloud
+                                    )
+                                {
                                     theme::card(t).show(ui, |ui| {
                                         ui.horizontal(|ui| {
                                             ui.spinner();
@@ -1324,6 +1349,7 @@ impl App {
                                     Page::Clean => self.clean_page(ui, t, &ctx),
                                     Page::Disk => self.disk_page(ui, t, &ctx),
                                     Page::Duplicates => self.duplicates_page(ui, t, &ctx),
+                                    Page::Cloud => self.cloud_page(ui, t, &ctx),
                                     Page::Programs => self.programs_page(ui, t, &ctx),
                                     Page::Optimizer => self.optimizer_page(ui, t, &ctx),
                                     Page::Startup => self.startup_page(ui, t, &ctx),
@@ -1350,6 +1376,7 @@ impl App {
         self.recycle_bin_dialog(&ctx);
         self.clean_settings_dialog(&ctx);
         self.help_dialog(&ctx);
+        self.cloud_dialog(&ctx);
         #[cfg(debug_assertions)]
         {
             let capture_busy = self.busy() || self.app_icons.is_loading();

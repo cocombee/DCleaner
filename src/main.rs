@@ -47,12 +47,17 @@ fn main() -> eframe::Result {
     } else {
         initial_size
     };
+    let viewport = eframe::egui::ViewportBuilder::default()
+        .with_inner_size(initial_size)
+        .with_min_inner_size([760., 600.])
+        .with_decorations(!cfg!(windows))
+        .with_app_id("com.cocombee.dcleaner");
+    let viewport = match dcleaner::brand::icon() {
+        Ok(icon) => viewport.with_icon(icon),
+        Err(_) => viewport,
+    };
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size(initial_size)
-            .with_min_inner_size([760., 600.])
-            .with_decorations(!cfg!(windows))
-            .with_app_id("com.cocombee.dcleaner"),
+        viewport,
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };

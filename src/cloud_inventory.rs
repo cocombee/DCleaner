@@ -115,6 +115,7 @@ pub enum InputError {
     ContainsControl,
     InvalidDigest,
     InvalidPageCursor,
+    InvalidTimestamp,
 }
 
 fn validate_opaque(_label: &str, value: &str, max: usize) -> Result<(), InputError> {
@@ -302,6 +303,32 @@ pub enum TrashStatus {
     Unknown(UnknownFieldReason),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderTimestampBasis {
+    Modified,
+    Received,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProviderTimestamp {
+    unix_millis: i64,
+    basis: ProviderTimestampBasis,
+}
+impl ProviderTimestamp {
+    pub fn new(unix_millis: i64, basis: ProviderTimestampBasis) -> Result<Self, InputError> {
+        if chrono::DateTime::<chrono::Utc>::from_timestamp_millis(unix_millis).is_none() {
+            return Err(InputError::InvalidTimestamp);
+        }
+        Ok(Self { unix_millis, basis })
+    }
+    pub const fn unix_millis(self) -> i64 {
+        self.unix_millis
+    }
+    pub const fn basis(self) -> ProviderTimestampBasis {
+        self.basis
+    }
+}
+
 /// Unvalidated provider row. The inventory validates each field before it is
 /// retained. It is deliberately not serializable and its Debug output omits
 /// provider identifiers and display metadata.
@@ -314,6 +341,7 @@ pub struct RemoteItemDraft {
     size: Option<SizeObservation>,
     content_hash: Option<ContentHash>,
     provider_revision: Option<String>,
+    provider_timestamp: Option<ProviderTimestamp>,
     trash_status: TrashStatus,
 }
 
@@ -331,6 +359,7 @@ impl RemoteItemDraft {
             size: None,
             content_hash: None,
             provider_revision: None,
+            provider_timestamp: None,
             trash_status: TrashStatus::Unknown(UnknownFieldReason::NotProvided),
         }
     }
@@ -352,6 +381,11 @@ impl RemoteItemDraft {
 
     pub fn with_provider_revision(mut self, revision: Option<String>) -> Self {
         self.provider_revision = revision;
+        self
+    }
+
+    pub fn with_provider_timestamp(mut self, timestamp: Option<ProviderTimestamp>) -> Self {
+        self.provider_timestamp = timestamp;
         self
     }
 
@@ -431,6 +465,8 @@ impl fmt::Debug for RemotePage {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ProviderFailure {
+    Unavailable,
+    StorageSelectionRequired,
     Cancelled,
     AccountScopeMismatch,
     AuthenticationRequired,
@@ -548,6 +584,7 @@ pub struct RemoteItem {
     size: Option<SizeObservation>,
     content_hash: Option<ContentHash>,
     provider_revision: Option<String>,
+    provider_timestamp: Option<ProviderTimestamp>,
     trash_status: TrashStatus,
     retained_bytes: usize,
 }
@@ -584,6 +621,10 @@ impl RemoteItem {
 
     pub fn provider_revision(&self) -> Option<&str> {
         self.provider_revision.as_deref()
+    }
+
+    pub const fn provider_timestamp(&self) -> Option<ProviderTimestamp> {
+        self.provider_timestamp
     }
 
     pub const fn trash_status(&self) -> TrashStatus {
@@ -1424,6 +1465,7 @@ fn validate_draft(
         size: draft.size,
         content_hash: draft.content_hash,
         provider_revision: draft.provider_revision,
+        provider_timestamp: draft.provider_timestamp,
         trash_status: draft.trash_status,
         retained_bytes,
     })

@@ -721,6 +721,7 @@ pub enum Icon {
     Brush,
     Disk,
     Duplicate,
+    Cloud,
     Programs,
     Optimizer,
     Browser,
@@ -846,6 +847,27 @@ pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color
         ))
     };
     match icon {
+        Icon::Cloud => {
+            line(&[
+                (5., 15.),
+                (3., 15.),
+                (1.5, 13.),
+                (1.5, 10.5),
+                (3.5, 8.5),
+                (5.5, 8.5),
+                (6., 5.),
+                (9., 3.5),
+                (12., 4.),
+                (14., 7.),
+                (16., 7.),
+                (18.5, 9.5),
+                (18.5, 12.5),
+                (16., 15.),
+                (14., 15.),
+            ]);
+            p.circle_stroke(point(9.5, 13.), rect.width() * 0.16, stroke);
+            line(&[(12., 15.5), (15., 18.)]);
+        }
         Icon::Optimizer => {
             line(&[
                 (7., 12.),
