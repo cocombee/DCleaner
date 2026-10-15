@@ -10,6 +10,7 @@ pub mod instance;
 #[cfg(windows)]
 pub(crate) mod native_hash;
 pub mod optimizer_identity;
+pub(crate) mod optimizer_intents;
 #[cfg(windows)]
 pub(crate) mod optimizer_pipe_io;
 #[cfg(windows)]

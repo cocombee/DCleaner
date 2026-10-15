@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "evidence_kind": "Remote compiler/test evidence; not installed, visual or full functional acceptance",
-  "tested_commit": "1001d775c2925c8dedf310103eb4588b42387c8c",
+  "tested_commit": "378f8ef6f088bbcbf8864e0d35dfaab6a0e6951f",
   "tested_trees": {
-    "src": "5de2f4d05bd043b417677e9bdd71960fec31b23e",
+    "src": "aa3459ad3105a7a816a550a0563f2d9636252488",
     "tests": "04eb2422b75ec32fca6bb31f902dc12ba9a398fa",
-    "Cargo.toml": "c493ce0dd25e64f52ee30469ec2cf7e95663d26e",
+    "Cargo.toml": "a9622ac08e778db7357da350ead9c961b8906cd9",
     "Cargo.lock": "8262c88990a9e6d2282d25485d49a0ca466382de",
     ".github/workflows": "9c728c0e6a6d85c0d41af93d1ca011af908a805a",
     "scripts": "80a6f24bf388825c926183d631b4e5ab9f29903c"
   },
-  "run_id": 38682022179,
-  "url": "https://github.com/cocombee/DCleaner/actions/runs/38682022179",
+  "run_id": 38684214443,
+  "url": "https://github.com/cocombee/DCleaner/actions/runs/38684214443",
   "conclusion": "success",
   "workflow": ".github/workflows/ci.yml",
   "commands": [
@@ -22,24 +22,24 @@
   "jobs": [
     {
       "runner": "windows-2025",
-      "job_id": 116248464371,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38682022179/job/116248464371",
+      "job_id": 116255269072,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38684214443/job/116255269072",
       "host": "x86_64-pc-windows-msvc",
       "rust": "1.98.0",
       "formatting": "passed",
       "tests": {
-        "passed": 233,
+        "passed": 247,
         "failed": 0,
         "ignored": 7,
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "5056ae5f6ccee6a67adb5848272354c8a6ce25f15e39bfd0025b0d6b220ea12a"
+      "private_log_sha256": "b6faeb85cb8c315e26dd077f1585520e6af7cc2d666cecb238ae23a2fcd8a63b"
     },
     {
       "runner": "macos-15",
-      "job_id": 116248464400,
-      "url": "https://github.com/cocombee/DCleaner/actions/runs/38682022179/job/116248464400",
+      "job_id": 116255269385,
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38684214443/job/116255269385",
       "host": "aarch64-apple-darwin",
       "rust": "1.98.0",
       "formatting": "passed",
@@ -50,13 +50,14 @@
         "suites": 15
       },
       "release_build": "passed",
-      "private_log_sha256": "7f93b6fad5d793fab6eb5115ee7acc8627361b0b1a455580cf611cb55f8aa6aa"
+      "private_log_sha256": "1001fd974a422484f19ad5789bb3d3b7d381c6385432168ed3ee8e270a99ea55"
     }
   ],
   "changes_verified": [
     "The non-Windows driver adapter implements the shared action boundary and returns NativeUpdateBoundaryUnavailable before update/restore journaling or effects.",
     "CI supplies canonical native fixture roots while preserving scanner link/redirect rejection.",
-    "All eleven file-backed invocation-ledger fixtures pass on both hosts; Windows also passes the native authenticated-frame-to-ledger case. This proves transaction/API fixtures, not protected storage, owner-death proof, native lease authority, installed service/effects or visual acceptance."
+    "All eleven file-backed invocation-ledger fixtures pass on both hosts; Windows also passes the native authenticated-frame-to-ledger case. This proves transaction/API fixtures, not protected storage, owner-death proof, native lease authority, installed service/effects or visual acceptance.",
+    "Fourteen native registry transaction fixtures pass on Windows. Private staging precedes public raw-byte validation; this is empirical fixture evidence, not production IFEO integration, durable native intent, resource ownership, helper readiness, Sleep/Wake or visual acceptance."
   ],
   "acceptance": {
     "gui_launched": false,

@@ -2843,5 +2843,238 @@
       "https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopenkeytransactedw",
       "https://learn.microsoft.com/en-us/windows/win32/api/ktmw32/nf-ktmw32-committransaction"
     ]
+  },
+  "dcleaner_intents": {
+    "evidence_kind": "File-backed intent journal plus disposable native registry bridge fixtures; not production optimizer acceptance",
+    "source": "src/optimizer_intents.rs",
+    "source_sha256_lf": "f7c2e50fb7a15f0eec7ef03c040dd527ca8ec54c0d50d663292a9a48f4c3a4f5",
+    "durable_record": [
+      "Full ImageSnapshot",
+      "Authenticated account/session identity projection",
+      "Operation, lease and revision UUIDs",
+      "Schema-fixed IFEO subtree, explicit registry view and exact typed existing/new-leaf before/desired plan"
+    ],
+    "phases": [
+      "Prepared",
+      "CommitStarted",
+      "Uncertain",
+      "Abandoned"
+    ],
+    "handoff": [
+      "Prepared ticket escapes only after SQLite COMMIT.",
+      "Exact retries return existing records, not another ticket.",
+      "Generation, lease, document and phase CAS commits CommitStarted before issuing a non-cloneable permit.",
+      "Native adapter matches the exact ordered staged path/kind/before+desired bytes/view before commit.",
+      "Every native attempt consumes the permit into a separate non-executable AttemptReceipt; no reuse through the result.",
+      "Unjournaled commit bypass is cfg(test)-only; production commit_staged is private."
+    ],
+    "recovery": [
+      "Reopen/listing does not mint permits, schedule or replay.",
+      "Explicit caller-scoped exact-plan CAS can abandon reviewed Prepared records after lost delivery; stale tickets cannot start.",
+      "CommitStarted and Uncertain cannot be abandoned or released through this API.",
+      "Safe review scopes account/session and cursor; separate unsafe all-account review is service-only.",
+      "Live keyset pages use the last emitted tuple, at most64 records plus one lookahead; new rows before a cursor require another sweep.",
+      "No verified/settled native receipt API is implemented yet."
+    ],
+    "bounds": {
+      "records": 512,
+      "database_page_bytes": 67108864,
+      "encoded_document_bytes": 4194304,
+      "raw_before_desired_bytes": 1048576,
+      "keys": 16,
+      "values_per_key": 3,
+      "raw_value_bytes": 65536,
+      "review_page_records": 64,
+      "busy_wait_ms": 250
+    },
+    "database": {
+      "application_id": "0x44435249",
+      "schema_version": 1,
+      "table": "STRICT WITHOUT ROWID",
+      "active_lease_index": "partial unique",
+      "journal_mode": "DELETE required without conversion",
+      "synchronous": "EXTRA verified",
+      "unknown_corrupt_bytes": "Closed fixture files preserved; SQLite hot-journal recovery is excluded from this claim."
+    },
+    "name_comparison": "Intent validation and native staging share Windows CompareStringOrdinal. Non-Windows only validates ASCII Windows-registry fixture names; unsupported Unicode equivalence is rejected.",
+    "cases": {
+      "optimizer_intents": [
+        "exact_native_intent_survives_reopen_without_reissuing_a_ticket_or_replay",
+        "changed_plan_and_foreign_owner_ids_never_replace_original_or_disclose_it",
+        "stale_generation_and_abandonment_cannot_authorize_native_commit",
+        "commit_started_and_uncertain_rows_survive_reopen_without_retry_authority",
+        "statement_and_commit_failures_never_escape_as_prepared_or_commit_permits",
+        "concurrent_exact_preparation_emits_only_one_post_commit_ticket",
+        "unknown_future_corrupt_and_noncanonical_documents_are_preserved",
+        "attached_temp_wal_and_busy_or_readonly_connections_do_not_admit_work",
+        "malformed_and_over_budget_intents_are_rejected_before_persistence",
+        "review_and_capacity_are_bounded_without_pruning_unresolved_intents",
+        "live_column_changes_are_rejected_by_queries_review_and_commit_cas"
+      ],
+      "optimizer_registry_tx": [
+        "committed_batch_preserves_raw_types_bytes_and_unselected_values",
+        "drop_and_unwind_roll_back_staged_values",
+        "mismatch_and_late_native_error_poison_the_entire_batch",
+        "new_leaf_requires_existing_parent_and_never_adopts_existing_key",
+        "invalid_and_over_budget_plans_never_commit_earlier_staging",
+        "cancellation_and_expired_deadline_block_commit_and_roll_back",
+        "native_read_then_foreign_write_cannot_silently_overwrite_foreign_value",
+        "native_write_conflicts_preserve_the_successful_writer_and_unrelated_data",
+        "competing_transactions_cannot_both_stage_conflicting_key_writes",
+        "foreign_write_between_private_staging_and_public_validation_is_preserved",
+        "both_views_preserve_intervening_deletes_creations_and_modify_revert",
+        "later_key_conflicts_roll_back_earlier_staging_and_replaced_keys_are_preserved",
+        "new_leaf_rollback_and_concurrent_creation_never_adopt_foreign_state",
+        "recorded_intent_must_match_every_staged_field_before_native_commit",
+        "no_op_guards_oversized_native_values_and_aggregate_work_are_rejected"
+      ],
+      "optimizer_requests": [
+        "lost_queue_hint_survives_reopen_without_readmission_or_automatic_claim",
+        "caller_scope_prevents_state_disclosure_and_conflicting_ids_do_not_requeue",
+        "concurrent_duplicate_admission_yields_exactly_one_new_ticket",
+        "competing_claims_commit_only_one_running_owner",
+        "failed_admission_statement_never_yields_a_ticket_or_partial_row",
+        "claim_and_finish_commit_failures_never_escape_as_durable_success",
+        "recovery_invalidates_old_claims_and_leaves_queued_work_unscheduled",
+        "terminal_receipts_survive_reopen_and_cannot_be_overwritten",
+        "unknown_future_and_corrupt_closed_databases_are_not_replaced",
+        "capacity_preserves_dedupe_and_review_batches_are_bounded",
+        "busy_and_readonly_admission_failures_never_leave_authorized_work"
+      ],
+      "optimizer_protocol": [
+        "fragmented_reads_preserve_frame_boundaries_and_invocation_identity",
+        "truncation_is_distinct_from_clean_disconnect_at_every_boundary",
+        "rejected_headers_do_not_consume_or_allocate_declared_payload",
+        "schema_rejects_unknown_duplicate_and_path_bearing_fields",
+        "nil_identifiers_cannot_be_encoded_or_accepted",
+        "responses_must_match_direction_and_request_correlation",
+        "partial_writes_and_transport_failures_are_not_reported_as_delivery"
+      ],
+      "optimizer_pipe_io": [
+        "fragmented_protocol_roundtrip_and_preconnected_accept",
+        "pending_accept_times_out_and_ends_exchange",
+        "pending_accept_completes_after_client_arrives",
+        "completed_cancel_race_drains_before_buffer_reuse",
+        "immediate_completion_after_cancel_or_deadline_is_not_success",
+        "peer_zero_byte_write_is_not_a_clean_frame_disconnect",
+        "pending_read_cancellation_drains_and_does_not_retry",
+        "deadline_is_shared_across_multiple_reads",
+        "blocked_write_times_out_without_claiming_delivery",
+        "disconnect_is_eof_and_terminal",
+        "precancelled_and_expired_exchanges_do_not_start_connect"
+      ],
+      "optimizer_pipe_security": [
+        "native_principal_is_owned_canonical_and_session_scoped",
+        "exact_descriptor_rejects_extra_generic_null_and_unprotected_permissions",
+        "native_pipe_uses_minimal_client_open_and_rejects_production_owner_spoof",
+        "existing_pipe_name_and_extra_server_instances_are_rejected",
+        "parsed_request_is_bound_to_native_caller_then_thread_reverts",
+        "existing_impersonation_is_preserved_and_never_replaced",
+        "unauthorized_request_never_escapes_and_ends_the_connection",
+        "malformed_frame_never_becomes_an_authenticated_request",
+        "authenticated_wire_ids_and_command_are_bound_to_durable_admission",
+        "production_bind_requires_unimpersonated_system_identity",
+        "connect_cancel_deadline_and_busy_endpoint_are_bounded"
+      ]
+    },
+    "full_local_suite": {
+      "passed": 259,
+      "failed": 0,
+      "ignored": 7,
+      "suites": 15,
+      "private_log_sha256": "a1cdc39097b7f558bea25c62d80ddf2ef7c42b5260f09560e579f892fa16f8e3",
+      "rust": "1.98.1",
+      "host": "x86_64-pc-windows-msvc"
+    },
+    "integration": {
+      "native_test": "recorded_intent_must_match_every_staged_field_before_native_commit",
+      "subcases": 7,
+      "matching": [
+        "existing key",
+        "exclusive new leaf"
+      ],
+      "mismatches": [
+        "desired bytes",
+        "expected bytes",
+        "path",
+        "key kind",
+        "view"
+      ],
+      "reopen_before_native_commit": true,
+      "fixture_only": true,
+      "private_optimizer_log_sha256": "49cbafc2b579faa64008c627726d30cdc9936018a805ac7dac972c5b4c9be10d"
+    },
+    "local_release": {
+      "sha256": "a358bf3c45b25a0d1aa8f4113ed5fda18b7e8e9fc587baed2b51a7382089f328",
+      "uninstalled": true,
+      "rust": "1.98.1",
+      "private_log_sha256": "1b538d9647e6a6629ff70bbd8071baf5e63591c70d9837510728fdac52880364",
+      "sources_sha256_lf": {
+        "src/optimizer_intents.rs": "f7c2e50fb7a15f0eec7ef03c040dd527ca8ec54c0d50d663292a9a48f4c3a4f5",
+        "src/optimizer_registry_tx.rs": "10c3ac08c964aea2d3583542c111333600622bfe026071aa9a6ece3b4d478e43",
+        "src/optimizer_requests.rs": "9c7aad7e295eda83aee4aa957fa4a268a41c8a85c29da25c3fafad2e991ffc89",
+        "src/lib.rs": "37ac09af1f4a09d3e4bcc742fa8cc1b9d670b7aafa73eed18c781bd0a859f76e",
+        "Cargo.toml": "166d58062a1749b071571e6b31b6720b6005bfc2d322e10cf6d4bfaf8bd443e2",
+        "Cargo.lock": "8d98dbf5054842ab04fa9d5036292cd58fae0d8a8223bee5e148d261f5292db3"
+      }
+    },
+    "preceding_source_native_ci": {
+      "tested_commit": "378f8ef6f088bbcbf8864e0d35dfaab6a0e6951f",
+      "url": "https://github.com/cocombee/DCleaner/actions/runs/38684214443",
+      "windows_passed": 247,
+      "macos_passed": 204,
+      "note": "Predates the intent journal and native bridge."
+    },
+    "acceptance": {
+      "production_storage_factory": false,
+      "resource_lease_authorization": false,
+      "desired_value_semantics_verified": false,
+      "trusted_scope_factory": false,
+      "helper_readiness": false,
+      "verified_poststate_receipts": false,
+      "production_registry_changed": false,
+      "installed": false,
+      "gui_launched": false,
+      "visual_verified": false,
+      "sleep_wake_verified": false
+    },
+    "limitations": [
+      "Plan equality does not establish semantic IFEO validity, correct root/image, foreign-filter policy, current lease ownership or helper readiness.",
+      "Synchronous native commit cannot be interrupted after entry; cancellation/deadlines are checkpoints, not a hard commit bound.",
+      "SQLite intent/request databases and KTM are not one atomic transaction.",
+      "Nonce/instance columns have schema shape checks, not cryptographic authentication.",
+      "Actual Sleep/Wake, lifecycle/re-sleep, native recovery receipts and GUI integration remain open."
+    ],
+    "references": [
+      "https://www.sqlite.org/pragma.html#pragma_synchronous",
+      "https://www.sqlite.org/pragma.html#pragma_max_page_count"
+    ]
+  },
+  "db_persistence_followup": {
+    "evidence_kind": "Failed admission followup; no new decoded body or semantic coverage",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "requested_functions": [
+      "0x140867910",
+      "0x140867cc0"
+    ],
+    "attempts": 3,
+    "status": "access_denied_before_function_decode",
+    "native_status": "Win32 5 / EACCES during private snapshot/runtime-root creation",
+    "new_functions_decoded": 0,
+    "existing_canonical_coverage_unchanged": true,
+    "private_review_sha256": "f916527b8f550c2f07e243c22320f346f8b7b712d51b4dac0dba1767ca8426ef",
+    "loader_sha256": "a9403947638074b679f6056302a81bbf753fa5e75a58c4d0d0a60e77253de5fc",
+    "bootstrap_sha256": "6f3eaf07aece64f1b74ba9cb7ca87a7e625bcfcf916ce19fcb162eef861659b0",
+    "installed_bundle_sha256": "12a70d8ab2a57de0cc71d794e38470031bfbdde855ba4a435e0ac0613f2fe82e",
+    "loaded_bundle_sha256": "8821b6c555410785ee87cc7534b520d202ec44136c0e139fe19f27d31467d4ae",
+    "final_close_succeeded": true,
+    "target_executed": false,
+    "package_changed": false,
+    "automatic_approval_review_rejection": false,
+    "payload_grammar_recovered": false,
+    "limitations": [
+      "Previously decoded caller routes remain separate evidence.",
+      "No new helper/serializer body, payload grammar, native effect or state meaning is established."
+    ]
   }
 }

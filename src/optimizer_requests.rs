@@ -69,6 +69,19 @@ pub(crate) struct Caller {
     session: u32,
 }
 impl Caller {
+    pub(crate) fn account(&self) -> &str {
+        &self.account
+    }
+    pub(crate) fn session(&self) -> u32 {
+        self.session
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture(account: &str, session: u32) -> Self {
+        Self {
+            account: account.into(),
+            session,
+        }
+    }
     #[cfg(windows)]
     pub(crate) fn authenticated(
         request: &crate::optimizer_pipe_security::AuthenticatedRequest,

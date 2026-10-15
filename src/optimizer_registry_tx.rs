@@ -8,6 +8,9 @@
 
 #![allow(dead_code)] // Production service/lease owner is not connected yet.
 
+use crate::optimizer_intents::{
+    AttemptReceipt, Change, CommitPermit, KeyChange, KeyKind, Name, RawValue,
+};
 use crate::optimizer_registration::RegistryView;
 use std::{
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
@@ -17,7 +20,6 @@ use std::{
 use windows::{
     Win32::{
         Foundation::{ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_SUCCESS, HANDLE, WIN32_ERROR},
-        Globalization::{CSTR_EQUAL, CompareStringOrdinal},
         Storage::FileSystem::{CommitTransaction, CreateTransaction, RollbackTransaction},
         System::Registry::{
             HKEY, KEY_CREATE_SUB_KEY, KEY_QUERY_VALUE, KEY_SET_VALUE, KEY_WOW64_32KEY,
@@ -62,6 +64,7 @@ impl Drop for Key {
 pub(crate) struct Scope {
     key: Key,
     view: REG_SAM_FLAGS,
+    view_id: RegistryView,
 }
 impl Scope {
     /// # Safety
@@ -74,6 +77,7 @@ impl Scope {
     pub(crate) unsafe fn from_owned_key(key: HKEY, view: RegistryView) -> Self {
         Self {
             key: Key(key),
+            view_id: view,
             view: match view {
                 RegistryView::Registry32 => KEY_WOW64_32KEY,
                 RegistryView::Registry64 => KEY_WOW64_64KEY,
@@ -82,12 +86,6 @@ impl Scope {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Name {
-    Debugger,
-    FilterFullPath,
-    UseFilter,
-}
 impl Name {
     fn wide(self) -> Vec<u16> {
         wide(match self {
@@ -98,21 +96,14 @@ impl Name {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct RawValue {
-    pub(crate) kind: u32,
-    pub(crate) bytes: Vec<u8>,
-}
-pub(crate) struct Change {
-    pub(crate) name: Name,
-    pub(crate) expected: Option<RawValue>,
-    pub(crate) desired: Option<RawValue>,
-}
-
 /// Means only that CommitTransaction returned success. Always reobserve before
 /// reporting a workflow result; this does not assert storage power-loss behavior.
 #[derive(Debug)]
 pub(crate) struct CommitAcknowledged;
+pub(crate) struct CommitAttempt {
+    pub(crate) receipt: AttemptReceipt,
+    pub(crate) outcome: Result<CommitAcknowledged, Failure>,
+}
 
 pub(crate) struct Transaction<'a> {
     handle: OwnedHandle,
@@ -121,6 +112,7 @@ pub(crate) struct Transaction<'a> {
     deadline: Instant,
     ended: bool,
     paths: Vec<String>,
+    staged: Vec<KeyChange>,
     bytes: usize,
 }
 impl<'a> Transaction<'a> {
@@ -159,6 +151,7 @@ impl<'a> Transaction<'a> {
             deadline,
             ended: false,
             paths: Vec::new(),
+            staged: Vec::new(),
             bytes: 0,
         };
         tx.active()?;
@@ -175,6 +168,13 @@ impl<'a> Transaction<'a> {
             let observed = self.open_public(path)?;
             self.stage_existing_values(&key, &observed, changes, || {})
         })();
+        if result.is_ok() {
+            self.staged.push(KeyChange {
+                path: path.into(),
+                kind: KeyKind::Existing,
+                values: changes.to_vec(),
+            });
+        }
         self.finish_stage(result)
     }
 
@@ -223,6 +223,13 @@ impl<'a> Transaction<'a> {
             }
             self.write_values(&key, changes)
         })();
+        if result.is_ok() {
+            self.staged.push(KeyChange {
+                path: format!("{parent}\\{leaf}"),
+                kind: KeyKind::NewLeaf,
+                values: changes.to_vec(),
+            });
+        }
         self.finish_stage(result)
     }
 
@@ -248,15 +255,7 @@ impl<'a> Transaction<'a> {
             return Err(Failure::Limited);
         }
         for seen in &self.paths {
-            let a: Vec<u16> = path.encode_utf16().collect();
-            let b: Vec<u16> = seen.encode_utf16().collect();
-            // SAFETY: counted UTF-16 buffers; native ordinal registry-style
-            // case comparison avoids lossy Unicode lowercase normalization.
-            let comparison = unsafe { CompareStringOrdinal(&a, &b, true) };
-            if comparison.0 == 0 {
-                return Err(Failure::InvalidPlan);
-            }
-            if comparison == CSTR_EQUAL {
+            if crate::optimizer_intents::same_registry_path(path, seen) != Some(false) {
                 return Err(Failure::InvalidPlan);
             }
         }
@@ -383,12 +382,29 @@ impl<'a> Transaction<'a> {
     }
 
     /// # Safety
-    /// Caller must have durably recorded the exact intent and completed native
-    /// lease/resource authorization and helper readiness checks. This primitive
-    /// cannot prove those prerequisites. No production caller exists yet.
-    pub(crate) unsafe fn commit_after_durable_intent(
-        mut self,
-    ) -> Result<CommitAcknowledged, Failure> {
+    /// Caller must independently bind the trusted scope to the schema's IFEO
+    /// root and lease/image, and verify helper readiness/resource authorization.
+    /// The journal proves durable plan identity, not those native prerequisites.
+    /// No production scope factory or caller exists yet.
+    /// Under cfg(test), uniquely owned disposable fixture subtrees/images may
+    /// model that root/identity; no production IFEO writes are performed.
+    pub(crate) unsafe fn commit_recorded_intent(self, permit: CommitPermit) -> CommitAttempt {
+        let matches = permit.matches_plan(self.scope.view_id, &self.staged);
+        let receipt = permit.into_attempt();
+        let outcome = if matches {
+            self.commit_staged()
+        } else {
+            Err(Failure::InvalidPlan)
+        };
+        CommitAttempt { receipt, outcome }
+    }
+
+    /// Disposable native fixture bypass; absent from production builds.
+    #[cfg(test)]
+    pub(crate) unsafe fn commit_after_durable_intent(self) -> Result<CommitAcknowledged, Failure> {
+        self.commit_staged()
+    }
+    fn commit_staged(mut self) -> Result<CommitAcknowledged, Failure> {
         self.active()?;
         if self.paths.is_empty() {
             return Err(Failure::InvalidPlan);
@@ -1155,6 +1171,144 @@ mod tests {
             "TxR leaf race: create_status={} commit={commit:?}",
             created.0
         );
+    }
+
+    #[test]
+    fn recorded_intent_must_match_every_staged_field_before_native_commit() {
+        use crate::{
+            optimizer_identity::{FileIdentity, ImageSnapshot, PeFormat, PeHeader},
+            optimizer_intents::{Intent, Journal, Phase, Preparation},
+            optimizer_requests::Caller,
+        };
+        for case in 0..7 {
+            let fixture = Fixture::new();
+            drop(fixture.create("a.exe"));
+            drop(fixture.create("b.exe"));
+            if case == 4 {
+                drop(fixture.create("a.exe\\owned"));
+            }
+            let data = tempfile::tempdir().unwrap();
+            let db = data.path().join("intents.db");
+            let mut journal = Journal::open(rusqlite::Connection::open(&db).unwrap()).unwrap();
+            let caller = Caller::fixture("S-1-5-21-1-2-3-1001", 1);
+            let operation = uuid::Uuid::new_v4();
+            let revision = uuid::Uuid::new_v4();
+            let intended_path = if [4, 6].contains(&case) {
+                "a.exe\\owned"
+            } else {
+                "a.exe"
+            };
+            let intended_kind = if [4, 6].contains(&case) {
+                KeyKind::NewLeaf
+            } else {
+                KeyKind::Existing
+            };
+            let intended_view = if case == 5 {
+                RegistryView::Registry32
+            } else {
+                RegistryView::Registry64
+            };
+            let image = ImageSnapshot {
+                requested_path: r"C:\Fixture\a.exe".into(),
+                final_path: r"\\?\C:\Fixture\a.exe".into(),
+                identity: FileIdentity {
+                    volume_serial: 1,
+                    file_id: [1; 16],
+                },
+                size: 4096,
+                creation_time: 1,
+                last_write_time: 2,
+                attributes: 32,
+                hard_links: 1,
+                sha256: "a".repeat(64),
+                pe: PeHeader {
+                    machine: 0x8664,
+                    format: PeFormat::Pe32Plus,
+                    characteristics: 0x22,
+                    subsystem: 2,
+                    sections: 1,
+                    entry_point_rva: 4096,
+                    image_size: 8192,
+                    headers_size: 512,
+                },
+                bytes_read: 4608,
+            };
+            let intended = Intent::from_owner(
+                &caller,
+                operation,
+                uuid::Uuid::new_v4(),
+                revision,
+                image,
+                intended_view,
+                vec![KeyChange {
+                    path: intended_path.into(),
+                    kind: intended_kind,
+                    values: vec![change(
+                        Name::UseFilter,
+                        if case == 2 { Some(dword(0)) } else { None },
+                        Some(dword(1)),
+                    )],
+                }],
+            )
+            .unwrap();
+            let cancel = AtomicBool::new(false);
+            let mut tx = fixture.tx(&cancel);
+            let staged_path = if case == 3 { "b.exe" } else { intended_path };
+            let changes = [change(
+                Name::UseFilter,
+                None,
+                Some(dword(if case == 1 { 2 } else { 1 })),
+            )];
+            if case == 6 {
+                tx.stage_new_leaf("a.exe", "owned", &changes).unwrap();
+            } else {
+                tx.stage_existing(staged_path, &changes).unwrap();
+            }
+            let prepared = match journal.prepare(intended).unwrap() {
+                Preparation::New(p) => p,
+                _ => panic!("expected new durable intent"),
+            };
+            assert_eq!(
+                journal.query(&caller, operation).unwrap().unwrap().phase,
+                Phase::Prepared
+            );
+            let permit = journal
+                .begin_commit(prepared, revision, uuid::Uuid::new_v4())
+                .unwrap();
+            drop(journal); // Native effect is still private; durable handoff survives reopen.
+            let mut journal = Journal::open(rusqlite::Connection::open(&db).unwrap()).unwrap();
+            assert_eq!(
+                journal.query(&caller, operation).unwrap().unwrap().phase,
+                Phase::CommitStarted
+            );
+            if case != 6 {
+                assert_eq!(
+                    read_value(&fixture.open(staged_path).unwrap(), Name::UseFilter).unwrap(),
+                    None
+                );
+            }
+            let attempt = unsafe { tx.commit_recorded_intent(permit) };
+            if [0, 6].contains(&case) {
+                attempt.outcome.unwrap();
+                assert_eq!(
+                    read_value(&fixture.open(staged_path).unwrap(), Name::UseFilter).unwrap(),
+                    Some(dword(1))
+                );
+            } else {
+                assert!(matches!(attempt.outcome, Err(Failure::InvalidPlan)));
+                assert_eq!(
+                    read_value(&fixture.open(staged_path).unwrap(), Name::UseFilter).unwrap(),
+                    None
+                );
+            }
+            // A spent attempt only supports reconciliation. It cannot authorize
+            // another commit or assert a verified lease/receipt in this schema.
+            journal.mark_uncertain(attempt.receipt).unwrap();
+            assert_eq!(
+                journal.query(&caller, operation).unwrap().unwrap().phase,
+                Phase::Uncertain
+            );
+        }
     }
 
     #[test]
