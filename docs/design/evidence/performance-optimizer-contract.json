@@ -1224,8 +1224,11 @@
       "The bounded +0x38 prelude tests one byte, saves another, clears two byte fields, and tail-transfers to 0x140842ef0 with derived flags. Its followed tail body lies outside the selected range and is unreviewed."
     ],
     "next_bounded_targets": [
-      "0x1408594d0",
-      "0x14085b4a0"
+      "0x14088f320",
+      "0x14088f500",
+      "0x14088e9f0",
+      "0x140867910",
+      "0x140867cc0"
     ],
     "limits": [
       "No native component mutations, association/impact classifier, re-sleep or recovery behavior established.",
@@ -1334,13 +1337,17 @@
       "private_canonical_review_sha256": "cc07dc762d8708d3684887ccc13e45ac5e355e89b0ef3cc059f06d001b8ba374",
       "private_deactivation_review_sha256": "843c00d11da7e4d5708a3cb25d933a5152a0bcebd3526cb789f7551575a97385",
       "findings": [
-        "State routing rereads actual state but does not generally verify that it equals the request. Numeric state names and final return/AL meaning are not assigned.",
+        "State routing rereads actual state but does not generally verify that it equals the request. Selected normal-return routes preserve numeric AL=0/1 across the reviewed cookie check; named-state/effect meaning is not assigned.",
         "The selected outer caller supplies a null optional initial-state output; caller-side AL branching does not establish a verified component post-state.",
         "The deactivation-route helper selects lookup branches and delegates through a guarded virtual slot and further helpers. It contains no component-enumeration loop, and its subordinate return values do not prove native component effects."
       ],
       "next_semantic_targets": [
-        "0x1408594d0",
-        "0x14085b4a0"
+        "0x14084f700",
+        "0x14088f320",
+        "0x14088f500",
+        "0x14088e9f0",
+        "0x140867910",
+        "0x140867cc0"
       ]
     }
   },
@@ -1678,5 +1685,288 @@
       "Native flow/truncation fields and unresolved-call counts must be retained when interpreting each dossier.",
       "No app UI, installer, Sleep/Wake operation or native visual acceptance was exercised."
     ]
+  },
+  "service_component_effects_evidence": {
+    "method": "Three targeted canonical REA service sessions under the existing isolated direct-JVM workaround; declared code seeds come from decoded direct-call sites in earlier source-bound dossiers",
+    "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
+    "rea_version": "6.5.0",
+    "ghidra_version": "12.1.4",
+    "target_executed": false,
+    "stock_launcher_verified": false,
+    "disabled_analyzers": 30,
+    "kept_enabled_analyzers": [
+      "Subroutine References"
+    ],
+    "cfg_end_convention": "Exclusive",
+    "additional_populated_procedures": 6,
+    "fully_pe_scoped": 5,
+    "scope_partial": 1,
+    "profiles": [
+      {
+        "label": "component-effects",
+        "analysis_profile_digest": "9b6d191882a5a7542cf6da3ae8b8bdaebc09cfd726118cc27eb71a674675d46a",
+        "seed_sha256": "42bf0c3dfbf7b6739ade23e796c2865f4efe47ce512e172656523b6b682f9b98",
+        "function_seed_count": 2,
+        "code_seed_count": 4,
+        "reported_seed_outcomes_validated": true,
+        "session_closed": true,
+        "snapshot_records": 2,
+        "private_snapshot_sha256": "d1f051ff4bd1cb94d0c44f0348294a96a6af92bbbabd9f4fb130112a163bc7d0",
+        "private_summary_sha256": "1365847f2d93fd16039ffe56f0242bdf2d0ef9705182d1a99fdc8aa48199240d",
+        "private_callsite_provenance_sha256": "cbca4e3252fc117b609e9412a2b7dfd54b3ca48c95882fc50778fe93f367491e",
+        "functions": [
+          {
+            "entry": "0x1408594d0",
+            "evidence_id": "ev_9d1b78db66ce366381bc486d8bffaf5bd04d5937a06af18456132b77a338d90d",
+            "private_record_sha256": "be64ec0dbbf1bd38eb083ff3410bbbd23cd2bc369f1966d9de41e3b92f195bff",
+            "pe_end_exclusive": "0x140859b05",
+            "registered_body_bytes": 1590,
+            "assembly_lines": 385,
+            "cfg_blocks": 56,
+            "unresolved_calls": 3,
+            "flow": {
+              "retained_operations": 1776,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": false,
+              "assembly_outside": 1,
+              "cfg_blocks_crossing": 1,
+              "flow_operations_outside": 37,
+              "limit": "Trailing padding INT3 at 0x140859b05 and its 37 value-flow operations are excluded from semantic claims; the crossing CFG block is retained as scope-partial"
+            }
+          },
+          {
+            "entry": "0x14085b4a0",
+            "evidence_id": "ev_c50d1d55dbf3bbe2806f3a17501467bd6eb7d8c632526f3b1a88c72843084ad9",
+            "private_record_sha256": "2253f657ac9fd846355ee54ea141c552fe0dc7c0ce5d05be203d8e955886ee68",
+            "pe_end_exclusive": "0x14085ba20",
+            "registered_body_bytes": 1408,
+            "assembly_lines": 349,
+            "cfg_blocks": 53,
+            "unresolved_calls": 6,
+            "flow": {
+              "retained_operations": 1377,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+            }
+          }
+        ]
+      },
+      {
+        "label": "component-owners",
+        "analysis_profile_digest": "f1b2a9a703f383d4d99e5d7c54f607d91e024e6815cdee4df4d44690a4ba9bb8",
+        "seed_sha256": "8b6c82c3f9954f323cb0c8a9fa85c0100f3e8fdb3dc635dee51659dc071e2dd8",
+        "function_seed_count": 3,
+        "code_seed_count": 10,
+        "reported_seed_outcomes_validated": true,
+        "session_closed": true,
+        "snapshot_records": 3,
+        "private_snapshot_sha256": "9a4f10adf5ae3957ae9fb675a4f5a78aa5cd35475636d1d59d5cd63f57b08536",
+        "private_summary_sha256": "eec29ad250b76c63cb9606986c67e33b3f4d6ff8fe2df3cb926f5e4737e07ec3",
+        "private_callsite_provenance_sha256": "b002e1dc8b0dbda3a9b7c4af01ecf005c77dea02821f3d3b19ce1aa685901ba4",
+        "functions": [
+          {
+            "entry": "0x140858120",
+            "evidence_id": "ev_50d582615db740d90f8986cbcdda1201b0a2be3a61c1ab2de0a8dbca5dd5eda9",
+            "private_record_sha256": "5501baafbedaf784ee2c29204a8efafe90c8abb973429fdeefe2c73ec2b575d2",
+            "pe_end_exclusive": "0x14085842c",
+            "registered_body_bytes": 778,
+            "assembly_lines": 215,
+            "cfg_blocks": 44,
+            "unresolved_calls": 1,
+            "flow": {
+              "retained_operations": 640,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x1408643e0",
+            "evidence_id": "ev_6906aba6ccc4560ac634a83e4035d42916cf9d6881b214e82708da45ba76d191",
+            "private_record_sha256": "4343435ec623bed28a0ec7a151d3a5f2070464f9f6bfbe28311ee0541530e8e1",
+            "pe_end_exclusive": "0x140864be5",
+            "registered_body_bytes": 2053,
+            "assembly_lines": 495,
+            "cfg_blocks": 82,
+            "unresolved_calls": 3,
+            "flow": {
+              "retained_operations": 2465,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+            }
+          },
+          {
+            "entry": "0x140850c80",
+            "evidence_id": "ev_201f372357e58bb427bde5d21e38cde945a83b867bd0f4c7c83136b38d726c33",
+            "private_record_sha256": "e82179f26f2a261bc89b71e293d0ebfdc7e3c31222dfb0b54484cb762cb6ab3f",
+            "pe_end_exclusive": "0x140851645",
+            "registered_body_bytes": 2501,
+            "assembly_lines": 555,
+            "cfg_blocks": 63,
+            "unresolved_calls": 6,
+            "flow": {
+              "retained_operations": 2122,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+            }
+          }
+        ]
+      },
+      {
+        "label": "debugger-effect",
+        "analysis_profile_digest": "dff2164bf91591bc42c8e7653e2eb9ae24c8fa7955daccd246b48f9d8518a5d2",
+        "seed_sha256": "f31e20220bb77c9e4a819e6bcf4b5f297cc1f4bce95f574cf74aa5ff1586702c",
+        "function_seed_count": 1,
+        "code_seed_count": 3,
+        "reported_seed_outcomes_validated": true,
+        "session_closed": true,
+        "snapshot_records": 1,
+        "private_snapshot_sha256": "ff625a6284e334ea38facdb6da474fc42ce848165c4a9c300dc7fe581af0dc81",
+        "private_summary_sha256": "4467725d8bf56a5b22f924d4bc2a23ca457f79ae750c5321463a54a12b21b94c",
+        "private_callsite_provenance_sha256": "88033fb8cb9c4381da92498dae540caef43737b51d9e2eb61bf2bc8621fe46ed",
+        "functions": [
+          {
+            "entry": "0x14088e280",
+            "evidence_id": "ev_97232a5789e9aaf5c14924dad598a808d28b122cb4f2b640a44db7e0b9e8c5ee",
+            "private_record_sha256": "586f1ee5e7e50a5446633755de6cf9596e2325db8ceea8c5afb230a471b8de96",
+            "pe_end_exclusive": "0x14088e6c9",
+            "registered_body_bytes": 1097,
+            "assembly_lines": 263,
+            "cfg_blocks": 36,
+            "unresolved_calls": 2,
+            "flow": {
+              "retained_operations": 942,
+              "truncated": false,
+              "omitted_operations_lower_bound": 0
+            },
+            "scope": {
+              "complete_within_selected_pe_range": true,
+              "assembly_outside": 0,
+              "cfg_blocks_crossing": 0,
+              "flow_operations_outside": 0,
+              "limit": "Selected PE scope only; direct callees and virtual effects are not automatically verified"
+            }
+          }
+        ]
+      }
+    ],
+    "private_component_review_sha256": "f6d85692cf0c4a8737cd7a0fcc677664d0c08ff94c187e6d315f7b163421f261",
+    "private_debugger_review_sha256": "605f3d2c19166ce7471003345532e27c959ad24a484005813757b217d37df1e7",
+    "private_flags_review_sha256": "0d7fd5340b9e1710fe78d99323efd3e6ab9dcbab6c3f957a098c9274b383304f",
+    "private_association_return_review_sha256": "1ae17e44d587150b9e89b727ef417f5bd5189a32ca98e1e1d4f24d30591caaf7",
+    "private_debugger_effect_review_sha256": "79e5e2d3fb4550c252395c901707814fbacdd6f5e14bf55b694159aa4d20c2bd",
+    "findings": [
+      "The entry loop applies a flag-dependent precheck, a shared-entry predicate and indirect status checks before collecting entries for a later indirect action. Status 0/2 admission and status 4 exclusion are raw observed branches, not verified component post-states.",
+      "The action router distinguishes numeric arguments 0-3 and delegates to debugger, property and persistence routines. The literal property keys are disabledAfterReboot and autoRedeactivation; their names alone do not prove an effect.",
+      "The association predicate obtains two manager-provided string collections and normalizes matches in the second to the selected key. A remaining differing key must produce a nonzero query-call result and a nonempty returned range for ActualProgramModifications. Record presence does not verify a native Sleeping state.",
+      "Source-bound SQL constants establish persistence modes 1=read, 2=update an existing row, 3=insert when missing, 4=insert-or-update, 5=delete. The Data payload grammar and runtime write results remain unverified.",
+      "The debugger delegate constructs a subkey beneath Windows Image File Execution Options from its first pointer/count payload. Calls using raw flags 0x200 and conditionally 0x100 are present. Actual registry write/delete operations remain delegated to 0x14088f320, 0x14088f500 and 0x14088e9f0; no direct registry API is proved in this wrapper.",
+      "The bounded return-check helper preserves RAX/EAX/AL on its successful RET path. The state router has observed numeric 0/1 status routes, and the deactivation wrapper returns its prepared byte on that normal path; these are not component post-state receipts."
+    ],
+    "limits": [
+      "These six records add selected static observations; they do not complete the optimizer, service or original app.",
+      "The entry-loop record includes one padding byte outside its PE scope; its associated assembly/CFG/flow details are explicitly retained and excluded from semantic conclusions.",
+      "Actual component mutations, complete app associations, impact, automatic reactivation/re-sleep, durable recovery and runtime post-state evidence remain required.",
+      "No DCleaner UI, install or desktop interaction occurred; this batch changes evidence only."
+    ],
+    "bounded_followups": [
+      {
+        "label": "component-gate",
+        "private_record_sha256": "73dbb6c3b06ca3cfbd05efe3445477629e947be533549aa96373be95492d3941",
+        "private_bounds_sha256": "f5d55cbae369efc84f894c47473b506c833a67a20cb1fb46e6f7b508fa82f118",
+        "functions": [
+          {
+            "entry": "0x1408594d0",
+            "end_exclusive": "0x140859b05",
+            "decoded_instructions": 384,
+            "pcode_instruction_addresses": 202,
+            "pcode_outside_requested_range_count": 1
+          }
+        ],
+        "limit": "Bounded standalone Ghidra records, not canonical REA Evidence IDs. Followed out-of-scope addresses remain excluded; exact in-scope return-path assembly supports only the stated register preservation."
+      },
+      {
+        "label": "entry-dispatch",
+        "private_record_sha256": "9adf3507b4441619ed99b631747a45f38a622226a496a97cfc7cdf7cd8dc4743",
+        "private_bounds_sha256": "6f4546a2545caa99577b84f6bc4dd7e101a8fce062f61a227b7a5b2de17fdf08",
+        "functions": [
+          {
+            "entry": "0x14084e5c0",
+            "end_exclusive": "0x14084e73b",
+            "decoded_instructions": 98,
+            "pcode_instruction_addresses": 52,
+            "pcode_outside_requested_range_count": 0
+          },
+          {
+            "entry": "0x1408499d0",
+            "end_exclusive": "0x140849e12",
+            "decoded_instructions": 273,
+            "pcode_instruction_addresses": 145,
+            "pcode_outside_requested_range_count": 1
+          },
+          {
+            "entry": "0x14084f700",
+            "end_exclusive": "0x140850a2d",
+            "decoded_instructions": 1042,
+            "pcode_instruction_addresses": 595,
+            "pcode_outside_requested_range_count": 0
+          },
+          {
+            "entry": "0x140855fa0",
+            "end_exclusive": "0x14085609a",
+            "decoded_instructions": 55,
+            "pcode_instruction_addresses": 22,
+            "pcode_outside_requested_range_count": 0
+          },
+          {
+            "entry": "0x14111e220",
+            "end_exclusive": "0x14111e23e",
+            "decoded_instructions": 8,
+            "pcode_instruction_addresses": 23,
+            "pcode_outside_requested_range_count": 18
+          }
+        ],
+        "limit": "Bounded standalone Ghidra records, not canonical REA Evidence IDs. Followed out-of-scope addresses remain excluded; exact in-scope return-path assembly supports only the stated register preservation."
+      }
+    ],
+    "private_manager_dispatch_slots_sha256": "761f4936492fa7a2b99e4dcc88bfe478668e2c2d7cfac844094316df771e0ab5"
+  },
+  "service_canonical_coverage": {
+    "populated_unique_procedures": 10,
+    "fully_within_selected_pe_scope": 9,
+    "scope_partial": 1,
+    "excluded_placeholder_records": 3,
+    "value_flow_truncated_procedures": 1,
+    "limit": "Counts cover only the two explicitly enumerated targeted evidence sections. They are not a percentage or claim of full service, feature, runtime or application coverage."
   }
 }
