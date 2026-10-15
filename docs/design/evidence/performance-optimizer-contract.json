@@ -9,6 +9,10 @@
       "file_version": "25.0.0.1",
       "product_version": "7.12.1526.0",
       "sha256": "ebf22f13d136528dbbd08317e0d1b20e6b6c1b6078c15b6fb02d7589df39ef4f"
+    },
+    "service": {
+      "file_version": "7.12.1526.0",
+      "sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd"
     }
   },
   "gui_evidence": [
@@ -235,7 +239,7 @@
     "Use independent Rust services and providers; observed vendor request names are reconstruction evidence, not an implemented backend."
   ],
   "unknowns": [
-    "Exact UI-to-native dispatcher association",
+    "Exact UI command translation to the service-side native dispatcher (service registration names and selected callbacks are now statically linked)",
     "Service-side component mutation and app/component association",
     "Impact classification",
     "Service lifecycle, process-exit monitoring and return-to-sleep",
@@ -261,5 +265,227 @@
     "chunks/analytics.js": "5f6b15cdb29f94d3fbc4c431c28153c8c6caa60e21cec537c5e145fe8055778a",
     "chunks/webview.js": "7adef99d34ef6da70fe79f108cce4af9306441dbd27d324e1491aa4dc14b0350",
     "chunks/en.js": "045ca0c315dd09981c86624ece95ff0d6e049bdf90635fbb8909678d55b8ae27"
+  },
+  "service_dispatch_evidence": {
+    "method": "Supplementary bounded offline PE/.pdata mapping, exact NUL-terminated strings and DUMPBIN instruction-boundary validation; separate from the completed REA/Ghidra reactivator run",
+    "tool": {
+      "name": "Microsoft DUMPBIN",
+      "version": "14.44.35229.0",
+      "options": [
+        "/NOPDB",
+        "/DISASM:BYTES",
+        "/RANGE"
+      ]
+    },
+    "registration_functions": [
+      "0x1408298c0",
+      "0x14082b430"
+    ],
+    "bindings": [
+      {
+        "command": "app.ProgramDeactivator.GetStatus",
+        "string_va": "0x141910cf8",
+        "string_reference": "0x1408299d0",
+        "table_reference": "0x1408299a4",
+        "table_va": "0x141890120",
+        "third_table_entry": "0x140836b40"
+      },
+      {
+        "command": "app.ProgramDeactivator.Scan",
+        "string_va": "0x141910cd8",
+        "string_reference": "0x140829a64",
+        "table_reference": "0x140829a38",
+        "table_va": "0x141890158",
+        "third_table_entry": "0x140836ab0"
+      },
+      {
+        "command": "app.ProgramDeactivator.Clean",
+        "string_va": "0x141910cb8",
+        "string_reference": "0x140829af8",
+        "table_reference": "0x140829acc",
+        "table_va": "0x141890190",
+        "third_table_entry": "0x140836a40"
+      },
+      {
+        "command": "app.ProgramDeactivator.CleanAll",
+        "string_va": "0x141910c98",
+        "string_reference": "0x140829b8c",
+        "table_reference": "0x140829b60",
+        "table_va": "0x1418901c8",
+        "third_table_entry": "0x1408369d0"
+      },
+      {
+        "command": "app.ProgramDeactivator.Revert",
+        "string_va": "0x141910c78",
+        "string_reference": "0x140829c20",
+        "table_reference": "0x140829bf4",
+        "table_va": "0x141890200",
+        "third_table_entry": "0x140836960"
+      },
+      {
+        "command": "app.ProgramDeactivator.RevertAll",
+        "string_va": "0x141910c50",
+        "string_reference": "0x140829cb4",
+        "table_reference": "0x140829c88",
+        "table_va": "0x141890238",
+        "third_table_entry": "0x1408368d0"
+      },
+      {
+        "command": "app.ProgramDeactivator.RevertAllSync",
+        "string_va": "0x141910c28",
+        "string_reference": "0x140829d48",
+        "table_reference": "0x140829d1c",
+        "table_va": "0x141890270",
+        "third_table_entry": "0x140836840"
+      },
+      {
+        "command": "app.ProgramDeactivator.Stop",
+        "string_va": "0x141910c08",
+        "string_reference": "0x140829ddc",
+        "table_reference": "0x140829db0",
+        "table_va": "0x1418902a8",
+        "third_table_entry": "0x1408367c0"
+      },
+      {
+        "command": "app.ProgramDeactivator.GetItems",
+        "string_va": "0x141910be8",
+        "string_reference": "0x140829e70",
+        "table_reference": "0x140829e44",
+        "table_va": "0x1418902e0",
+        "third_table_entry": "0x140836750"
+      },
+      {
+        "command": "app.ProgramDeactivator.GetDebugDetails",
+        "string_va": "0x141910b70",
+        "string_reference": "0x140829f04",
+        "table_reference": "0x140829ed8",
+        "table_va": "0x141890318",
+        "third_table_entry": "0x1408366e0"
+      },
+      {
+        "command": "app.ProgramDeactivator.GetItemDetails",
+        "string_va": "0x141910af8",
+        "string_reference": "0x140829f98",
+        "table_reference": "0x140829f6c",
+        "table_va": "0x141890350",
+        "third_table_entry": "0x140836670"
+      },
+      {
+        "command": "app.ProgramDeactivator.SetIgnoreFlag",
+        "string_va": "0x141910bc0",
+        "string_reference": "0x14082a02c",
+        "table_reference": "0x14082a000",
+        "table_va": "0x141890388",
+        "third_table_entry": "0x140836600"
+      },
+      {
+        "command": "app.ProgramDeactivator.ReenableForExe",
+        "string_va": "0x141910b98",
+        "string_reference": "0x14082a0c0",
+        "table_reference": "0x14082a094",
+        "table_va": "0x1418903c0",
+        "third_table_entry": "0x1408363a0"
+      },
+      {
+        "command": "pd.ReenableForExe",
+        "string_va": "0x141911ff0",
+        "string_reference": "0x14082b47f",
+        "table_reference": "0x14082b453",
+        "table_va": "0x141890468",
+        "third_table_entry": "0x1408363a0"
+      },
+      {
+        "command": "pd.RevertProgram",
+        "string_va": "0x141912008",
+        "string_reference": "0x14082b513",
+        "table_reference": "0x14082b4e7",
+        "table_va": "0x1418904a0",
+        "third_table_entry": "0x140836270"
+      }
+    ],
+    "callback_observations": [
+      {
+        "procedures": [
+          "0x1408363a0"
+        ],
+        "fact": "Both app.ProgramDeactivator.ReenableForExe and pd.ReenableForExe registration objects point to this same third table entry. Its inspected body references exeName and dispatches through virtual slot 0xc0."
+      },
+      {
+        "procedures": [
+          "0x140836a40",
+          "0x14082a290"
+        ],
+        "fact": "The Clean callback jumps to 0x14082a290. Its body traverses supplied data and invokes virtual slot 0xb0. The actual SDK target and component mutations remain unresolved."
+      },
+      {
+        "procedures": [
+          "0x1408368d0",
+          "0x140836840"
+        ],
+        "fact": "RevertAll and RevertAllSync callback bodies dispatch through the same virtual slot 0xa0 with flag values 0 and 1 respectively; this does not establish runtime completion or recovery behavior."
+      },
+      {
+        "procedures": [
+          "0x140836ab0"
+        ],
+        "fact": "The Scan callback body dispatches through virtual slot 0x48. Exact implementation remains unresolved."
+      },
+      {
+        "procedures": [
+          "0x140836270"
+        ],
+        "fact": "The pd.RevertProgram callback body dispatches through virtual slot 0xb8 with a string-derived argument and flag 1. Its effect and lifecycle role remain unresolved."
+      }
+    ],
+    "private_record_sha256": {
+      "optimizer-service-dispatch.disasm.txt": "b1fd23b7fb8a71f0030bdf1003103b3a47273ebc4585a1fe793adc707e14835e",
+      "optimizer-service-reactivation-handler.disasm.txt": "d84217afd6fb466328d02d6bab538a7a5b27b6f5e04e8a8f904772a2bc6275be",
+      "optimizer-service-dispatch-callbacks.disasm.txt": "c6549a2fc1857f1e84456bba5052b7817d0c1dc6eda70ce3f3cea7f019ccc943",
+      "optimizer-service-pd-callback.disasm.txt": "fb4757d6df73de1f2cacec50cac81f7779f900ca3e092048df6e2d16c15cd428",
+      "optimizer-service-clean-handler.disasm.txt": "a568696c1854701f0bbfd791d5c0278b02b176aba8d2863a1236b9e85f608de5",
+      "optimizer-service-pd-revert-callback.disasm.txt": "a34df552a3fa3a26d0c5c4784e6cead94763ed2b6cc02a455cf70638b94db6aa",
+      "optimizer-service-validated-bindings.json": "80dbef175d4dff659072d044e2c645075cd0345fad7bb52f7d4a5b8d7840d2cc"
+    },
+    "limits": [
+      "Only two bounded command-registration functions and selected callback bodies were inspected",
+      "PE unwind ranges may be fragments; the CleanAll business body was only partially inspected",
+      "Third table-entry and registration links are static code/data evidence, not successful host requests",
+      "Indirect SDK targets, component associations and mutation, process-exit/re-sleep and recovery remain unresolved",
+      "The earlier full service Ghidra timeout is not counted as completed analysis"
+    ],
+    "target_executed": false
+  },
+  "dcleaner_read_only_preflight": {
+    "source": "src/optimizer_registration.rs",
+    "native_api": "inspect(paths: &[PathBuf], cancel: &AtomicBool) -> RegistrationReport",
+    "windows_behavior": "HKLM IFEO image-key and direct-filter raw value observations in requested 32/64 views; shared views are not independent hooks",
+    "non_windows_behavior": "Explicit unsupported report; not a macOS optimizer adapter",
+    "bounds": {
+      "input_paths": 32,
+      "path_utf16_units": 32767,
+      "direct_subkeys_per_view": 64,
+      "values_per_key": 128,
+      "values_per_view": 512,
+      "value_bytes": 65536,
+      "raw_name_and_value_bytes_per_view": 1048576
+    },
+    "fixture_tests_passed": 11,
+    "native_read_smoke": {
+      "passed": true,
+      "input_paths": 2,
+      "view_observations": 4,
+      "key_observations": 10,
+      "value_observations": 20,
+      "denied_views": 0,
+      "unexamined_paths": 0,
+      "registry_writes": false
+    },
+    "authority_limits": [
+      "Supplied-path syntax is not verified executable identity",
+      "Sequential raw reads are not an atomic snapshot",
+      "No debugger ownership or effective-precedence inference",
+      "No registration writes, helper installation, RPC, launch, process effects, Sleep/Wake or return-to-sleep implementation",
+      "Not connected as a GUI Sleep action"
+    ]
   }
 }

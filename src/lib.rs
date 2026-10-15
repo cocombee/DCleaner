@@ -7,6 +7,7 @@ pub mod duplicates;
 pub mod effects;
 pub mod health;
 pub mod instance;
+pub mod optimizer_registration;
 pub mod platform;
 pub mod privacy;
 pub mod programs;
