@@ -259,5 +259,212 @@
       "Complete native Cloud provider/account/results/row-action/review/progress/error/restore states",
       "All current native visual/accessibility acceptance and full application parity"
     ]
+  },
+  "workflow_integration": {
+    "source_commit": "b39c1e8a3bf365ba14d89f6c9bda06675aba502a",
+    "captured_utc": "2026-10-15T08:25:26.062Z",
+    "status": "Native cloud UI, account/scan/review/effect/history owners compiled and fixture-tested; real provider and pixel acceptance remain open",
+    "source_hash_basis": "Committed repository blob bytes (Git-normalized text); local compile used the same source content",
+    "sources": [
+      {
+        "path": "Cargo.toml",
+        "sha256": "5d6d31bafdf0e5e66d0d4e133063fb0e0b20cfe230784a96ae7aaef689170627"
+      },
+      {
+        "path": "Cargo.lock",
+        "sha256": "a128e85b0f2dfb25bfd2309e838356b99bf47cab0fc5584d43dd726d267a99c0"
+      },
+      {
+        "path": "build.rs",
+        "sha256": "b4ec275550c0bff20b502f5b6b550868630078b80112ed54aef385b021a3a093"
+      },
+      {
+        "path": "src/app.rs",
+        "sha256": "7408c2c5e1a5790dca52a79eff5f1e62f36e3e8d2d38363a1a5e7aab01399c98"
+      },
+      {
+        "path": "src/main.rs",
+        "sha256": "a5e88d7bd1b81aa93269966aeb001df1e5a7266cdedfd949993874108d354cf1"
+      },
+      {
+        "path": "src/lib.rs",
+        "sha256": "d60f151349b29e561cc05503730628a9bd536e99afb02f5fd9512bf553b025e0"
+      },
+      {
+        "path": "src/theme.rs",
+        "sha256": "714538bfd8de10033be639675ef0e96d4903016b58738868dbd842a1c205583d"
+      },
+      {
+        "path": "src/brand.rs",
+        "sha256": "f2cd6a0183f12a9cfb997b0046e0e19ab3b01bb892a4c7de7a2a1ff4e227da07"
+      },
+      {
+        "path": "src/view_cloud.rs",
+        "sha256": "a80539f85ba19d2f6f0f593b11494fa7a7d7535d62f12358a34f2a6ead51559f"
+      },
+      {
+        "path": "src/cloud.rs",
+        "sha256": "579625721e07a0fa727e599feb93d1a39530402a145aa0f6bd185a67e2c530b0"
+      },
+      {
+        "path": "src/cloud_http.rs",
+        "sha256": "72d65275108a995ccd4fc71d45ea288a3ab7858ef75894a7e01b1395074baeb4"
+      },
+      {
+        "path": "src/cloud_inventory.rs",
+        "sha256": "711750fb06002313cfbcde1ae23e42b278cc089e255f93233d86016efd037e78"
+      },
+      {
+        "path": "src/cloud_auth.rs",
+        "sha256": "66b759c4cfd3d9c858ff7e8d61a2e04eeaa7cc4fb4a46c4d4523bc58162a0a59"
+      },
+      {
+        "path": "src/cloud_vault.rs",
+        "sha256": "99f93a9af6fc420bd1cfcec24d828403b0887ea252e5788ca0eedd7d4f54716a"
+      },
+      {
+        "path": "src/cloud_drive.rs",
+        "sha256": "adf0b7966e22ccdc46c4427c735e4c4761a07739e3ec11f6a5d2127d6dce400f"
+      },
+      {
+        "path": "src/cloud_gmail.rs",
+        "sha256": "7811ce89852965ff7ae42e558bc39ccdac60f37afebfb84a4a1df5d5ed6c135f"
+      },
+      {
+        "path": "src/cloud_onedrive.rs",
+        "sha256": "687568dbbdf464648414d82c8ad7c2eea51218373f163a85d3bf1a538a326776"
+      },
+      {
+        "path": "src/cloud_dropbox.rs",
+        "sha256": "a9100fd7dd3dc9a98896ceefcf66f723d07d41e9d3d79381de543fb1f0f6c6de"
+      },
+      {
+        "path": "src/cloud_actions.rs",
+        "sha256": "35801ce3e05b6eed8be4df2395e12d5dd31d280809cdeab8831dbb4ba8228673"
+      },
+      {
+        "path": "src/cloud_store.rs",
+        "sha256": "295686a299641c143283d969f1733739964417cda60d81d8578a713e348b22f0"
+      },
+      {
+        "path": "assets/brand/dcleaner.svg",
+        "sha256": "2d10935a72ede9491d1ae4294f89a16930286a80a6284623c87519c1bac367cc"
+      },
+      {
+        "path": "assets/brand/dcleaner.png",
+        "sha256": "d4b00151d1621e85c3b9d7f0dea3140890293b986ab45c122412df8f84a350dc"
+      },
+      {
+        "path": "assets/brand/dcleaner.ico",
+        "sha256": "f332155205f75ea2a311d099eae0b8971c94f780a5ea8c353ead25e0efde10ef"
+      },
+      {
+        "path": "assets/brand/dcleaner.icns",
+        "sha256": "69ee4afb3ff3b69ebcc0ed2d7501b100d26f2666bfd07fedf8bbf60978ccaac7"
+      },
+      {
+        "path": "assets/brand/windows.rc",
+        "sha256": "607d290b5eaae99a70f9c5ecad3f66f5e3d58d3df27a12941d7a5878f5827927"
+      }
+    ],
+    "windows_validation": {
+      "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+      "tests": {
+        "passed": 372,
+        "failed": 0,
+        "ignored": 7,
+        "suites": 15
+      },
+      "ordinary_tests_only": true,
+      "test_log_sha256": "3a1439a8a7a274d5756c8ab8a92b2aa57f75bfd8f7644c0ff20ce16f5f973750",
+      "release": "passed",
+      "release_log_sha256": "8ff6b39b6bf4d441661b500f8d6103f3daaacc747287f49afd3610c09e0f9b70",
+      "installed_sha256": "1355339d990c6163258a7633037f9c0c23eb94fad8f86ef39c984fb5668980a4",
+      "installed_executables": 1,
+      "start_menu_shortcuts": 1,
+      "launched": false,
+      "mouse_control": false
+    },
+    "ci": {
+      "run_url": "https://github.com/cocombee/DCleaner/actions/runs/38705228933",
+      "source_commit": "b39c1e8a3bf365ba14d89f6c9bda06675aba502a",
+      "status": "in_progress; no result claimed"
+    },
+    "ui": {
+      "navigation": "one Cloud Drive Cleaner section",
+      "intro": true,
+      "provider_connect": [
+        "Google Drive",
+        "OneDrive",
+        "Dropbox",
+        "Gmail"
+      ],
+      "registration_wizard": false,
+      "account_switch_disconnect_reconnect": true,
+      "existing_onedrive_choice": true,
+      "scan_cancel_partial_results": true,
+      "filters": [
+        "all",
+        "large",
+        "possible duplicates",
+        "older",
+        "ignored",
+        "history"
+      ],
+      "row_actions": [
+        "review",
+        "details",
+        "ignore/include",
+        "review trash"
+      ],
+      "selection_review": true,
+      "offline_history": true,
+      "history_paging_max_rows": 200,
+      "trash_batch_max_items": 200,
+      "restore_attempt_gating": true,
+      "duplicate_primary_scan_removed": true
+    },
+    "logo": {
+      "style": "flat solid vector shapes; no letters, gradients, gloss, shadows or depth",
+      "colors": [
+        "#087CFF",
+        "#65BFFF"
+      ],
+      "master": "assets/brand/dcleaner.svg",
+      "exports": [
+        "assets/brand/dcleaner.png",
+        "assets/brand/dcleaner.ico",
+        "assets/brand/dcleaner.icns"
+      ],
+      "creation": "Built-in ImageGen concept, followed by repo-native flat SVG implementation; the SVG is production authority",
+      "concept_prompt": "Circular cleaning sweep and a four-point sparkle, no letters; cobalt and sky blue, strictly flat solid shapes on transparency",
+      "installed_resource_check": {
+        "method": "Static Windows icon-resource extraction; executable not launched",
+        "dimensions": [
+          32,
+          32
+        ],
+        "sha256": "cda86955d61744b4ca0f4f7c8d6cf56e2a843e91155916a5de78e2f48331db50",
+        "inspected": true
+      }
+    },
+    "recovery": {
+      "intent_before_dispatch": true,
+      "generation_bound": true,
+      "client_registration_bound": true,
+      "same_scope_reconnect_preserves_history": true,
+      "unknown_outcomes_never_retried": true,
+      "permanent_delete_route": false
+    },
+    "acceptance_gates": [
+      "DCleaner-owned provider credentials have not been supplied; Connect reports unavailable rather than creating a fake account",
+      "Actual provider consent, live scans, trash and restore have not been exercised",
+      "Original external service pages after sign-in have not been inspected",
+      "Folder descendant cleanup remains unsupported",
+      "OneDrive work/school restore is unsupported by the documented Personal restore API",
+      "Bounded scans of very large accounts need resumable traversal acceptance",
+      "No new native app screenshot or pixel acceptance was performed; installation did not launch the app",
+      "macOS native account, credential and visual runtime acceptance remain open"
+    ]
   }
 }
