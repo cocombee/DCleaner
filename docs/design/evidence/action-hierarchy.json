@@ -8820,7 +8820,7 @@
     "ci_source_commit": "55163751d7505f4590bbe500c1289268edffcbf7"
   },
   "source_commit_scope": "Original grouping batch, retained with its historical evidence",
-  "latest_source_commit": "43e8f9b4b1c84f89d9fdf63cb523b43afe7cb657",
+  "latest_source_commit": "0d2f9e8ce0ee0022db13834330839a2e06f0ecab",
   "user_comment_refinements": {
     "source_commit": "eab64061d4485f8ebb808363f0f4603c7e113287",
     "scope": "Actual 550 emphasis, selected-only menu emphasis, 25% thinner icons, capsule controls, centered 26px row actions and grouped Health incomplete-scan notice",
@@ -15769,5 +15769,207 @@
       "full_app_delivery_gate": "OPEN: complete original-action coverage, native/GPU/keyboard/macOS acceptance and outstanding feature owners remain in PLAN.md."
     },
     "scope_limit": "This closes the measured padding and visible scrollbar defects. It does not close every original workflow, installation acceptance or full 1:1 parity."
+  },
+  "hover_help_correction": {
+    "source_commit": "0d2f9e8ce0ee0022db13834330839a2e06f0ecab",
+    "build": {
+      "installed_acceptance": false,
+      "native_effects": false,
+      "source_files": {
+        "theme.rs": "cdcc90244c9794870080fb4ca5251e3dca5f139a04b1df6e3b4d5c68cc5d62b8",
+        "offscreen_qa.rs": "655800406471b478673ff134c354bf24544521599b037356f8886c3a863750a1",
+        "view_startup.rs": "38020b08ed98bff097283076640f366d497b9fcfc2e821e38bacfc93de5a7e85",
+        "app.rs": "1cc9f09bf411119ea6e451bc0030e8a5aec1a8a6c0cd6d830289c6e114b13449"
+      },
+      "renderer_binary_sha256": "13f7a7c7571634d74282a10570145c8be288a185ae57144b9e87379c1ca00a9e",
+      "physical_input": false
+    },
+    "user_override": "Remove the filled information button; short explanations belong on hover.",
+    "implementation": "Startup Manager title tooltip; four existing section tabs retain descriptions and source-availability notes. Old help button/modal/state/artwork/fixture/actions removed. Inventory/detail/change workflows remain.",
+    "verification": {
+      "ui_tests_passed": 65,
+      "opt_in_ignored": 1,
+      "format_and_diff_check": "PASS",
+      "windows_release_build": "PASS",
+      "stills": 4,
+      "hover_stories": 2,
+      "physical_input": false,
+      "foreground_activation": false,
+      "reinstallation": false,
+      "rendered_sizes": [
+        "minimum",
+        "reference",
+        "wide"
+      ],
+      "light_theme": "reference",
+      "actual_hover_tooltip_asserted": [
+        "minimum",
+        "reference"
+      ]
+    },
+    "frames": [
+      {
+        "name": "hierarchy-startup-populated-minimum-hover-help-open",
+        "image_sha256": "df583d2b8d33d6b4648850fc8457e860bcedec8959497d13113462b754bf422c",
+        "layout_sha256": "a7548289f17579a539ddcd9fdcccd30d50281ae3b3404d1e67897d3f9d09462f",
+        "renderer": {
+          "fixture": "startup-populated",
+          "host_inventory": false,
+          "installed_acceptance": false,
+          "native_framebuffer": false,
+          "physical_input": false,
+          "renderer": "CPU rasterization of actual egui meshes; no OS window",
+          "scale": 1.0,
+          "size": [
+            760,
+            600
+          ],
+          "synthetic_data": true
+        },
+        "actions": [
+          {
+            "interaction": "hover",
+            "label": "Startup Manager help",
+            "occurrence": null,
+            "physical_input": false,
+            "post_state": {
+              "page": "Startup Manager",
+              "startup_tooltip_open": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "hierarchy-startup-populated-minimum-hover-help",
+        "image_sha256": "24aa579ab5eeeca8008e60d21dbb978373ed1721e3f220758a18325ebe6bc000",
+        "layout_sha256": "a7548289f17579a539ddcd9fdcccd30d50281ae3b3404d1e67897d3f9d09462f",
+        "renderer": {
+          "fixture": "startup-populated",
+          "host_inventory": false,
+          "installed_acceptance": false,
+          "native_framebuffer": false,
+          "physical_input": false,
+          "renderer": "CPU rasterization of actual egui meshes; no OS window",
+          "scale": 1.0,
+          "size": [
+            760,
+            600
+          ],
+          "synthetic_data": true
+        },
+        "actions": []
+      },
+      {
+        "name": "hierarchy-startup-populated-reference-hover-help-light",
+        "image_sha256": "fd1ef9b88f9adae2cbc29892c0f06c6348ab7fdf807f86b72a91a994e3ea278a",
+        "layout_sha256": "a3ea705512b9bb201996fc2f4814190e2b8809b5fbedd454aec7bec9e3ba95dd",
+        "renderer": {
+          "fixture": "startup-populated",
+          "host_inventory": false,
+          "installed_acceptance": false,
+          "native_framebuffer": false,
+          "physical_input": false,
+          "renderer": "CPU rasterization of actual egui meshes; no OS window",
+          "scale": 1.0,
+          "size": [
+            920,
+            612
+          ],
+          "synthetic_data": true
+        },
+        "actions": []
+      },
+      {
+        "name": "hierarchy-startup-populated-reference-hover-help-open",
+        "image_sha256": "4e3014922b42e49b6ac79444a7d15fa52ff7860371f0ea7ed0c7e43a66c9b260",
+        "layout_sha256": "a3ea705512b9bb201996fc2f4814190e2b8809b5fbedd454aec7bec9e3ba95dd",
+        "renderer": {
+          "fixture": "startup-populated",
+          "host_inventory": false,
+          "installed_acceptance": false,
+          "native_framebuffer": false,
+          "physical_input": false,
+          "renderer": "CPU rasterization of actual egui meshes; no OS window",
+          "scale": 1.0,
+          "size": [
+            920,
+            612
+          ],
+          "synthetic_data": true
+        },
+        "actions": [
+          {
+            "interaction": "hover",
+            "label": "Startup Manager help",
+            "occurrence": null,
+            "physical_input": false,
+            "post_state": {
+              "page": "Startup Manager",
+              "startup_tooltip_open": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "hierarchy-startup-populated-reference-hover-help",
+        "image_sha256": "bfa7780a425c344ece99692ec40042f520f056feca6339a191e66d826da1e2a9",
+        "layout_sha256": "a3ea705512b9bb201996fc2f4814190e2b8809b5fbedd454aec7bec9e3ba95dd",
+        "renderer": {
+          "fixture": "startup-populated",
+          "host_inventory": false,
+          "installed_acceptance": false,
+          "native_framebuffer": false,
+          "physical_input": false,
+          "renderer": "CPU rasterization of actual egui meshes; no OS window",
+          "scale": 1.0,
+          "size": [
+            920,
+            612
+          ],
+          "synthetic_data": true
+        },
+        "actions": []
+      },
+      {
+        "name": "hierarchy-startup-populated-wide-hover-help",
+        "image_sha256": "2e4a7e14a05cc071a7695dac271f6aab989d58ef965b40502fcd0f71d9d4ae58",
+        "layout_sha256": "d5c55d8df4cf27e5028640839cf7736fde9f80abd168f682a1d772690432ede2",
+        "renderer": {
+          "fixture": "startup-populated",
+          "host_inventory": false,
+          "installed_acceptance": false,
+          "native_framebuffer": false,
+          "physical_input": false,
+          "renderer": "CPU rasterization of actual egui meshes; no OS window",
+          "scale": 1.0,
+          "size": [
+            1240,
+            820
+          ],
+          "synthetic_data": true
+        },
+        "actions": []
+      }
+    ],
+    "published_authored_images": [
+      {
+        "path": "design/evidence/user-refinements/hover-help/startup.png",
+        "sha256": "bfa7780a425c344ece99692ec40042f520f056feca6339a191e66d826da1e2a9"
+      },
+      {
+        "path": "design/evidence/user-refinements/hover-help/title-tooltip-crop.png",
+        "sha256": "561c8a4900bfbdab8bcbcfafa251e5bddb9e57ada6bf49fa7ba478b15e0e5d4d"
+      },
+      {
+        "path": "design/evidence/user-refinements/hover-help/title-tooltip.png",
+        "sha256": "4e3014922b42e49b6ac79444a7d15fa52ff7860371f0ea7ed0c7e43a66c9b260"
+      }
+    ],
+    "anti_slop_after_audit": {
+      "R-03_R-34": "PASS: inspected three widths and supplementary light state; heading/controls fit.",
+      "R-23": "PASS: remove redundant chrome and reuse existing title/tabs for user-requested hover help; no new decorative assets.",
+      "R-26_R-35": "PASS within this scope: real in-memory pointer hover opens the actual egui tooltip at both tested sizes, with asserted tooltip state and image evidence.",
+      "full_app_delivery_gate": "OPEN; these scoped checks do not establish complete original/native/macOS parity."
+    }
   }
 }
