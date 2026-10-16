@@ -174,6 +174,30 @@ fn field_style(ui: &mut egui::Ui) {
     }
 }
 
+pub fn hover_help(ui: &egui::Ui, response: &egui::Response, label: &str, text: &str) {
+    response.clone().on_hover_text(text);
+    #[cfg(debug_assertions)]
+    {
+        record_labeled_control(
+            ui,
+            "hover-help",
+            response.rect,
+            0,
+            label,
+            response.enabled(),
+        );
+        ui.ctx()
+            .data_mut(|data| data.insert_temp(egui::Id::new(("hover-help", label)), response.id));
+    }
+    let _ = (ui, label);
+}
+
+#[cfg(debug_assertions)]
+pub fn qa_tooltip_open(ctx: &egui::Context, label: &str) -> bool {
+    ctx.data(|data| data.get_temp::<egui::Id>(egui::Id::new(("hover-help", label))))
+        .is_some_and(|id| egui::Tooltip::was_tooltip_open_last_frame(ctx, id))
+}
+
 /// Sets the row height before laying out labels, so earlier labels are not
 /// positioned against a shorter default row than the fields that follow.
 pub fn control_row<R>(

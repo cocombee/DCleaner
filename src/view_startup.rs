@@ -36,6 +36,23 @@ fn startup_section_icon(section: StartupSection) -> theme::Icon {
     }
 }
 
+fn startup_section_description(section: StartupSection) -> &'static str {
+    match section {
+        StartupSection::StartupApps => {
+            "Run entries and Startup-folder shortcuts registered for the user or machine."
+        }
+        StartupSection::ScheduledTasks => {
+            "Task Scheduler registrations, with their available trigger and action details."
+        }
+        StartupSection::ContextMenu => {
+            "Shell commands and extensions registered for Windows Explorer menus."
+        }
+        StartupSection::WindowsServices => {
+            "Service startup configuration and current service state."
+        }
+    }
+}
+
 fn startup_cached_tab_count(inventory: Option<&StartupInventory>) -> Option<usize> {
     let inventory = inventory?;
     match inventory.quality {
@@ -55,7 +72,6 @@ pub(super) struct StartupUi {
     descending: bool,
     selected: Option<StartupId>,
     details_open: bool,
-    info_open: bool,
     was_focused: bool,
     last_refresh: Option<std::time::Instant>,
     background_read: Option<Receiver<StartupInventory>>,
@@ -79,7 +95,6 @@ impl Default for StartupUi {
             descending: false,
             selected: None,
             details_open: false,
-            info_open: false,
             was_focused: false,
             last_refresh: None,
             background_read: None,
@@ -171,13 +186,6 @@ impl App {
     pub(super) fn seed_startup_qa(&mut self, case: &str) -> Result<(), String> {
         if !self.qa_fixture_mode() {
             return Err("Startup visual fixtures require fixture mode.".into());
-        }
-        if case == "startup-help" {
-            self.startup_ui = StartupUi {
-                info_open: true,
-                ..StartupUi::default()
-            };
-            return Ok(());
         }
         if !matches!(
             case,
@@ -509,26 +517,6 @@ impl App {
         self.history_panel(ui, t);
     }
 
-    pub(super) fn startup_info_button(&mut self, ui: &mut egui::Ui) {
-        let t = theme::tokens(self.prefs.dark);
-        let response = ui.add_sized(
-            [26., 26.],
-            egui::Button::new(RichText::new("i").family(theme::semibold()).color(t.muted))
-                .corner_radius(13)
-                .fill(t.tint)
-                .stroke(egui::Stroke::new(1., t.border)),
-        );
-        #[cfg(debug_assertions)]
-        theme::record_fixture_control(ui, "About Startup Manager", &response);
-        if response.on_hover_text("About Startup Manager").clicked() {
-            self.startup_ui.info_open = true;
-        }
-    }
-
-    #[cfg(debug_assertions)]
-    pub(super) fn qa_startup_info_open(&self) -> bool {
-        self.startup_ui.info_open
-    }
     #[cfg(debug_assertions)]
     pub(super) fn qa_startup_sort_state(&self) -> serde_json::Value {
         serde_json::json!({"column":match self.startup_ui.sort {SortColumn::Program => "Program", SortColumn::Publisher => "Publisher", SortColumn::FilePath => "File path", SortColumn::Enabled => state_header_label(self.startup_ui.section)},"descending":self.startup_ui.descending})
@@ -575,7 +563,6 @@ impl App {
                 dcleaner::startup_removal::supports_run_value_removal(&entry.identity)
             }),
             "details_open": self.startup_ui.details_open,
-            "info_open": self.startup_ui.info_open,
             "more_open": self.startup_ui.qa_more_open,
             "review_kind": review_kind,
             "removal_review_kind": removal_review_kind,
@@ -817,9 +804,6 @@ impl App {
     }
 
     pub(super) fn startup_dialog(&mut self, ctx: &egui::Context) {
-        if self.startup_ui.info_open {
-            self.startup_info_dialog(ctx);
-        }
         if self.startup_ui.details_open {
             let t = theme::tokens(self.prefs.dark);
             let mut close = false;
@@ -938,100 +922,6 @@ impl App {
             } else {
                 self.begin_startup_action(action, ctx);
             }
-        }
-    }
-
-    fn startup_info_dialog(&mut self, ctx: &egui::Context) {
-        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
-            self.startup_ui.info_open = false;
-            return;
-        }
-        let t = theme::tokens(self.prefs.dark);
-        let width = (ctx.content_rect().width() - 100.).clamp(260., 728.);
-        let body_height = (ctx.content_rect().height() - 190.).clamp(120., 520.);
-        let columns = if width < 500. { 1 } else { 2 };
-        let mut close = false;
-        let modal = egui::Modal::new(egui::Id::new("startup-manager-help"))
-            .frame(theme::dialog_frame(t))
-            .show(ctx, |ui| {
-                ui.set_width(width);
-                ui.horizontal(|ui| {
-                    startup_gauge_icon(ui, t);
-                    ui.label(RichText::new("Startup Manager").family(theme::semibold()).size(theme::FONT_TITLE));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let close_button = ui.add_sized(
-                            [28., 28.],
-                            egui::Button::new(RichText::new("×").size(theme::FONT_TITLE).color(t.muted))
-                                .corner_radius(14)
-                                .fill(t.tint)
-                                .stroke(egui::Stroke::new(1., t.border)),
-                        );
-                        if close_button.on_hover_text("Close help").clicked() {
-                            close = true;
-                        }
-                    });
-                });
-                ui.separator();
-                theme::scroll_vertical()
-                    .max_height(body_height)
-                    .auto_shrink([false, true])
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::Label::new(
-                                "Review the items that can run automatically, inspect their source and current state, and review the exact identity before changing a supported entry.",
-                            )
-                            .wrap(),
-                        );
-                        ui.add_space(14.);
-                        let cards = [
-                            (
-                                theme::Icon::Startup,
-                                "Startup apps",
-                                "Run entries and Startup-folder shortcuts registered for the user or machine.",
-                            ),
-                            (
-                                theme::Icon::History,
-                                "Scheduled tasks",
-                                "Task Scheduler registrations, with their available trigger and action details.",
-                            ),
-                            (
-                                theme::Icon::ContextMenu,
-                                "Context menu",
-                                "Shell commands and extensions registered for Windows Explorer menus.",
-                            ),
-                            (
-                                theme::Icon::Services,
-                                "Windows services",
-                                "Service startup configuration and current service state.",
-                            ),
-                        ];
-                        for row_start in (0..cards.len()).step_by(columns) {
-                            ui.columns(columns, |column_uis| {
-                                for (column_index, column_ui) in column_uis.iter_mut().enumerate() {
-                                    if let Some((icon, title, description)) =
-                                        cards.get(row_start + column_index)
-                                    {
-                                        startup_help_card(
-                                            column_ui,
-                                            t,
-                                            *icon,
-                                            title,
-                                            description,
-                                        );
-                                    }
-                                }
-                            });
-                            ui.add_space(10.);
-                        }
-                    });
-                ui.separator();
-                ui.with_layout(
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| close |= theme::primary(ui, "Got it", t, true),
-                );
-            });
-        if close || modal.should_close() {
-            self.startup_ui.info_open = false;
         }
     }
 
@@ -1378,15 +1268,17 @@ impl App {
                     startup_cached_tab_count(inventory),
                     theme::tokens(self.prefs.dark),
                 );
-                let response = match inventory.map(|inventory| &inventory.quality) {
-                    Some(InventoryQuality::Partial) => response.on_hover_text(
-                        "The count is omitted because some startup sources could not be read.",
+                let description = startup_section_description(section);
+                let tooltip = match inventory.map(|inventory| &inventory.quality) {
+                    Some(InventoryQuality::Partial) => format!(
+                        "{description}\n\nThe count is omitted because some startup sources could not be read."
                     ),
-                    Some(InventoryQuality::Unavailable) => response.on_hover_text(
-                        "The count is unavailable because Windows did not return a complete inventory.",
+                    Some(InventoryQuality::Unavailable) => format!(
+                        "{description}\n\nThe count is unavailable because Windows did not return a complete inventory."
                     ),
-                    Some(InventoryQuality::Complete) | None => response,
+                    Some(InventoryQuality::Complete) | None => description.to_owned(),
                 };
+                let response = response.on_hover_text(tooltip);
                 if response.clicked() {
                     self.startup_ui.section = section;
                     self.startup_ui.selected = None;
@@ -2124,80 +2016,6 @@ fn startup_qa_removal_intent(entry: &StartupEntry) -> Option<RemovalIntent> {
         before,
     };
     valid_removal_intent(&intent).then_some(intent)
-}
-
-fn startup_gauge_icon(ui: &mut egui::Ui, t: Tokens) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::splat(34.), egui::Sense::hover());
-    let center = egui::Pos2::new(rect.center().x, rect.center().y + 3.);
-    let radius = 11.;
-    let arc = (0..=16)
-        .map(|index| {
-            let angle = std::f32::consts::PI + std::f32::consts::PI * index as f32 / 16.;
-            egui::Pos2::new(
-                center.x + radius * angle.cos(),
-                center.y + radius * angle.sin(),
-            )
-        })
-        .collect::<Vec<_>>();
-    ui.painter()
-        .add(egui::Shape::line(arc, egui::Stroke::new(1.5, t.primary)));
-    ui.painter().line_segment(
-        [
-            egui::Pos2::new(center.x - radius, center.y),
-            egui::Pos2::new(center.x + radius, center.y),
-        ],
-        egui::Stroke::new(1.125, t.muted),
-    );
-    ui.painter().line_segment(
-        [center, egui::Pos2::new(center.x + 5., center.y - 6.)],
-        egui::Stroke::new(1.5, t.primary),
-    );
-    ui.painter().circle_filled(center, 1.5, t.primary);
-}
-
-fn startup_help_card(
-    ui: &mut egui::Ui,
-    t: Tokens,
-    icon: theme::Icon,
-    title: &str,
-    description: &str,
-) {
-    let width = (ui.available_width() - 24.).max(0.);
-    egui::Frame::new()
-        .fill(t.canvas)
-        .stroke(egui::Stroke::new(1., t.border))
-        .corner_radius(8)
-        .inner_margin(12.)
-        .show(ui, |ui| {
-            ui.set_min_width(width);
-            ui.set_width(width);
-            ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                ui.horizontal(|ui| {
-                    let (icon_rect, _) =
-                        ui.allocate_exact_size(Vec2::splat(22.), egui::Sense::hover());
-                    theme::paint_icon(ui.painter(), icon_rect, icon, t.primary);
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(title)
-                                .family(theme::semibold())
-                                .size(theme::FONT_TITLE)
-                                .color(t.foreground),
-                        )
-                        .wrap(),
-                    );
-                });
-                ui.add_space(5.);
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(description)
-                            .size(theme::FONT_CAPTION)
-                            .color(t.muted),
-                    )
-                    .wrap()
-                    .halign(Align::Min),
-                );
-            });
-        });
 }
 
 fn startup_export_enabled(state: &EnabledState) -> &'static str {

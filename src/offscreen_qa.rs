@@ -248,6 +248,8 @@ fn save_png(path: &Path, width: usize, height: usize, pixels: &[u8]) -> Result<(
 struct UiAction {
     label: String,
     occurrence: Option<usize>,
+    #[serde(default)]
+    hover: bool,
 }
 
 fn click_point(
@@ -362,6 +364,9 @@ pub fn run() -> Result<(), String> {
         serde_json::from_str(&std::env::var("DCLEANER_QA_ACTIONS").unwrap_or_else(|_| "[]".into()))
             .map_err(|error| format!("Invalid fixture UI actions: {error}"))?;
     if actions.len() > 16
+        || actions
+            .iter()
+            .any(|action| action.hover != (action.label == "Startup Manager help"))
         || actions.iter().any(|action| {
             !matches!(
                 action.label.as_str(),
@@ -374,8 +379,7 @@ pub fn run() -> Result<(), String> {
                     | "Details"
                     | "Close"
                     | "Copy path"
-                    | "About Startup Manager"
-                    | "Got it"
+                    | "Startup Manager help"
                     | "Scan now"
                     | "Start now"
                     | "Sort Program"
@@ -637,7 +641,7 @@ pub fn run() -> Result<(), String> {
                     &destination
                         .with_file_name(format!("{stem}.step-{:02}-after.png", action_log.len())),
                 )?;
-                action_log.push(serde_json::json!({"label":action.label,"occurrence":action.occurrence,"post_state":state,"physical_input":false}));
+                action_log.push(serde_json::json!({"label":action.label,"occurrence":action.occurrence,"interaction":if action.hover {"hover"} else {"click"},"post_state":state,"physical_input":false}));
             }
             if let Some(action) = actions.pop_front() {
                 app.qa_action_precondition(&action.label, &context)?;
@@ -655,16 +659,16 @@ pub fn run() -> Result<(), String> {
                     &destination
                         .with_file_name(format!("{stem}.step-{:02}-before.png", action_log.len())),
                 )?;
-                pending_events.extend([
-                    egui::Event::PointerMoved(point),
-                    egui::Event::PointerButton {
+                pending_events.push(egui::Event::PointerMoved(point));
+                if !action.hover {
+                    pending_events.push(egui::Event::PointerButton {
                         pos: point,
                         button: egui::PointerButton::Primary,
                         pressed: true,
                         modifiers: egui::Modifiers::NONE,
-                    },
-                ]);
-                release_at = Some(point);
+                    });
+                    release_at = Some(point);
+                }
                 awaiting_action = Some(action);
                 idle_frames = 0;
                 textures.finish_frame();

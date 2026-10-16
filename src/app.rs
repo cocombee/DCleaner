@@ -450,7 +450,6 @@ impl App {
                 | "startup-populated"
                 | "startup-details"
                 | "startup-error"
-                | "startup-help"
                 | "programs-empty"
                 | "programs-populated"
                 | "programs-search"
@@ -1715,8 +1714,7 @@ impl App {
             (Page::Cloud, "Cleanup history") => cloud["history"] == false,
             (Page::Disk, "Details") => !self.qa_disk_detail_open(),
             (Page::Disk, "Close" | "Copy path") => self.qa_disk_detail_open(),
-            (Page::Startup, "About Startup Manager") => !self.qa_startup_info_open(),
-            (Page::Startup, "Got it") => self.qa_startup_info_open(),
+            (Page::Startup, "Startup Manager help") => true,
             (Page::Startup, "Sort Program") => self.qa_startup_sort_state()["descending"] == false,
             (Page::Startup, "Sort Publisher") => true,
             (Page::Overview, "All statistics") => {
@@ -1891,7 +1889,7 @@ impl App {
         {
             return self.qa_startup_action_state(label);
         }
-        let state = serde_json::json!({"page":self.page.name(),"settings":view_settings::qa_state(self, ctx),"health_started":self.health_started(),"health":self.qa_health_state(),"clean_settings":self.qa_clean_settings_state(),"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_info_open":self.qa_startup_info_open(),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
+        let state = serde_json::json!({"page":self.page.name(),"settings":view_settings::qa_state(self, ctx),"health_started":self.health_started(),"health":self.qa_health_state(),"clean_settings":self.qa_clean_settings_state(),"cloud":self.qa_cloud_state(), "disk_details_open":self.qa_disk_detail_open(),"startup_tooltip_open":theme::qa_tooltip_open(ctx, "Startup Manager help"),"startup_sort":self.qa_startup_sort_state(),"seen_features":self.prefs.seen_features});
         let valid = match (self.page, label) {
             (Page::Settings, label) => {
                 let before = ctx
@@ -1948,8 +1946,7 @@ impl App {
             (Page::Disk, "Details") => self.qa_disk_detail_open(),
             (Page::Disk, "Close") => !self.qa_disk_detail_open(),
             (Page::Disk, "Copy path") => self.qa_disk_detail_open(),
-            (Page::Startup, "About Startup Manager") => self.qa_startup_info_open(),
-            (Page::Startup, "Got it") => !self.qa_startup_info_open(),
+            (Page::Startup, "Startup Manager help") => state["startup_tooltip_open"] == true,
             (Page::History, "All statistics") => true,
             (Page::Overview, "Rescan") => self.health_started(),
             (Page::Startup, "Sort Program") => {
@@ -2148,7 +2145,7 @@ impl App {
                     .show(ui, |ui| {
                         if !health_workflow {
                             ui.horizontal(|ui| {
-                                ui.heading(
+                                let heading = ui.heading(
                                     if self.page == Page::Overview
                                         && !self.health_started()
                                         && self.feature_seen("health")
@@ -2159,7 +2156,12 @@ impl App {
                                     },
                                 );
                                 if self.page == Page::Startup {
-                                    self.startup_info_button(ui);
+                                    theme::hover_help(
+                                        ui,
+                                        &heading,
+                                        "Startup Manager help",
+                                        "Manage apps, scheduled tasks, Explorer menu entries and services that can run automatically.",
+                                    );
                                 }
                                 if self.page == Page::Clean {
                                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
