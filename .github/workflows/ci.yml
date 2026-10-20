@@ -23,7 +23,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, macos-15]
+        # macOS runners bill at 10x and Windows at 2x on private repos, so
+        # pushes and pull requests check Windows only; start the workflow by
+        # hand (Actions > Run workflow) to include macOS.
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["windows-2025","macos-15"]' || '["windows-2025"]') }}
     env:
       CARGO_TERM_COLOR: always
     steps:
