@@ -4287,10 +4287,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -5385,10 +5388,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -6633,10 +6639,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -7869,10 +7878,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -8868,10 +8880,13 @@
             "pattern": "*",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 1,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           }
         ],
         "other_actions": [],
@@ -9125,10 +9140,13 @@
             "pattern": "SiteSecurityServiceState.txt",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 3,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           }
         ],
         "other_actions": [],
@@ -9879,10 +9897,13 @@
             "pattern": "*",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 1,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           }
         ],
         "other_actions": [],
@@ -10103,10 +10124,13 @@
             "pattern": "SiteSecurityServiceState.txt",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 3,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           }
         ],
         "other_actions": [],
@@ -11162,10 +11186,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -11189,10 +11216,13 @@
             "pattern": "wand.dat",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 2,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           }
         ],
         "other_actions": [],
@@ -12580,10 +12610,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -13831,10 +13864,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -15055,10 +15091,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -16263,10 +16302,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -17523,10 +17565,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -18747,10 +18792,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -19996,10 +20044,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -21188,10 +21239,13 @@
             "pattern": "Login Data",
             "handler": "FileDelete",
             "parameters": [],
-            "coverage": "open",
+            "coverage": "partial: generated declared profile-relative FileKey masks and first-descriptor ordering route this handler through bounded read-only file inventory and exact reviewed Trash cleanup; opt-in only (Keep me signed in off and an explicit saved-password warning); original runtime/global policy remains open",
             "native_config_retrieval_index": 0,
             "native_config_retrieval_stage": "cookie_file_ownership_native_2026_10_18",
-            "coverage_status": "open"
+            "coverage_status": "partial",
+            "implementation_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "discovery_evidence_stage": "saved_password_site_preference_file_rules_2026_10_22",
+            "limits": "Static FileDelete enum 2 route evidence (native_filedelete_route_2026_10_18) is category-agnostic; no new native body was traced for these categories. PathMatchSpecW semicolon mask lists were checked against the installed Windows API with owned names only. Live -journal/-wal/-shm sidecars block cleanup; key4.db and cert9.db are never declared. Original GUI aggregation, native keep/secure-delete policy and Mac effects remain unverified."
           },
           {
             "key": "OnFile2",
@@ -21780,8 +21834,8 @@
         "neobrowser": 10
       },
       "coverage_status_counts": {
-        "partial": 475,
-        "open": 112
+        "partial": 493,
+        "open": 94
       }
     }
   },
@@ -23494,7 +23548,7 @@
       ]
     }
   },
-  "latest_validated_stage": "generic_sqlite_table_count_foundation_2026_10_18",
+  "latest_validated_stage": "saved_password_site_preference_file_rules_2026_10_22",
   "site_storage_predicates_2026_10_18": {
     "confidence": "Statically derived native SQL; original target not executed.",
     "target_sha256": "cc457a013b56d75c8e2d29fb449383ba35498d2284fd8871bf126c25aeac4abd",
@@ -37463,7 +37517,8 @@
     "limits": [
       "No original execution, user browser data, source writes, native application activation, installation or Git mutation.",
       "Shared generic driver proof does not prove every FileKey projection, default category, native caller policy or successful cleanup."
-    ]
+    ],
+    "open_declarations_note": "open_declarations counts every FileDelete declaration open at that stage, not a current figure. After saved_password_site_preference_file_rules_2026_10_22 all 164 FileDelete declarations are partial; none remain open."
   },
   "history_download_file_rules_2026_10_18": {
     "scope": "Ordinary FileDelete handlers in thirty history/download rule sets across all fifteen existing profile families; conditional on resolved physical profile bindings.",
@@ -42063,7 +42118,7 @@
     "git_mutation": false,
     "goal_complete": false
   },
-  "latest_integrated_stage": "mozilla_session_reviewed_files_2026_10_18",
+  "latest_integrated_stage": "saved_password_site_preference_file_rules_2026_10_22",
   "chromium_session_reviewed_files_2026_10_18": {
     "scope": "Opt-in session discovery, exact reviewed file groups, guarded Trash and selective binary rewrite/recovery across13 Chromium families; native GUI counters and full native policy remain unverified.",
     "artifact_pin_filename": "session-owner-artifacts.json",
@@ -44721,5 +44776,56 @@
     "installation": false,
     "git_mutation": false,
     "goal_complete": false
+  },
+  "saved_password_site_preference_file_rules_2026_10_22": {
+    "scope": "Saved-password and site-preference FileDelete FileKeys (13 Chromium-family Login Data, Opera wand.dat, Mozilla/Thunderbird signons*.txt and logins*.json, Mozilla/Thunderbird SiteSecurityServiceState.txt) through the existing record-file owner, opt-in only.",
+    "promoted_handlers": [
+      "edge-chromium.savedpasswords:OnFile1",
+      "avgsecurebrowser.savedpasswords:OnFile1",
+      "ccleanerbrowser.savedpasswords:OnFile1",
+      "avastsecurebrowser.savedpasswords:OnFile1",
+      "mozilla.savedpasswords:OnFile2",
+      "mozilla.sitepreferences:OnFile4",
+      "thunderbird.savedpasswords:OnFile2",
+      "thunderbird.sitepreferences:OnFile4",
+      "opera.savedpasswords:OnFile1",
+      "opera.savedpasswords:OnFile3",
+      "google-chrome.savedpasswords:OnFile1",
+      "vivaldi.savedpasswords:OnFile1",
+      "brave.savedpasswords:OnFile1",
+      "operagx.savedpasswords:OnFile1",
+      "nortonprivatebrowser.savedpasswords:OnFile1",
+      "avirasecurebrowser.savedpasswords:OnFile1",
+      "arc.savedpasswords:OnFile1",
+      "neobrowser.savedpasswords:OnFile1"
+    ],
+    "catalogue_rules": 47,
+    "catalogue_filedelete_declarations": 160,
+    "catalogue_sha256": "3a99b8904e6177bb30cbee5a66cbde950caa24f358d510f065e6ef325cc3972e",
+    "generator": "reference/rea/generate-record-file-catalogue.py (local, ignored): adds savedpasswords->SavedPasswords and sitepreferences->SitePreferences; Mozilla container-only <MOZILLA_PROFILE_FOLDERS>\\* projects to the profile root.",
+    "native_evidence": "Reuses native_filedelete_route_2026_10_18: FileDelete enum 2 matches basenames with PathMatchSpecW and enters the generic file driver regardless of rule category.",
+    "owned_api_check": {
+      "api": "SHLWAPI PathMatchSpecW",
+      "semicolon_lists_match_each_member": true,
+      "journal_sidecar_does_not_match_exact_login_data": true,
+      "key4_db_not_matched": true
+    },
+    "product_policy": "Keep me signed in (default on) removes Cookies and SavedPasswords from every Custom Clean and Health scan; SavedPasswords also requires an explicit warning dialog when it is off. The unconditional unsupported-password-store notice was removed because every declared store now has an owner.",
+    "tests": [
+      "saved_password_files_are_owned_only_when_that_category_is_selected",
+      "mozilla_password_and_site_security_files_keep_keys_and_sql_stores_untouched",
+      "reviewed_login_data_moves_after_intent_but_a_live_journal_blocks_it",
+      "wildcard_only_chromium_profiles_discover_review_and_preserve_fresh_sources (updated)",
+      "categories_remain_opt_in_and_unimplemented_formats_are_explicit (updated)"
+    ],
+    "coverage_status_counts": {
+      "partial": 493,
+      "open": 94
+    },
+    "original_reference_executed": false,
+    "limits": [
+      "No original CCleaner execution, user browser data, installation or push.",
+      "Static plus owned fixtures only: partial, not verified."
+    ]
   }
 }

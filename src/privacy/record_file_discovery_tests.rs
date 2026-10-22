@@ -29,12 +29,26 @@ fn wildcard_only_chromium_profiles_discover_review_and_preserve_fresh_sources() 
         put(&base.join("Other data"), "History metadata.txt");
         // Exact Preferences now witnesses the JSON owner; a backup is unrelated.
         put(&base.join("Other data"), "Preferences.backup");
-        put(&base.join("Other data"), "Login Data");
+        // Undeclared lookalikes never witness; exact Login Data is a declared
+        // saved-password FileKey and witnesses its own profile.
+        put(&base.join("Other data"), "Login Data For Account");
         let mut inventory = ProfileInventory::default();
         profile_discovery::user_data_profiles(browser, &base, &mut inventory);
         assert!(!inventory.partial, "{browser:?}: {:?}", inventory.skipped);
         assert_eq!(inventory.profiles.len(), 1, "{browser:?}");
         assert!(same_named_path(&inventory.profiles[0].root, &root));
+        let passwords = base.join("Passwords only");
+        put(&passwords, "Login Data");
+        let mut with_passwords = ProfileInventory::default();
+        profile_discovery::user_data_profiles(browser, &base, &mut with_passwords);
+        assert_eq!(with_passwords.profiles.len(), 2, "{browser:?}");
+        assert!(
+            with_passwords
+                .profiles
+                .iter()
+                .any(|profile| same_named_path(&profile.root, &passwords))
+        );
+        fs::remove_dir_all(&passwords).unwrap();
         let report = scan_profiles_with_settings(
             &inventory.profiles,
             &[PrivacyCategory::History],

@@ -364,3 +364,136 @@ fn recursive_roots_and_exact_masks_do_not_claim_nearby_documents_or_passwords() 
     );
     assert!(cancelled.cancelled && cancelled.records.is_empty());
 }
+
+fn owned_files(p: &BrowserProfile, report: &PrivacyReport) -> Vec<(String, &'static str)> {
+    let mut owned = report
+        .records
+        .iter()
+        .filter_map(|r| {
+            let RecordLocator::File(file) = &r.locator else {
+                return None;
+            };
+            let (_, handler) = file.record_binding()?;
+            let relative = file
+                .candidate
+                .path
+                .strip_prefix(&p.root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            Some((relative, handler))
+        })
+        .collect::<Vec<_>>();
+    owned.sort();
+    owned
+}
+
+#[test]
+#[cfg(windows)]
+fn saved_password_files_are_owned_only_when_that_category_is_selected() {
+    let temp = tempfile::tempdir().unwrap();
+    let chrome = profile(&temp.path().join("chrome"), Browser::Chrome);
+    write(&chrome, "Login Data", b"owned password store");
+    write(&chrome, "Login Data For Account", b"not declared");
+    write(&chrome, "History-journal", b"unrelated");
+    for unrelated in [PrivacyCategory::History, PrivacyCategory::Downloads] {
+        assert!(owned_files(&chrome, &scan(&chrome, &[unrelated])).is_empty());
+    }
+    let report = scan(&chrome, &[PrivacyCategory::SavedPasswords]);
+    assert_eq!(
+        owned_files(&chrome, &report),
+        [("Login Data".to_owned(), "OnFile1")]
+    );
+    assert!(report.records.iter().all(|r| r.actionable()));
+
+    let opera = profile(&temp.path().join("opera"), Browser::Opera);
+    write(&opera, "Login Data", b"owned");
+    write(&opera, "wand.dat", b"owned legacy store");
+    assert_eq!(
+        owned_files(&opera, &scan(&opera, &[PrivacyCategory::SavedPasswords])),
+        [
+            ("Login Data".to_owned(), "OnFile1"),
+            ("wand.dat".to_owned(), "OnFile3")
+        ]
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn mozilla_password_and_site_security_files_keep_keys_and_sql_stores_untouched() {
+    let temp = tempfile::tempdir().unwrap();
+    for browser in [Browser::Firefox, Browser::Thunderbird] {
+        let p = profile(&temp.path().join(browser.cache_category()), browser);
+        for name in [
+            "logins.json",
+            "logins-backup.json",
+            "signons3.txt",
+            "nested/signons.txt",
+            "key4.db",
+            "cert9.db",
+            "SiteSecurityServiceState.txt",
+            "places.sqlite",
+        ] {
+            write(&p, name, b"owned synthetic");
+        }
+        let passwords = scan(&p, &[PrivacyCategory::SavedPasswords]);
+        assert_eq!(
+            owned_files(&p, &passwords),
+            [
+                ("logins-backup.json".to_owned(), "OnFile2"),
+                ("logins.json".to_owned(), "OnFile2"),
+                ("nested/signons.txt".to_owned(), "OnFile2"),
+                ("signons3.txt".to_owned(), "OnFile2"),
+            ],
+            "{browser:?}"
+        );
+        let site = scan(&p, &[PrivacyCategory::SitePreferences]);
+        assert_eq!(
+            owned_files(&p, &site),
+            [("SiteSecurityServiceState.txt".to_owned(), "OnFile4")]
+        );
+        assert!(p.root.join("key4.db").exists() && p.root.join("cert9.db").exists());
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn reviewed_login_data_moves_after_intent_but_a_live_journal_blocks_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let p = profile(&temp.path().join("profile"), Browser::Edge);
+    let login = write(&p, "Login Data", b"owned password store");
+    let history = write(&p, "Visited Links", b"preserved");
+    let report = scan(&p, &[PrivacyCategory::SavedPasswords]);
+    assert_eq!(report.records.len(), 1, "{:?}", report.skipped);
+    let plan = build_cleanup_plan(&report, &[report.records[0].id]).unwrap();
+    let data = temp.path().join("data");
+    let mut trash = OwnedTrash {
+        data: data.clone(),
+        destination: temp.path().join("trash"),
+        moved: vec![],
+    };
+    let receipt = clean_privacy_with_runtime_and_trash(
+        &data,
+        &plan,
+        &AtomicBool::new(false),
+        &Closed,
+        &mut trash,
+        &mut |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(
+        (receipt.deleted, receipt.skipped),
+        (1, 0),
+        "{:?}",
+        receipt.errors
+    );
+    assert!(!login.exists());
+    assert_eq!(fs::read(history).unwrap(), b"preserved");
+
+    write(&p, "Login Data", b"browser recreated it");
+    write(&p, "Login Data-journal", b"live transaction");
+    let report = scan(&p, &[PrivacyCategory::SavedPasswords]);
+    assert_eq!(report.records.len(), 1);
+    assert!(!report.records[0].actionable());
+    assert!(build_cleanup_plan(&report, &[report.records[0].id]).is_err());
+}

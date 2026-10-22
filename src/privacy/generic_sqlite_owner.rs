@@ -318,14 +318,6 @@ pub(in crate::privacy) fn scan(
             privacy::add_skip(report, &profile.name, Some(category), &reason);
         }
     }
-    if categories.contains(&PrivacyCategory::SavedPasswords) {
-        privacy::add_skip(
-            report,
-            &profile.name,
-            Some(PrivacyCategory::SavedPasswords),
-            "Saved-password coverage currently includes declared legacy SQLite tables; other declared password stores are not yet supported.",
-        );
-    }
     for scope in [Scope::SavedForms, Scope::SitePreferences] {
         let category = match scope {
             Scope::SavedForms => PrivacyCategory::SavedForms,

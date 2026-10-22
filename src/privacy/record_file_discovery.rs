@@ -123,8 +123,14 @@ fn discover_with_limits(
                     }
                     // All same-family rules participate, even when scopes are
                     // deduplicated between History and Downloads.
-                    let owned = claims(browser, PrivacyCategory::History, root, &path)
-                        || claims(browser, PrivacyCategory::Downloads, root, &path);
+                    let owned = [
+                        PrivacyCategory::History,
+                        PrivacyCategory::Downloads,
+                        PrivacyCategory::SavedPasswords,
+                        PrivacyCategory::SitePreferences,
+                    ]
+                    .into_iter()
+                    .any(|category| claims(browser, category, root, &path));
                     if !recursive && !owned {
                         continue;
                     }

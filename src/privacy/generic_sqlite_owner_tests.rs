@@ -360,14 +360,10 @@ fn categories_remain_opt_in_and_unimplemented_formats_are_explicit() {
     let p = profile(&temp.path().join("profile"), Browser::Firefox);
     let report = scan(&p, &[PrivacyCategory::SavedForms]);
     assert!(report.partial && !report.skipped.is_empty());
+    // Every declared password store now has an owner: legacy SQLite tables
+    // here, and the FileDelete stores in record_files.
     let report = scan(&p, &[PrivacyCategory::SavedPasswords]);
-    assert!(
-        report.partial
-            && report
-                .skipped
-                .iter()
-                .any(|s| s.reason.contains("legacy SQLite"))
-    );
+    assert!(!report.partial, "{:?}", report.skipped);
 }
 #[test]
 fn old_pending_cleanup_and_restore_intents_block_fresh_reviewed_actions() {

@@ -1086,9 +1086,9 @@ fn append_file_record(
                 PrivacyCategory::LastDownloadLocation | PrivacyCategory::SnapLocation => {
                     "Browser location data"
                 }
-                PrivacyCategory::SavedForms
-                | PrivacyCategory::SavedPasswords
-                | PrivacyCategory::SitePreferences => "Browser database table",
+                PrivacyCategory::SavedPasswords => "Saved passwords file",
+                PrivacyCategory::SitePreferences => "Site security file",
+                PrivacyCategory::SavedForms => "Browser database table",
             }
             .to_owned(),
         )

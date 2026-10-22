@@ -166,6 +166,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Edge,
+        category: PrivacyCategory::SavedPasswords,
+        id: "edge-chromium.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Avg,
         category: PrivacyCategory::History,
         id: "avgsecurebrowser.history",
@@ -325,6 +354,35 @@ pub(super) static RULES: &[Rule] = &[
                 key: "OnFile2",
                 pattern: "DownloadMetadata",
                 delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Avg,
+        category: PrivacyCategory::SavedPasswords,
+        id: "avgsecurebrowser.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
             },
         ],
     },
@@ -492,6 +550,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Ccleaner,
+        category: PrivacyCategory::SavedPasswords,
+        id: "ccleanerbrowser.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Avast,
         category: PrivacyCategory::History,
         id: "avastsecurebrowser.history",
@@ -655,6 +742,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Avast,
+        category: PrivacyCategory::SavedPasswords,
+        id: "avastsecurebrowser.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Firefox,
         category: PrivacyCategory::History,
         id: "mozilla.history",
@@ -773,6 +889,89 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Firefox,
+        category: PrivacyCategory::SavedPasswords,
+        id: "mozilla.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "signons.txt;signons2.txt;signons3.txt",
+                recursive: true,
+            },
+            Scope {
+                directory: "",
+                mask: "signons.sqlite",
+                recursive: true,
+            },
+            Scope {
+                directory: "",
+                mask: "logins.json;logins-backup.json",
+                recursive: true,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "signons.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "*",
+                delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Firefox,
+        category: PrivacyCategory::SitePreferences,
+        id: "mozilla.sitepreferences",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "content-prefs.sqlite",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "permissions.sqlite",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "signons.sqlite",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "SiteSecurityServiceState.txt",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "content-prefs.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "permissions.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile3",
+                pattern: "signons.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile4",
+                pattern: "SiteSecurityServiceState.txt",
+                delete: true,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Thunderbird,
         category: PrivacyCategory::History,
         id: "thunderbird.history",
@@ -881,6 +1080,89 @@ pub(super) static RULES: &[Rule] = &[
             Handler {
                 key: "OnFile4",
                 pattern: "downloads.json",
+                delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Thunderbird,
+        category: PrivacyCategory::SavedPasswords,
+        id: "thunderbird.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "signons.txt;signons2.txt;signons3.txt",
+                recursive: true,
+            },
+            Scope {
+                directory: "",
+                mask: "signons.sqlite",
+                recursive: true,
+            },
+            Scope {
+                directory: "",
+                mask: "logins.json;logins-backup.json",
+                recursive: true,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "signons.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "*",
+                delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Thunderbird,
+        category: PrivacyCategory::SitePreferences,
+        id: "thunderbird.sitepreferences",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "content-prefs.sqlite",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "permissions.sqlite",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "signons.sqlite",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "SiteSecurityServiceState.txt",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "content-prefs.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "permissions.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile3",
+                pattern: "signons.sqlite",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile4",
+                pattern: "SiteSecurityServiceState.txt",
                 delete: true,
             },
         ],
@@ -1084,6 +1366,45 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Opera,
+        category: PrivacyCategory::SavedPasswords,
+        id: "opera.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "wand.dat",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+            Handler {
+                key: "OnFile3",
+                pattern: "wand.dat",
+                delete: true,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Chrome,
         category: PrivacyCategory::History,
         id: "google-chrome.history",
@@ -1243,6 +1564,35 @@ pub(super) static RULES: &[Rule] = &[
                 key: "OnFile2",
                 pattern: "DownloadMetadata",
                 delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Chrome,
+        category: PrivacyCategory::SavedPasswords,
+        id: "google-chrome.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
             },
         ],
     },
@@ -1410,6 +1760,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Vivaldi,
+        category: PrivacyCategory::SavedPasswords,
+        id: "vivaldi.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Brave,
         category: PrivacyCategory::History,
         id: "brave.history",
@@ -1569,6 +1948,35 @@ pub(super) static RULES: &[Rule] = &[
                 key: "OnFile2",
                 pattern: "DownloadMetadata",
                 delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Brave,
+        category: PrivacyCategory::SavedPasswords,
+        id: "brave.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
             },
         ],
     },
@@ -1736,6 +2144,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::OperaGx,
+        category: PrivacyCategory::SavedPasswords,
+        id: "operagx.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Norton,
         category: PrivacyCategory::History,
         id: "nortonprivatebrowser.internethistory",
@@ -1895,6 +2332,35 @@ pub(super) static RULES: &[Rule] = &[
                 key: "OnFile2",
                 pattern: "DownloadMetadata",
                 delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Norton,
+        category: PrivacyCategory::SavedPasswords,
+        id: "nortonprivatebrowser.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
             },
         ],
     },
@@ -2062,6 +2528,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Avira,
+        category: PrivacyCategory::SavedPasswords,
+        id: "avirasecurebrowser.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Arc,
         category: PrivacyCategory::History,
         id: "arc.history",
@@ -2225,6 +2720,35 @@ pub(super) static RULES: &[Rule] = &[
         ],
     },
     Rule {
+        browser: Browser::Arc,
+        category: PrivacyCategory::SavedPasswords,
+        id: "arc.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
+            },
+        ],
+    },
+    Rule {
         browser: Browser::Neo,
         category: PrivacyCategory::History,
         id: "neobrowser.history",
@@ -2384,6 +2908,35 @@ pub(super) static RULES: &[Rule] = &[
                 key: "OnFile2",
                 pattern: "DownloadMetadata",
                 delete: true,
+            },
+        ],
+    },
+    Rule {
+        browser: Browser::Neo,
+        category: PrivacyCategory::SavedPasswords,
+        id: "neobrowser.savedpasswords",
+        scopes: &[
+            Scope {
+                directory: "",
+                mask: "Login Data",
+                recursive: false,
+            },
+            Scope {
+                directory: "",
+                mask: "Web Data",
+                recursive: false,
+            },
+        ],
+        handlers: &[
+            Handler {
+                key: "OnFile1",
+                pattern: "Login Data",
+                delete: true,
+            },
+            Handler {
+                key: "OnFile2",
+                pattern: "Web Data",
+                delete: false,
             },
         ],
     },
