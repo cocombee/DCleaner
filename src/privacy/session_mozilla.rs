@@ -18,8 +18,13 @@ pub(super) enum Plan {
     DeleteFile,
     RewritePinned {
         bytes: Vec<u8>,
+        // Tab accounting is asserted by the owned fixtures; production review
+        // reports only the rewrite and skipped windows.
+        #[cfg_attr(not(test), allow(dead_code))]
         pinned_tabs: usize,
+        #[cfg_attr(not(test), allow(dead_code))]
         retained_tabs: usize,
+        #[cfg_attr(not(test), allow(dead_code))]
         removed_tabs: usize,
         skipped_windows: usize,
     },
