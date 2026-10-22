@@ -82,12 +82,15 @@ fn shipped_defaults_and_optional_rule_record_are_preserved() {
     assert!(!defaults.skip_show_registry_attention);
     assert!(!defaults.shutdown_after_cleaning);
 
-    let domains: Vec<_> = defaults
-        .exclusions
-        .iter()
-        .filter(|rule| rule.exclusion_type == ExclusionType::Cookie)
-        .map(|rule| rule.path.as_str())
-        .collect();
+    // Shipped cookie keep entries seed Trusted websites, the applied policy;
+    // they are no longer dead generic exclusions.
+    assert!(
+        !defaults
+            .exclusions
+            .iter()
+            .any(|rule| rule.exclusion_type == ExclusionType::Cookie)
+    );
+    let domains = clean_settings::default_cookie_domains();
     assert_eq!(domains.len(), 15);
     assert!(domains.windows(2).all(|pair| pair[0] < pair[1]));
     assert!(!domains.iter().any(|domain| domain.contains("piriform")));

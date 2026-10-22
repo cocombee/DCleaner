@@ -3204,6 +3204,18 @@ pub fn save_cookie_exception_settings(
     save_cookie_policy(data_dir, domains, keep_signed_in)
 }
 
+/// First run only: with no cookie policy file yet, save `domains` as trusted
+/// websites with Keep me signed in on. An existing file is never changed.
+pub fn seed_cookie_policy(data_dir: &Path, domains: &[String]) -> Result<bool, String> {
+    match fs::symlink_metadata(data_dir.join("privacy-cookie-settings.json")) {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            save_cookie_policy(data_dir, domains, true).map(|_| true)
+        }
+        Err(error) => Err(format!("Cookie settings could not be inspected: {error}")),
+    }
+}
+
 /// Validate and persist the cookie policy. Domains accept DNS names, punycode
 /// and IP literals, but not URL paths, ports, wildcards or credentials.
 pub fn save_cookie_policy(

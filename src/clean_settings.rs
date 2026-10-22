@@ -72,7 +72,7 @@ pub struct CustomCleanSettings {
     pub schema: u32,
     #[serde(default)]
     pub inclusions: Vec<InclusionRule>,
-    #[serde(default = "default_exclusions")]
+    #[serde(default)]
     pub exclusions: Vec<ExclusionRule>,
     #[serde(default, rename = "file-deletion")]
     pub file_deletion: FileDeletionPolicy,
@@ -98,7 +98,7 @@ impl Default for CustomCleanSettings {
         Self {
             schema: CLEAN_SETTINGS_SCHEMA_VERSION,
             inclusions: Vec::new(),
-            exclusions: default_exclusions(),
+            exclusions: Vec::new(),
             file_deletion: FileDeletionPolicy::default(),
             advanced_filter_options: AdvancedFilterOptions::default(),
             rule_selections: None,
@@ -527,9 +527,11 @@ fn validate_rule_id(value: &str, label: &str) -> Result<(), CleanSettingsError> 
     validate_text(value, label, MAX_RULE_ID_BYTES)
 }
 
-fn default_exclusions() -> Vec<ExclusionRule> {
-    // Editable cookie keep entries from the shipped settings schema. Dynamic
-    // hidden/vendor exclusions are intentionally not included in this owner.
+/// The reference's shipped, editable cookie keep entries. They seed the
+/// Trusted websites list (the policy the browser scanners apply) on first run;
+/// as generic exclusions no scanner ever read them. Dynamic hidden/vendor
+/// exclusions are intentionally not included.
+pub fn default_cookie_domains() -> Vec<String> {
     let mut domains = [
         "services.adobe.com",
         "aol.com",
@@ -548,11 +550,5 @@ fn default_exclusions() -> Vec<ExclusionRule> {
         "yahoo.com",
     ];
     domains.sort_unstable();
-    domains
-        .into_iter()
-        .map(|domain| ExclusionRule {
-            exclusion_type: ExclusionType::Cookie,
-            path: domain.into(),
-        })
-        .collect()
+    domains.into_iter().map(str::to_owned).collect()
 }

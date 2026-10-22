@@ -1234,6 +1234,77 @@ impl App {
         self.clean_settings_ui.form_error = None;
     }
 
+    /// Cookie domains stored as generic exclusions were never applied by any
+    /// scanner. Offer one explicit move into the Trusted websites list.
+    fn legacy_cookie_exclusions(&mut self, ui: &mut egui::Ui, t: Tokens, editable: bool) {
+        let Some(draft) = self.clean_settings_ui.draft.as_ref() else {
+            return;
+        };
+        let count = draft
+            .exclusions
+            .iter()
+            .filter(|rule| rule.exclusion_type == ExclusionType::Cookie)
+            .count();
+        if count == 0 || self.clean_settings_ui.draft_cookie_domains.is_none() {
+            return;
+        }
+        ui.add_space(8.);
+        theme::action_row(ui, |ui| {
+            ui.colored_label(
+                t.attention,
+                format!(
+                    "{count} cookie domain{} here {} not used. Move {} to Trusted websites to keep {} sign-ins.",
+                    if count == 1 { "" } else { "s" },
+                    if count == 1 { "is" } else { "are" },
+                    if count == 1 { "it" } else { "them" },
+                    if count == 1 { "its" } else { "their" },
+                ),
+            );
+            if theme::secondary(ui, "Move to Trusted websites", editable) {
+                self.move_cookie_exclusions_to_trusted();
+            }
+        });
+    }
+
+    fn move_cookie_exclusions_to_trusted(&mut self) {
+        let (Some(draft), Some(domains)) = (
+            self.clean_settings_ui.draft.as_mut(),
+            self.clean_settings_ui.draft_cookie_domains.as_mut(),
+        ) else {
+            return;
+        };
+        let mut moved = Vec::new();
+        for rule in &draft.exclusions {
+            if rule.exclusion_type != ExclusionType::Cookie {
+                continue;
+            }
+            match privacy::normalize_cookie_domain(&rule.path) {
+                Ok(domain) => moved.push(domain),
+                Err(error) => {
+                    self.clean_settings_ui.form_error =
+                        Some(format!("{} could not be moved: {error}", rule.path));
+                    return;
+                }
+            }
+        }
+        let mut merged = domains.clone();
+        for domain in moved {
+            if !merged.contains(&domain) {
+                merged.push(domain);
+            }
+        }
+        if let Err(error) = validate_cookie_domains(&merged) {
+            self.clean_settings_ui.form_error = Some(error);
+            return;
+        }
+        merged.sort_unstable();
+        *domains = merged;
+        draft
+            .exclusions
+            .retain(|rule| rule.exclusion_type != ExclusionType::Cookie);
+        self.clean_settings_ui.form_error = None;
+    }
+
     fn exclusions_editor(&mut self, ui: &mut egui::Ui, t: Tokens, editable: bool) {
         ui.label(
             RichText::new("Protect paths and data")
@@ -1243,17 +1314,12 @@ impl App {
         ui.add_space(4.);
         theme::muted(
             ui,
-            "File and path exclusions are applied by the current Custom Clean scanner. Registry and cookie exclusions are saved for future support only.",
+            "File and path exclusions are applied by the current Custom Clean scanner. Registry exclusions are saved for future support only. Websites to stay signed in to belong in the Cookies tab under Trusted websites.",
             t,
         );
+        self.legacy_cookie_exclusions(ui, t, editable);
         ui.add_space(10.);
-        let type_choices = [
-            "File",
-            "Path",
-            "Registry key",
-            "Registry key value",
-            "Cookie domain",
-        ];
+        let type_choices = ["File", "Path", "Registry key", "Registry key value"];
         let selected_type = exclusion_type_label(self.clean_settings_ui.exclusion_type);
         let mut selected_new_type = None;
         theme::control_row(ui, |ui| {
@@ -1269,7 +1335,6 @@ impl App {
                         ExclusionType::Path,
                         ExclusionType::RegistryKey,
                         ExclusionType::RegistryKeyValue,
-                        ExclusionType::Cookie,
                     ] {
                         let label = exclusion_type_label(kind);
                         if theme::choice(ui, selected_type == label, label).clicked() {
@@ -1964,6 +2029,42 @@ mod draft_tests {
 
     fn fixture() -> App {
         App::new_fixture_with_context(&egui::Context::default(), "clean-settings-cookies").unwrap()
+    }
+
+    #[test]
+    fn unused_cookie_exclusions_move_into_trusted_websites_once() {
+        let mut app = fixture();
+        let draft = app.clean_settings_ui.draft.as_mut().unwrap();
+        draft
+            .exclusions
+            .retain(|rule| rule.exclusion_type != ExclusionType::Cookie);
+        for path in ["Bank.Example", "example.test", r"C:\keep"] {
+            draft.exclusions.push(ExclusionRule {
+                exclusion_type: if path.starts_with("C:") {
+                    ExclusionType::Path
+                } else {
+                    ExclusionType::Cookie
+                },
+                path: path.into(),
+            });
+        }
+        app.move_cookie_exclusions_to_trusted();
+        let domains = app.clean_settings_ui.draft_cookie_domains.as_ref().unwrap();
+        assert_eq!(
+            domains.iter().filter(|d| *d == "example.test").count(),
+            1,
+            "existing trusted domain is not duplicated"
+        );
+        assert!(domains.iter().any(|d| d == "bank.example"));
+        let exclusions = &app.clean_settings_ui.draft.as_ref().unwrap().exclusions;
+        assert!(
+            !exclusions
+                .iter()
+                .any(|rule| rule.exclusion_type == ExclusionType::Cookie)
+        );
+        assert!(exclusions.iter().any(|rule| rule.path == r"C:\keep"));
+        assert!(app.clean_settings_changed());
+        assert!(app.clean_settings_ui.form_error.is_none());
     }
 
     #[test]

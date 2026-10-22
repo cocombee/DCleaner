@@ -2,7 +2,7 @@
 use dcleaner::{
     clean_settings,
     domain::{Category, CleanupResult, Preferences},
-    platform, store,
+    platform, privacy, store,
 };
 use std::path::PathBuf;
 
@@ -19,10 +19,25 @@ pub fn load() -> Result<StartupData, String> {
     if !root.is_absolute() {
         return Err("DCleaner's data directory is unavailable; no startup files were read.".into());
     }
+    let settings = clean_settings::load_settings(&root).map_err(|error| error.to_string());
+    // First run: trusted websites start from the reference's shipped keep list
+    // plus any cookie domains an older build stored as unused exclusions.
+    let mut trusted = clean_settings::default_cookie_domains();
+    if let Ok(settings) = &settings {
+        trusted.extend(
+            settings
+                .exclusions
+                .iter()
+                .filter(|rule| rule.exclusion_type == clean_settings::ExclusionType::Cookie)
+                .filter_map(|rule| privacy::normalize_cookie_domain(&rule.path).ok()),
+        );
+    }
+    // A seeding failure leaves the file missing; pages then load an empty list.
+    let _ = privacy::seed_cookie_policy(&root, &trusted);
     Ok(StartupData {
         preferences: store::load_preferences(&root),
         history: store::history(&root),
-        clean_settings: clean_settings::load_settings(&root).map_err(|error| error.to_string()),
+        clean_settings: settings,
         categories: platform::categories(),
         root,
     })

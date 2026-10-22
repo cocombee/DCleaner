@@ -4,7 +4,7 @@ use dcleaner::privacy::{
     load_cookie_exception_settings, prepare_privacy_restore_with_runtime,
     recover_privacy_operations, restore_privacy_database_with_runtime,
     save_cookie_exception_settings, save_cookie_policy, scan_profiles, scan_profiles_with_settings,
-    sign_in_policy_categories,
+    seed_cookie_policy, sign_in_policy_categories,
 };
 use rusqlite::{Connection, OpenFlags, backup::Backup};
 use std::{
@@ -4404,6 +4404,24 @@ fn keeping_one_sign_in_domain_keeps_its_whole_account_group_and_subdomains() {
         ]
     );
     assert_eq!(report.cookie_exempted, 3);
+}
+
+#[test]
+fn first_run_seeds_trusted_websites_once_and_never_overwrites_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("app-data");
+    let defaults = dcleaner::clean_settings::default_cookie_domains();
+    assert!(seed_cookie_policy(&data, &defaults).unwrap());
+    let seeded = load_cookie_exception_settings(&data).unwrap();
+    assert!(seeded.keep_signed_in);
+    assert_eq!(seeded.keep_domains.len(), 15);
+    assert!(seeded.keep_domains.iter().any(|d| d == "google.com"));
+
+    save_cookie_policy(&data, &["mine.test".into()], false).unwrap();
+    assert!(!seed_cookie_policy(&data, &defaults).unwrap());
+    let kept = load_cookie_exception_settings(&data).unwrap();
+    assert_eq!(kept.keep_domains, ["mine.test"]);
+    assert!(!kept.keep_signed_in);
 }
 
 #[test]
