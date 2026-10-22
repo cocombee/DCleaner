@@ -37,15 +37,77 @@ impl TrashPort for SystemTrash {
     fn move_batch_to_trash(&mut self, paths: &[&Path]) -> Result<(), String> {
         // Same native Trash policy as the single-file path, with one Windows
         // IFileOperation/PerformOperations for a bounded set of exact files.
+        let before: Vec<_> = paths.iter().map(|path| file_identity(path)).collect();
         trash::delete_all(paths).map_err(|e| e.to_string())?;
-        for path in paths {
-            match fs::symlink_metadata(path) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                _ => return Err("The native Trash operation did not confirm removal of every selected source path.".into()),
-            }
-        }
-        Ok(())
+        confirm_removed(paths, &before, |path| match fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Presence::Absent,
+            Ok(_) => Presence::Present(file_identity(path)),
+            Err(_) => Presence::Unknown,
+        })
     }
+}
+
+/// Volume serial and file index: stable for one file across a same-volume
+/// Recycle Bin move, and different for a file recreated at the same path.
+type FileIdentity = (u32, u64);
+
+enum Presence {
+    Absent,
+    Present(Option<FileIdentity>),
+    Unknown,
+}
+
+#[cfg(windows)]
+fn file_identity(path: &Path) -> Option<FileIdentity> {
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    use windows::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, FILE_FLAG_OPEN_REPARSE_POINT, GetFileInformationByHandle,
+        },
+    };
+    // Metadata-only handle; std shares read/write/delete, so the Trash move
+    // is not blocked, and the handle closes before the move starts.
+    let file = fs::OpenOptions::new()
+        .access_mode(0)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0)
+        .open(path)
+        .ok()?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info) }.ok()?;
+    Some((
+        info.dwVolumeSerialNumber,
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+    ))
+}
+
+#[cfg(not(windows))]
+fn file_identity(_path: &Path) -> Option<FileIdentity> {
+    None
+}
+
+/// A path that still exists after a successful batch counts as removed only
+/// when it is provably a different file (a program recreated it at once).
+/// Same or unknown identity keeps the whole batch unresolved, without retry.
+fn confirm_removed(
+    paths: &[&Path],
+    before: &[Option<FileIdentity>],
+    presence: impl Fn(&Path) -> Presence,
+) -> Result<(), String> {
+    for (path, before) in paths.iter().zip(before) {
+        let removed = match presence(path) {
+            Presence::Absent => true,
+            Presence::Present(Some(now)) => before.is_some_and(|before| before != now),
+            Presence::Present(None) | Presence::Unknown => false,
+        };
+        if !removed {
+            return Err(
+                "The native Trash operation did not confirm removal of every selected source path."
+                    .into(),
+            );
+        }
+    }
+    Ok(())
 }
 pub fn revalidate(file: &Candidate, age: u32) -> Result<(), String> {
     let root = safe_root(&file.root)?;
@@ -255,6 +317,55 @@ pub(crate) fn clean_with_validator(
 mod tests {
     use super::*;
     use crate::domain::Category;
+
+    #[test]
+    fn only_provably_recreated_paths_confirm_a_batch_move() {
+        let (a, b) = (Path::new("a.log"), Path::new("b.log"));
+        let paths = [a, b];
+        let before = [Some((7, 1)), Some((7, 2))];
+        // Gone, or replaced by a different file: the originals were moved.
+        assert!(
+            confirm_removed(&paths, &before, |path| if path == a {
+                Presence::Absent
+            } else {
+                Presence::Present(Some((7, 99)))
+            })
+            .is_ok()
+        );
+        // The same file, an unreadable identity, an unknown pre-move identity
+        // or an uninspectable path never confirm the batch.
+        for presence in [
+            |_: &Path| Presence::Present(Some((7, 2))),
+            |_: &Path| Presence::Present(None),
+            |_: &Path| Presence::Unknown,
+        ] {
+            assert!(
+                confirm_removed(&[b], &[Some((7, 2))], |path| if path == a {
+                    Presence::Absent
+                } else {
+                    presence(path)
+                })
+                .is_err()
+            );
+        }
+        assert!(confirm_removed(&[b], &[None], |_| Presence::Present(Some((7, 99)))).is_err());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn file_identity_is_stable_for_one_file_and_changes_when_recreated() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("recreated.log");
+        fs::write(&path, b"first").unwrap();
+        let first = file_identity(&path).unwrap();
+        assert_eq!(file_identity(&path), Some(first));
+        let moved = temp.path().join("moved.log");
+        fs::rename(&path, &moved).unwrap();
+        assert_eq!(file_identity(&moved), Some(first));
+        fs::write(&path, b"first").unwrap();
+        assert_ne!(file_identity(&path), Some(first));
+        assert_eq!(file_identity(&temp.path().join("missing.log")), None);
+    }
 
     #[derive(Default)]
     struct Effects(usize);
