@@ -54,6 +54,9 @@ pub(crate) enum Failure {
     Ended,
     Changed,
     Native(u32),
+    /// The host refuses registry transactions (ERROR_RM_NOT_ACTIVE). Nothing
+    /// was staged; this build never falls back to untransacted writes.
+    TransactionsUnavailable,
     NotAuthorized,
     /// Commit was attempted: reconciliation is required, never automatic retry.
     CommitUncertain(i32),
@@ -369,6 +372,9 @@ fn observe_pass(
                         Failure::Limited => ReadStatus::Limited,
                         Failure::Changed => ReadStatus::Changed,
                         Failure::Native(code) => ReadStatus::NativeFailed { code },
+                        Failure::TransactionsUnavailable => ReadStatus::NativeFailed {
+                            code: ERROR_RM_NOT_ACTIVE,
+                        },
                         _ => ReadStatus::Changed,
                     },
                     records,
@@ -945,9 +951,15 @@ fn read_value(key: &Key, name: Name) -> Result<Option<RawValue>, Failure> {
         bytes,
     }))
 }
+/// Windows 11 25H2 can refuse every transacted open on the user and SOFTWARE
+/// hives with ERROR_RM_NOT_ACTIVE although CreateTransaction succeeds.
+const ERROR_RM_NOT_ACTIVE: u32 = 6801;
+
 fn status(code: WIN32_ERROR) -> Result<(), Failure> {
     if code == ERROR_SUCCESS {
         Ok(())
+    } else if code.0 == ERROR_RM_NOT_ACTIVE {
+        Err(Failure::TransactionsUnavailable)
     } else {
         Err(Failure::Native(code.0))
     }
@@ -1015,8 +1027,25 @@ mod tests {
             if code == ERROR_SUCCESS {
                 drop(Key(key));
             }
-            code.0 != 6801
+            status(code) != Err(Failure::TransactionsUnavailable)
         })
+    }
+
+    #[test]
+    fn unavailable_registry_transactions_are_named_and_stage_nothing() {
+        let fixture = Fixture::new();
+        let key = fixture.create("a.exe");
+        let cancel = AtomicBool::new(false);
+        let mut tx = fixture.tx(&cancel);
+        let staged = tx.stage_existing("a.exe", &[change(Name::UseFilter, None, Some(dword(1)))]);
+        if txr_available() {
+            assert!(staged.is_ok());
+        } else {
+            assert_eq!(staged, Err(Failure::TransactionsUnavailable));
+        }
+        drop(tx);
+        // Staging is private either way; the public value never appears.
+        assert_eq!(read_value(&key, Name::UseFilter).unwrap(), None);
     }
     mod binding_cases;
     mod completion_cases;
