@@ -13,6 +13,19 @@ use windows::Win32::System::{
     Threading::{GetStartupInfoW, STARTUPINFOW},
 };
 
+/// Production waits for the aborted root's process object. Job accounting is
+/// updated a moment later, so slower hosts can still count it as active.
+fn settled_accounting(job: BorrowedHandle<'_>) -> JOBOBJECT_BASIC_ACCOUNTING_INFORMATION {
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let counts = accounting(job).unwrap();
+        if counts.ActiveProcesses == 0 || Instant::now() >= deadline {
+            return counts;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 fn own_top_level_windows() -> usize {
     use windows::{
         Win32::{
@@ -565,7 +578,7 @@ fn final_pin_refusal_and_cancellation_abort_suspended_child_before_code_runs() {
             }
         );
         assert_eq!(error.outcome, LaunchOutcome::AbortedBeforeResume);
-        let counts = accounting(job.as_handle()).unwrap();
+        let counts = settled_accounting(job.as_handle());
         assert_eq!((counts.TotalProcesses, counts.ActiveProcesses), (1, 0));
         assert!(!fixture.marker("observed.json").exists());
     }
@@ -597,7 +610,7 @@ fn identical_other_file_cannot_admit_created_root_and_creation_failure_is_not_re
     .expect("identical bytes are not exact file identity");
     assert_eq!(error.cause.kind(), io::ErrorKind::PermissionDenied);
     assert_eq!(error.outcome, LaunchOutcome::AbortedBeforeResume);
-    assert_eq!(accounting(job.as_handle()).unwrap().ActiveProcesses, 0);
+    assert_eq!(settled_accounting(job.as_handle()).ActiveProcesses, 0);
     assert!(!fixture.marker("observed.json").exists());
     let mut input = fixture.input();
     input.application = local_path(&fixture.marker("missing.exe")).unwrap();
@@ -893,7 +906,7 @@ fn unwind_during_final_pin_check_aborts_only_its_unresumed_private_child() {
     }));
     assert!(result.is_err());
     assert_eq!(checks, 2);
-    let counts = accounting(job.as_handle()).unwrap();
+    let counts = settled_accounting(job.as_handle());
     assert_eq!((counts.TotalProcesses, counts.ActiveProcesses), (1, 0));
     assert!(!fixture.marker("observed.json").exists());
 }
@@ -974,7 +987,7 @@ fn changed_native_suspend_count_retains_uncertain_family_and_never_retries_resum
     let state = family.observe(&no_cancel()).unwrap();
     assert!(state.ended());
     assert_eq!(state.root_exit_code, Some(0xDC01));
-    assert_eq!(accounting(job.as_handle()).unwrap().ActiveProcesses, 0);
+    assert_eq!(settled_accounting(job.as_handle()).ActiveProcesses, 0);
     assert!(!fixture.marker("observed.json").exists());
     eprintln!(
         "OWNED_CREATION_UNCERTAINTY native_suspend_count_changed=true resume_retried=false family_retained=true aborted=true"

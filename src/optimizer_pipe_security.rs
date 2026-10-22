@@ -361,6 +361,28 @@ impl Principal {
     pub(crate) fn user_sid(&self) -> io::Result<String> {
         self.user.text()
     }
+    /// The owner Windows assigns to objects this process creates. Elevated
+    /// administrator tokens default to BUILTIN\Administrators, not the user.
+    #[cfg(test)]
+    pub(crate) fn default_owner_sid() -> io::Result<String> {
+        use std::os::windows::io::AsHandle;
+        use windows::Win32::Security::{TOKEN_OWNER, TokenOwner};
+        let token = effective_token()?;
+        let owner = token_information(token.as_handle(), TokenOwner)?;
+        if owner.bytes < size_of::<TOKEN_OWNER>() {
+            return Err(invalid("Token owner buffer is truncated."));
+        }
+        // SAFETY: aligned buffer contains the fixed TOKEN_OWNER prefix.
+        let sid = unsafe { (*owner.as_ptr().cast::<TOKEN_OWNER>()).Owner };
+        let start = owner.as_ptr() as usize;
+        let end = start + owner.bytes;
+        let at = sid.0 as usize;
+        if at < start || at > end {
+            return Err(invalid("Token owner SID is outside its native buffer."));
+        }
+        // SAFETY: checked source allocation bound; copy validates SID length.
+        unsafe { Sid::copy(sid, end - at) }?.text()
+    }
     pub(crate) fn session_id(&self) -> u32 {
         self.session
     }

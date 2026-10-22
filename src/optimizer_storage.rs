@@ -89,7 +89,9 @@ impl Access {
     }
     #[cfg(test)]
     fn fixture() -> io::Result<Self> {
-        let owner = Principal::current()?.user_sid()?;
+        // Files this process creates (including SQLite journals) take the token
+        // default owner, which is Administrators on elevated hosts.
+        let owner = Principal::default_owner_sid()?;
         Self::for_owner(&owner, "(A;OICI;FA;;;SY)", "(A;;FA;;;SY)")
     }
 }
@@ -369,7 +371,7 @@ mod tests {
         Ok((root, access, vec![held]))
     }
     fn loosen_dacl(path: &Path) {
-        let owner = Principal::current().unwrap().user_sid().unwrap();
+        let owner = Principal::default_owner_sid().unwrap();
         let descriptor =
             Descriptor::from_sddl(&format!("O:{owner}D:P(A;;FA;;;{owner})(A;;FR;;;WD)")).unwrap();
         let mut present = BOOL(0);
