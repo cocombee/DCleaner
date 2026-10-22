@@ -2047,15 +2047,20 @@ pub fn scan_privacy_step(
         Err(error) => return HealthStepReport::failed(HealthStep::Privacy, error),
     };
     let profiles = privacy::discover_profiles();
+    let categories = privacy::sign_in_policy_categories(PRIVACY_SCAN_CATEGORIES, &cookie_settings);
     progress(
         HealthStep::Privacy,
         0,
         None,
-        Some("Scanning browser history and cookies".into()),
+        Some(if cookie_settings.keep_signed_in {
+            "Scanning browser history; cookies are kept so you stay signed in".into()
+        } else {
+            "Scanning browser history and cookies".into()
+        }),
     );
     let browser_records = privacy::scan_profiles_with_settings(
         &profiles.profiles,
-        PRIVACY_SCAN_CATEGORIES,
+        &categories,
         &cookie_settings,
         cancel,
         |update| {

@@ -298,6 +298,7 @@ fn scan(profile: &BrowserProfile, keep: &[String]) -> PrivacyReport {
     let settings = CookieExceptionSettings {
         schema: COOKIE_SETTINGS_SCHEMA,
         keep_domains: keep.to_vec(),
+        keep_signed_in: false,
     };
     scan_profiles_with_settings(
         std::slice::from_ref(profile),

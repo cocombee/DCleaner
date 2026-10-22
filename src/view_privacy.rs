@@ -52,6 +52,7 @@ pub(super) struct PrivacyUi {
     restore_error: Option<String>,
     restore_plan: Option<PrivacyRestorePlan>,
     restore_review: bool,
+    confirm_saved_passwords: bool,
     operation: PrivacyOperation,
 }
 
@@ -83,6 +84,7 @@ impl Default for PrivacyUi {
             restore_error: None,
             restore_plan: None,
             restore_review: false,
+            confirm_saved_passwords: false,
             operation: PrivacyOperation::Idle,
         }
     }
@@ -116,6 +118,16 @@ pub(super) enum PrivacyEvent {
 }
 
 impl App {
+    /// Unverified settings fail closed: sign-in data is kept until a valid
+    /// policy is loaded or saved.
+    fn sign_in_policy(&self) -> CookieExceptionSettings {
+        if self.privacy_ui.cookie_settings_readable {
+            self.privacy_ui.cookie_settings.clone()
+        } else {
+            CookieExceptionSettings::default()
+        }
+    }
+
     pub(super) fn sync_privacy_cookie_settings(&mut self, settings: CookieExceptionSettings) {
         let changed = settings != self.privacy_ui.cookie_settings;
         self.privacy_ui.cookie_settings = settings;
@@ -165,6 +177,15 @@ impl App {
                 report.profiles_scanned = 0;
                 ui.report = Some(report);
                 ui.cookie_settings.keep_domains = vec!["example.test".into()];
+            }
+            "privacy-signed-in-off" | "privacy-saved-passwords-confirm" => {
+                let (_, mut report) = privacy::visual_preview_fixture();
+                report.records.clear();
+                report.profiles_scanned = 0;
+                ui.report = Some(report);
+                ui.cookie_settings.keep_domains = vec!["google.com".into()];
+                ui.cookie_settings.keep_signed_in = false;
+                ui.confirm_saved_passwords = case == "privacy-saved-passwords-confirm";
             }
             "privacy-populated"
             | "privacy-selected"
@@ -345,6 +366,52 @@ impl App {
             ui.add_space(10.);
         }
         self.privacy_recovery(ui, t, ctx);
+        self.saved_passwords_dialog(ctx, t);
+    }
+
+    /// Saved passwords are opt-in, as in the reference (`Default=False`), and
+    /// only join the selection after this explicit warning.
+    fn saved_passwords_dialog(&mut self, ctx: &egui::Context, t: Tokens) {
+        if !self.privacy_ui.confirm_saved_passwords {
+            return;
+        }
+        let mut close = false;
+        let mut include = false;
+        let response = egui::Modal::new(egui::Id::new("privacy-saved-passwords-confirmation"))
+            .frame(theme::dialog_frame(t))
+            .show(ctx, |ui| {
+                ui.set_width((ctx.content_rect().width() - 40.).clamp(280., 460.));
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("Clean saved passwords?")
+                            .family(theme::semibold())
+                            .size(theme::FONT_TITLE),
+                    );
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        close |= theme::close_button(ui, "Close", true);
+                    });
+                });
+                ui.add_space(8.);
+                theme::muted(
+                    ui,
+                    "Your browsers will forget every password they saved, and you will have to type them again to sign in. You still review the exact items before anything is removed.",
+                    t,
+                );
+                ui.add_space(18.);
+                theme::action_row(ui, |ui| {
+                    close |= theme::secondary(ui, "Keep my passwords", true);
+                    include |= theme::primary(ui, "Include saved passwords", t, true);
+                });
+            });
+        if include {
+            self.privacy_ui
+                .categories
+                .insert(PrivacyCategory::SavedPasswords);
+            self.invalidate_privacy_report();
+        }
+        if include || close || response.should_close() {
+            self.privacy_ui.confirm_saved_passwords = false;
+        }
     }
 
     #[cfg(debug_assertions)]
@@ -690,13 +757,20 @@ impl App {
                             self.privacy_ui.cookie_domain_input.clear();
                         }
                         self.privacy_ui.clear_cookie_input_on_save = false;
+                        let toggled = settings.keep_signed_in
+                            != self.privacy_ui.cookie_settings.keep_signed_in;
+                        let keep_signed_in = settings.keep_signed_in;
                         self.sync_cookie_settings_owners(settings);
                         self.privacy_ui.report = None;
                         self.privacy_ui.selected_ids.clear();
                         self.privacy_ui.cleanup_review = false;
                         self.set_notice(
-                            "Cookie keep domains were saved. Scan again to apply them to results."
-                                .into(),
+                            match (toggled, keep_signed_in) {
+                                (true, true) => "Keep me signed in is on. Cookies, site data and saved passwords will be kept.",
+                                (true, false) => "Keep me signed in is off. Scan again to include cookies; keep domains still apply.",
+                                _ => "Cookie keep domains were saved. Scan again to apply them to results.",
+                            }
+                            .into(),
                         );
                     }
                     Err(error) => {
@@ -899,6 +973,25 @@ impl App {
                 }
             }
             ui.add_space(8.);
+            let keep_signed_in = self.sign_in_policy().keep_signed_in;
+            theme::action_row(ui, |ui| {
+                let mut keep = keep_signed_in;
+                let editable = !busy && self.privacy_ui.cookie_settings_readable;
+                if theme::checkbox(ui, &mut keep, "Keep me signed in", editable).changed() {
+                    let domains = self.privacy_ui.cookie_settings.keep_domains.clone();
+                    self.begin_save_cookie_settings(domains, keep, ctx, false);
+                }
+                theme::muted(
+                    ui,
+                    if keep_signed_in {
+                        "Cookies, site data and saved passwords are kept, so websites stay signed in."
+                    } else {
+                        "Cookies are cleaned except for the keep domains below; sites may ask you to sign in again."
+                    },
+                    t,
+                );
+            });
+            ui.add_space(4.);
             ui.horizontal_wrapped(|ui| {
                 theme::muted(ui, "Categories", t);
                 for (category, label) in [
@@ -912,13 +1005,20 @@ impl App {
                     (PrivacyCategory::SavedPasswords,"Saved passwords"),
                     (PrivacyCategory::SitePreferences,"Site preferences"),
                 ] {
-                    let mut selected = self.privacy_ui.categories.contains(&category);
+                    let kept = keep_signed_in && privacy::SIGN_IN_CATEGORIES.contains(&category);
+                    let mut selected = self.privacy_ui.categories.contains(&category) && !kept;
                     let enabled = !busy
+                        && !kept
                         && (category != PrivacyCategory::Cookies
                             || self.privacy_ui.cookie_settings_readable);
-                    if theme::checkbox(ui, &mut selected, label, enabled).changed()
-                    {
-                        if selected {
+                    let response = theme::checkbox(ui, &mut selected, label, enabled);
+                    if kept {
+                        response.on_disabled_hover_text("Kept while Keep me signed in is on.");
+                    } else if response.changed() {
+                        if selected && category == PrivacyCategory::SavedPasswords {
+                            // Opt-in only after the explicit warning below.
+                            self.privacy_ui.confirm_saved_passwords = true;
+                        } else if selected {
                             self.privacy_ui.categories.insert(category);
                         } else {
                             self.privacy_ui.categories.remove(&category);
@@ -1000,7 +1100,7 @@ impl App {
                             let mut domains = self.privacy_ui.cookie_settings.keep_domains.clone();
                             if !domains.iter().any(|existing| existing == &domain) {
                                 domains.push(domain);
-                                self.begin_save_cookie_settings(domains, ctx, true);
+                                self.begin_save_cookie_settings(domains, self.privacy_ui.cookie_settings.keep_signed_in, ctx, true);
                             } else {
                                 self.privacy_ui.cookie_domain_input.clear();
                             }
@@ -1035,7 +1135,7 @@ impl App {
                 if let Some(index) = remove {
                     let mut domains = self.privacy_ui.cookie_settings.keep_domains.clone();
                     domains.remove(index);
-                    self.begin_save_cookie_settings(domains, ctx, false);
+                    self.begin_save_cookie_settings(domains, self.privacy_ui.cookie_settings.keep_signed_in, ctx, false);
                     changed = true;
                 }
             }
@@ -1740,12 +1840,20 @@ impl App {
             self.error = Some("Select at least one discovered browser profile.".into());
             return;
         }
-        let categories = PrivacyCategory::ALL
+        let selected = PrivacyCategory::ALL
             .into_iter()
             .filter(|category| self.privacy_ui.categories.contains(category))
             .collect::<Vec<_>>();
-        if categories.is_empty() {
+        if selected.is_empty() {
             self.error = Some("Select at least one browser-data category.".into());
+            return;
+        }
+        let categories = privacy::sign_in_policy_categories(&selected, &self.sign_in_policy());
+        if categories.is_empty() {
+            self.error = Some(
+                "Keep me signed in is on, so cookies and saved passwords are kept. Select another category or turn it off."
+                    .into(),
+            );
             return;
         }
         if categories.contains(&PrivacyCategory::Cookies)
@@ -1843,6 +1951,7 @@ impl App {
     fn begin_save_cookie_settings(
         &mut self,
         domains: Vec<String>,
+        keep_signed_in: bool,
         ctx: &egui::Context,
         clear_input_on_success: bool,
     ) {
@@ -1866,7 +1975,7 @@ impl App {
         let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
-            let result = privacy::save_cookie_exception_settings(&data_dir, &domains);
+            let result = privacy::save_cookie_policy(&data_dir, &domains, keep_signed_in);
             let _ = tx.send(Event::Privacy(PrivacyEvent::SettingsSaved(result)));
             ctx.request_repaint();
         });

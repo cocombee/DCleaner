@@ -457,6 +457,7 @@ impl App {
             self.sync_health_cookie_settings(CookieExceptionSettings {
                 schema: 1,
                 keep_domains: vec!["trusted.example".into()],
+                keep_signed_in: false,
             });
         }
         if case == "health-finding-details" {
@@ -2935,6 +2936,7 @@ mod ui_contract_tests {
         app.sync_health_cookie_settings(CookieExceptionSettings {
             schema: 1,
             keep_domains: vec!["trusted.example".into()],
+            keep_signed_in: false,
         });
         assert_eq!(app.health_ui.action_plan.as_ref().unwrap().id(), plan_id);
         app.mark_health_cookie_settings_unverified("fixture unreadable");

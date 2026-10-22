@@ -473,6 +473,15 @@ pub struct PrivacyRecoveryItem {
 pub struct CookieExceptionSettings {
     pub schema: u32,
     pub keep_domains: Vec<String>,
+    /// "Keep me signed in": while on, Custom Clean and Health Check never scan
+    /// cookies, site storage or saved passwords. Files saved before this field
+    /// existed load as on, so an upgrade never starts logging the user out.
+    #[serde(default = "keep_signed_in_default")]
+    pub keep_signed_in: bool,
+}
+
+fn keep_signed_in_default() -> bool {
+    true
 }
 
 impl Default for CookieExceptionSettings {
@@ -480,8 +489,26 @@ impl Default for CookieExceptionSettings {
         Self {
             schema: COOKIE_SETTINGS_SCHEMA,
             keep_domains: Vec::new(),
+            keep_signed_in: true,
         }
     }
+}
+
+/// Categories that hold website sign-ins. Cookies also own site storage
+/// (Local Storage, IndexedDB, WebSQL, quota and LevelDB keys).
+pub const SIGN_IN_CATEGORIES: &[PrivacyCategory] =
+    &[PrivacyCategory::Cookies, PrivacyCategory::SavedPasswords];
+
+/// The categories a scan may use under the saved sign-in policy.
+pub fn sign_in_policy_categories(
+    categories: &[PrivacyCategory],
+    settings: &CookieExceptionSettings,
+) -> Vec<PrivacyCategory> {
+    categories
+        .iter()
+        .copied()
+        .filter(|category| !settings.keep_signed_in || !SIGN_IN_CATEGORIES.contains(category))
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3138,10 +3165,7 @@ pub fn load_cookie_exception_settings(data_dir: &Path) -> Result<CookieException
     let metadata = match fs::symlink_metadata(&path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(CookieExceptionSettings {
-                schema: COOKIE_SETTINGS_SCHEMA,
-                keep_domains: Vec::new(),
-            });
+            return Ok(CookieExceptionSettings::default());
         }
         Err(error) => return Err(format!("Cookie settings could not be inspected: {error}")),
     };
@@ -3168,11 +3192,24 @@ pub fn load_cookie_exception_settings(data_dir: &Path) -> Result<CookieException
     Ok(settings)
 }
 
-/// Validate and persist cookie keep-domains. This accepts DNS names, punycode and IP literals,
-/// but not URL paths, ports, wildcards or credentials.
+/// Validate and persist cookie keep-domains, preserving the saved "Keep me
+/// signed in" choice (on when the current file is missing or unreadable).
 pub fn save_cookie_exception_settings(
     data_dir: &Path,
     domains: &[String],
+) -> Result<CookieExceptionSettings, String> {
+    let keep_signed_in = load_cookie_exception_settings(data_dir)
+        .map(|settings| settings.keep_signed_in)
+        .unwrap_or(true);
+    save_cookie_policy(data_dir, domains, keep_signed_in)
+}
+
+/// Validate and persist the cookie policy. Domains accept DNS names, punycode
+/// and IP literals, but not URL paths, ports, wildcards or credentials.
+pub fn save_cookie_policy(
+    data_dir: &Path,
+    domains: &[String],
+    keep_signed_in: bool,
 ) -> Result<CookieExceptionSettings, String> {
     if domains.len() > COOKIE_EXCEPTION_LIMIT {
         return Err(format!(
@@ -3188,6 +3225,7 @@ pub fn save_cookie_exception_settings(
     let settings = CookieExceptionSettings {
         schema: COOKIE_SETTINGS_SCHEMA,
         keep_domains,
+        keep_signed_in,
     };
     create_private_dir(data_dir)?;
     let path = data_dir.join("privacy-cookie-settings.json");
@@ -3257,15 +3295,50 @@ pub fn normalize_cookie_domain(input: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
+/// One account signs in across every domain of a group, so keeping any listed
+/// domain keeps the whole group. The reference matches each keep pattern alone
+/// (an exact `google.com` keeps neither `accounts.google.com` nor YouTube).
+const SIGN_IN_GROUPS: &[&[&str]] = &[
+    &[
+        "google.com",
+        "youtube.com",
+        "gmail.com",
+        "googleusercontent.com",
+    ],
+    &[
+        "microsoft.com",
+        "live.com",
+        "microsoftonline.com",
+        "office.com",
+        "outlook.com",
+        "bing.com",
+        "msn.com",
+        "xbox.com",
+        "skype.com",
+    ],
+    &["facebook.com", "messenger.com", "fb.com"],
+    &["apple.com", "icloud.com"],
+    &["yahoo.com", "aol.com"],
+    &["amazon.com", "primevideo.com", "audible.com"],
+];
+
+fn domain_matches(host: &str, domain: &str) -> bool {
+    host == domain
+        || (host.len() > domain.len()
+            && host.ends_with(domain)
+            && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
+}
+
 fn is_cookie_exception(site: &str, keep_domains: &HashSet<String>) -> bool {
     let Ok(host) = normalize_cookie_domain(site) else {
         return false;
     };
     keep_domains.iter().any(|domain| {
-        host == *domain
-            || (host.len() > domain.len()
-                && host.ends_with(domain)
-                && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
+        domain_matches(&host, domain)
+            || SIGN_IN_GROUPS
+                .iter()
+                .filter(|group| group.contains(&domain.as_str()))
+                .any(|group| group.iter().any(|member| domain_matches(&host, member)))
     })
 }
 

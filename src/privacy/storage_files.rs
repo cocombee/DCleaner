@@ -1999,6 +1999,7 @@ mod tests {
             &CookieExceptionSettings {
                 schema: COOKIE_SETTINGS_SCHEMA,
                 keep_domains: vec!["keep.test".into()],
+                keep_signed_in: false,
             },
             &AtomicBool::new(false),
             |_| {},

@@ -638,6 +638,8 @@ impl App {
                 | "health-summary"
                 | "health-error"
                 | "privacy-empty"
+                | "privacy-signed-in-off"
+                | "privacy-saved-passwords-confirm"
                 | "privacy-populated"
                 | "privacy-selected"
                 | "privacy-details"

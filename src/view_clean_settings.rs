@@ -98,6 +98,7 @@ pub(super) struct CleanSettingsUi {
     draft: Option<CustomCleanSettings>,
     saved_cookies: Option<CookieExceptionSettings>,
     draft_cookie_domains: Option<Vec<String>>,
+    draft_keep_signed_in: Option<bool>,
     cookie_domain_input: String,
     popular_sites_open: bool,
     popular_site_selected: Vec<bool>,
@@ -124,6 +125,7 @@ impl Default for CleanSettingsUi {
             draft: None,
             saved_cookies: None,
             draft_cookie_domains: None,
+            draft_keep_signed_in: None,
             cookie_domain_input: String::new(),
             popular_sites_open: false,
             popular_site_selected: Vec::new(),
@@ -209,10 +211,12 @@ impl App {
             self.clean_settings_ui.saved = Some(settings.clone());
             self.clean_settings_ui.draft = Some(settings);
             self.clean_settings_ui.saved_cookies = Some(cookies.clone());
+            self.clean_settings_ui.draft_keep_signed_in = Some(cookies.keep_signed_in);
             self.clean_settings_ui.draft_cookie_domains = Some(cookies.keep_domains);
         } else {
             self.clean_settings_ui.draft = None;
             self.clean_settings_ui.draft_cookie_domains = None;
+            self.clean_settings_ui.draft_keep_signed_in = None;
             self.start_clean_settings_load(ctx);
         }
     }
@@ -220,6 +224,7 @@ impl App {
     fn clean_settings_changed(&self) -> bool {
         matches!((&self.clean_settings_ui.saved, &self.clean_settings_ui.draft), (Some(saved), Some(draft)) if saved != draft)
             || matches!((&self.clean_settings_ui.saved_cookies, &self.clean_settings_ui.draft_cookie_domains), (Some(saved), Some(draft)) if &saved.keep_domains != draft)
+            || matches!((&self.clean_settings_ui.saved_cookies, self.clean_settings_ui.draft_keep_signed_in), (Some(saved), Some(draft)) if saved.keep_signed_in != draft)
     }
 
     fn save_committed_clean_settings(&mut self, ctx: &egui::Context) {
@@ -421,12 +426,14 @@ impl App {
                     Ok(cookies) => {
                         self.clean_settings_ui.draft_cookie_domains =
                             Some(cookies.keep_domains.clone());
+                        self.clean_settings_ui.draft_keep_signed_in = Some(cookies.keep_signed_in);
                         self.clean_settings_ui.saved_cookies = Some(cookies.clone());
                         self.sync_cookie_settings_owners(cookies);
                     }
                     Err(error) => {
                         self.clean_settings_ui.saved_cookies = None;
                         self.clean_settings_ui.draft_cookie_domains = None;
+                        self.clean_settings_ui.draft_keep_signed_in = None;
                         self.mark_cookie_settings_unverified();
                         errors.push(format!("Cookie exceptions: {error}"));
                     }
@@ -452,6 +459,7 @@ impl App {
                     Some(Ok(cookies)) => {
                         self.clean_settings_ui.saved_cookies = Some(cookies.clone());
                         self.clean_settings_ui.draft_cookie_domains = Some(cookies.keep_domains.clone());
+                        self.clean_settings_ui.draft_keep_signed_in = Some(cookies.keep_signed_in);
                         self.sync_cookie_settings_owners(cookies);
                     }
                     Some(Err(error)) => errors.push(format!("Cookie exceptions were not saved: {error}")),
@@ -541,13 +549,19 @@ impl App {
             return;
         };
         let settings_changed = settings != saved_settings;
-        let cookies_changed = cookie_domains != saved_cookies.keep_domains;
+        let keep_signed_in = self
+            .clean_settings_ui
+            .draft_keep_signed_in
+            .unwrap_or(saved_cookies.keep_signed_in);
+        let cookies_changed = cookie_domains != saved_cookies.keep_domains
+            || keep_signed_in != saved_cookies.keep_signed_in;
         if self.qa_fixture_mode() {
             self.clean_settings_event(CleanSettingsEvent::Saved {
                 settings: Ok(settings),
                 cookies: Some(Ok(CookieExceptionSettings {
                     schema: 1,
                     keep_domains: cookie_domains,
+                    keep_signed_in,
                 })),
             });
             return;
@@ -569,7 +583,7 @@ impl App {
             };
             let cookies_result = settings_result.as_ref().ok().map(|_| {
                 if cookies_changed {
-                    privacy::save_cookie_exception_settings(&root, &cookie_domains)
+                    privacy::save_cookie_policy(&root, &cookie_domains, keep_signed_in)
                 } else {
                     Ok(saved_cookies)
                 }
@@ -593,6 +607,11 @@ impl App {
             .saved_cookies
             .as_ref()
             .map(|settings| settings.keep_domains.clone());
+        self.clean_settings_ui.draft_keep_signed_in = self
+            .clean_settings_ui
+            .saved_cookies
+            .as_ref()
+            .map(|settings| settings.keep_signed_in);
         self.clean_settings_ui.cookie_domain_input.clear();
         self.clean_settings_ui.form_error = None;
         self.clean_settings_ui.save_error = None;
@@ -651,6 +670,21 @@ impl App {
     }
 
     fn cookie_settings_editor(&mut self, ui: &mut egui::Ui, t: Tokens, editable: bool) {
+        if let Some(keep) = self.clean_settings_ui.draft_keep_signed_in.as_mut() {
+            theme::checkbox(ui, keep, "Keep me signed in", editable);
+            theme::muted(
+                ui,
+                if *keep {
+                    "Cookies, site data and saved passwords are never cleaned, so websites stay signed in. The trusted websites below apply when this is off."
+                } else {
+                    "Cookies are cleaned except for the trusted websites below. Keeping one account domain also keeps its related sign-in domains, such as Google with YouTube and Gmail."
+                },
+                t,
+            );
+            ui.add_space(12.);
+            ui.separator();
+            ui.add_space(8.);
+        }
         ui.label(
             RichText::new("Trusted websites")
                 .family(theme::semibold())
@@ -1887,9 +1921,11 @@ impl App {
             } else {
                 vec!["example.test".into(), "docs.example.test".into()]
             },
+            keep_signed_in: false,
         };
         state.saved_cookies = Some(cookies.clone());
         state.draft_cookie_domains = Some(cookies.keep_domains.clone());
+        state.draft_keep_signed_in = Some(cookies.keep_signed_in);
         state.tab = tab;
         state.open = true;
         if case == "clean-settings-popular-sites" {
@@ -2044,6 +2080,7 @@ mod draft_tests {
         CookieExceptionSettings {
             schema: 1,
             keep_domains: vec!["protected.example".into()],
+            keep_signed_in: false,
         }
     }
 
@@ -2130,6 +2167,7 @@ mod draft_tests {
         let cookies = CookieExceptionSettings {
             schema: 1,
             keep_domains: vec!["saved.example".into()],
+            keep_signed_in: false,
         };
         app.clean_settings_event(CleanSettingsEvent::Saved {
             settings: Ok(settings),

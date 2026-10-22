@@ -261,6 +261,7 @@ fn reviewed_history_file_moves_after_intent_and_unselected_downloads_stay() {
         &CookieExceptionSettings {
             schema: COOKIE_SETTINGS_SCHEMA,
             keep_domains: vec!["kept.test".into()],
+            keep_signed_in: false,
         },
         &AtomicBool::new(false),
         |_| {},

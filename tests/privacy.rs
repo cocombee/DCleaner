@@ -3,7 +3,8 @@ use dcleaner::privacy::{
     build_cleanup_plan, clean_privacy_with_runtime, list_privacy_restore_options,
     load_cookie_exception_settings, prepare_privacy_restore_with_runtime,
     recover_privacy_operations, restore_privacy_database_with_runtime,
-    save_cookie_exception_settings, scan_profiles, scan_profiles_with_settings,
+    save_cookie_exception_settings, save_cookie_policy, scan_profiles, scan_profiles_with_settings,
+    sign_in_policy_categories,
 };
 use rusqlite::{Connection, OpenFlags, backup::Backup};
 use std::{
@@ -4352,6 +4353,133 @@ fn cookie_keep_domains_round_trip_and_filter_only_matching_hosts() {
         fs::read_to_string(settings_dir.join("privacy-cookie-settings.json")).unwrap();
     assert!(!settings_text.contains("secret-cookie"));
     assert!(!settings_text.contains("not-read"));
+}
+
+#[test]
+fn keeping_one_sign_in_domain_keeps_its_whole_account_group_and_subdomains() {
+    let dir = tempfile::tempdir().unwrap();
+    let fixture = chrome_fixture(dir.path());
+    let cookies = Connection::open(&fixture.cookies_path).unwrap();
+    for (index, host) in [
+        ".accounts.google.com",
+        ".youtube.com",
+        "mail.google.com",
+        ".notgoogle.com",
+        ".google.com.evil.test",
+    ]
+    .iter()
+    .enumerate()
+    {
+        cookies
+            .execute(
+                "INSERT INTO cookies VALUES(?1,'sid','/',999,?2,22,X'00')",
+                rusqlite::params![host, 100 + index as i64],
+            )
+            .unwrap();
+    }
+    drop(cookies);
+    let settings =
+        save_cookie_policy(&dir.path().join("app-data"), &["google.com".into()], false).unwrap();
+    let report = scan_profiles_with_settings(
+        &[fixture.profile],
+        &[PrivacyCategory::Cookies],
+        &settings,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    let mut sites = report
+        .records
+        .iter()
+        .map(|record| record.site.as_str())
+        .collect::<Vec<_>>();
+    sites.sort_unstable();
+    // Only lookalikes and unrelated hosts remain cleanable.
+    assert_eq!(
+        sites,
+        [
+            "example.test",
+            "google.com.evil.test",
+            "notgoogle.com",
+            "other.test"
+        ]
+    );
+    assert_eq!(report.cookie_exempted, 3);
+}
+
+#[test]
+fn keep_signed_in_defaults_on_and_keeps_every_sign_in_record_out_of_scans() {
+    let dir = tempfile::tempdir().unwrap();
+    let fixture = chrome_fixture(dir.path());
+    let settings_dir = dir.path().join("app-data");
+    let wanted = [
+        PrivacyCategory::History,
+        PrivacyCategory::Cookies,
+        PrivacyCategory::SavedPasswords,
+    ];
+
+    // A fresh install, and a file saved before the switch existed, keep users signed in.
+    let fresh = load_cookie_exception_settings(&settings_dir).unwrap();
+    assert!(fresh.keep_signed_in);
+    fs::create_dir_all(&settings_dir).unwrap();
+    fs::write(
+        settings_dir.join("privacy-cookie-settings.json"),
+        r#"{"schema":1,"keep_domains":["bank.test"]}"#,
+    )
+    .unwrap();
+    let legacy = load_cookie_exception_settings(&settings_dir).unwrap();
+    assert!(legacy.keep_signed_in);
+    assert_eq!(legacy.keep_domains, ["bank.test"]);
+
+    let kept = sign_in_policy_categories(&wanted, &legacy);
+    assert_eq!(kept, [PrivacyCategory::History]);
+    let report = scan_profiles_with_settings(
+        &[fixture.profile.clone()],
+        &kept,
+        &legacy,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert!(report.records.iter().all(|record| {
+        record.category != PrivacyCategory::Cookies
+            && record.category != PrivacyCategory::SavedPasswords
+    }));
+    assert!(
+        report
+            .records
+            .iter()
+            .any(|record| record.category == PrivacyCategory::History)
+    );
+
+    // Editing keep domains never silently flips the switch.
+    let edited = save_cookie_exception_settings(&settings_dir, &["mail.test".into()]).unwrap();
+    assert!(edited.keep_signed_in);
+    let off = save_cookie_policy(&settings_dir, &edited.keep_domains, false).unwrap();
+    assert!(
+        !load_cookie_exception_settings(&settings_dir)
+            .unwrap()
+            .keep_signed_in
+    );
+    assert!(
+        !save_cookie_exception_settings(&settings_dir, &["mail.test".into()])
+            .unwrap()
+            .keep_signed_in
+    );
+
+    // Turned off, cookies are scanned again and keep domains still apply.
+    assert_eq!(sign_in_policy_categories(&wanted, &off), wanted);
+    let report = scan_profiles_with_settings(
+        &[fixture.profile],
+        &sign_in_policy_categories(&[PrivacyCategory::Cookies], &off),
+        &off,
+        &AtomicBool::new(false),
+        |_| {},
+    );
+    assert!(
+        report
+            .records
+            .iter()
+            .any(|record| record.category == PrivacyCategory::Cookies)
+    );
 }
 
 #[test]
