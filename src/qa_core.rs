@@ -8,7 +8,13 @@ impl App {
         }
         if !matches!(
             case,
-            "clean-empty"
+            "clean-ready"
+                | "clean-info"
+                | "clean-success"
+                | "clean-failure"
+                | "clean-history-unavailable"
+                | "clean-progress"
+                | "clean-empty"
                 | "clean-populated"
                 | "clean-selected"
                 | "clean-details"
@@ -37,6 +43,51 @@ impl App {
         self.settings_readable = true;
 
         match case {
+            "clean-ready"
+            | "clean-info"
+            | "clean-success"
+            | "clean-failure"
+            | "clean-progress"
+            | "clean-history-unavailable" => {
+                self.page = Page::Clean;
+                self.analysis = None;
+                self.custom_analysis = None;
+                self.categories = [
+                    ("temp", "Temporary files", "Windows"),
+                    ("crashes", "Crash reports", "Windows"),
+                    ("chrome", "Google Chrome cache", "Applications"),
+                    ("edge", "Microsoft Edge cache", "Applications"),
+                    ("firefox", "Mozilla Firefox cache", "Applications"),
+                ]
+                .into_iter()
+                .map(|(id, name, group)| dcleaner::domain::Category {
+                    cache_root_scopes: Default::default(),
+                    id: id.into(),
+                    name: name.into(),
+                    group: group.into(),
+                    description: "In-memory layout fixture; no filesystem roots.".into(),
+                    roots: Vec::new(),
+                })
+                .collect();
+                self.prefs.selected_categories = vec!["temp".into(), "crashes".into()];
+                self.message_page = Page::Clean;
+                match case {
+                    "clean-info" => self.set_notice("Some locations could not be scanned. Review the omissions before cleaning.".into()),
+                    "clean-success" => {
+                        self.set_notice("The requested app update is verified. This is a synthetic layout preview.".into());
+                        self.notice_kind = theme::StatusKind::Success;
+                    },
+                    "clean-failure" => self.error = Some("The selected location is unavailable. Your files have not been changed.".into()),
+                    "clean-history-unavailable" => {
+                        self.error = Some("Cleanup stopped: an item outcome is uncertain. Review History for confirmed and uncertain outcomes.".into());
+                        self.apply_cleanup_history(Err("A cleanup record is damaged; preserved for recovery. This is a synthetic in-memory preview.".into()));
+                    },
+                    "clean-progress" => {
+                        self.progress = format!("Finding files · 39808 entries · 0 of 4108 files · C:\\Windows\\WinSxS\\{}", "long-fixture-path-".repeat(16));
+                    },
+                    _ => {},
+                }
+            }
             "clean-empty" | "clean-populated" | "clean-selected" | "clean-details"
             | "clean-error" => {
                 self.page = Page::Clean;
@@ -55,6 +106,7 @@ impl App {
                     .iter()
                     .flat_map(|analysis| &analysis.categories)
                     .map(|category| dcleaner::domain::Category {
+                        cache_root_scopes: Default::default(),
                         id: category.id.clone(),
                         name: category.name.clone(),
                         group: "Applications".into(),

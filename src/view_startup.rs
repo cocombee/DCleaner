@@ -17,7 +17,7 @@ use dcleaner::{
         valid_restore_intent, valid_restore_receipt,
     },
 };
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SortColumn {
@@ -63,9 +63,10 @@ fn startup_cached_tab_count(inventory: Option<&StartupInventory>) -> Option<usiz
 
 pub(super) struct StartupUi {
     section: StartupSection,
-    inventories: HashMap<StartupSection, StartupInventory>,
+    inventories: HashMap<StartupSection, Arc<StartupInventory>>,
     loaded: bool,
-    history: Vec<EffectHistory>,
+    history: Arc<Vec<EffectHistory>>,
+    history_view: Arc<HistoryView>,
     history_error: Option<String>,
     query: String,
     sort: SortColumn,
@@ -88,7 +89,8 @@ impl Default for StartupUi {
             section: StartupSection::StartupApps,
             inventories: HashMap::new(),
             loaded: false,
-            history: Vec::new(),
+            history: Arc::new(Vec::new()),
+            history_view: Arc::new(HistoryView::default()),
             history_error: None,
             query: String::new(),
             sort: SortColumn::Program,
@@ -110,7 +112,7 @@ impl Default for StartupUi {
 pub(super) enum StartupEvent {
     Loaded {
         inventories: Vec<StartupInventory>,
-        history: Result<Vec<EffectHistory>, String>,
+        history: Result<PreparedHistory, String>,
     },
     Prepared {
         id: StartupId,
@@ -148,6 +150,61 @@ enum ReviewAction {
     Restore(ChangeReceipt),
     RecoverIntent(ChangeIntent),
     RecoverReceipt(ChangeReceipt),
+}
+
+#[derive(Default)]
+struct HistoryView {
+    rows: Vec<HistoryRow>,
+    has_uncertain: bool,
+}
+
+struct HistoryRow {
+    id: Uuid,
+    label: String,
+    state: String,
+    action: Option<ReviewAction>,
+    removal: Option<RemovalHistorySource>,
+}
+
+pub(super) struct PreparedHistory {
+    records: Arc<Vec<EffectHistory>>,
+    view: Arc<HistoryView>,
+}
+
+impl PreparedHistory {
+    // Prepared on the loader worker. These cached candidates never bypass the
+    // existing review and native revalidation required to perform an action.
+    fn prepare(records: Vec<EffectHistory>, cancel: &AtomicBool) -> Result<Self, String> {
+        let mut view = HistoryView::default();
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Startup history preparation cancelled".into());
+        }
+        for record in &records {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Startup history preparation cancelled".into());
+            }
+            view.has_uncertain |= record.state == "uncertain";
+            view.rows.push(HistoryRow {
+                id: record.id,
+                label: format!(
+                    "{} · {} · {}",
+                    record.date,
+                    history_state_label(record),
+                    history_record_summary(record)
+                ),
+                state: record.state.clone(),
+                action: history_review_action(record, &records),
+                removal: history_removal_source(record, &records),
+            });
+        }
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Startup history preparation cancelled".into());
+        }
+        Ok(Self {
+            records: Arc::new(records),
+            view: Arc::new(view),
+        })
+    }
 }
 
 impl ReviewAction {
@@ -189,7 +246,12 @@ impl App {
         }
         if !matches!(
             case,
-            "startup-empty" | "startup-populated" | "startup-details" | "startup-error"
+            "startup-empty"
+                | "startup-populated"
+                | "startup-details"
+                | "startup-error"
+                | "startup-history"
+                | "startup-history-review"
         ) {
             return Err(format!("Unsupported Startup Manager fixture: {case}"));
         }
@@ -232,7 +294,7 @@ impl App {
             }
             inventories.insert(
                 section,
-                StartupInventory {
+                Arc::new(StartupInventory {
                     section,
                     quality: if partial {
                         InventoryQuality::Partial
@@ -241,7 +303,7 @@ impl App {
                     },
                     entries,
                     sources,
-                },
+                }),
             );
         }
 
@@ -257,6 +319,29 @@ impl App {
             last_refresh: Some(std::time::Instant::now()),
             ..StartupUi::default()
         };
+        if matches!(case, "startup-history" | "startup-history-review") {
+            let entry = &self.startup_ui.inventories[&StartupSection::StartupApps].entries[0];
+            let mut intent =
+                startup_qa_intent(entry, false).ok_or("Invalid synthetic history intent")?;
+            intent.intent_id = Uuid::from_u128(0x400);
+            let history = PreparedHistory::prepare(
+                vec![EffectHistory {
+                    id: intent.intent_id,
+                    feature: "startup".into(),
+                    date: "2026-10-17T00:00:00Z".into(),
+                    intent: serde_json::to_value(&intent).map_err(|e| e.to_string())?,
+                    state: "uncertain".into(),
+                    receipt: None,
+                }],
+                &AtomicBool::new(false),
+            )?;
+            self.startup_ui.history = history.records;
+            self.startup_ui.history_view = history.view;
+            self.startup_ui.selected_history = Some(intent.intent_id);
+            if case == "startup-history-review" {
+                self.startup_ui.review = Some(ReviewAction::RecoverIntent(intent));
+            }
+        }
         self.error = None;
         self.notice = None;
         self.progress.clear();
@@ -290,13 +375,14 @@ impl App {
                 let ui = &mut self.startup_ui;
                 ui.inventories = inventories
                     .into_iter()
-                    .map(|inventory| (inventory.section, inventory))
+                    .map(|inventory| (inventory.section, Arc::new(inventory)))
                     .collect();
                 ui.loaded = true;
                 ui.last_refresh = Some(std::time::Instant::now());
                 match history {
                     Ok(history) => {
-                        ui.history = history;
+                        ui.history = history.records;
+                        ui.history_view = history.view;
                         ui.history_error = None;
                         if ui
                             .selected_history
@@ -306,7 +392,9 @@ impl App {
                         }
                     }
                     Err(error) => {
-                        ui.history.clear();
+                        ui.history = Arc::new(Vec::new());
+                        ui.history_view = Arc::new(HistoryView::default());
+                        ui.selected_history = None;
                         ui.history_error = Some(error);
                     }
                 }
@@ -353,7 +441,7 @@ impl App {
                 match result {
                     Ok(receipt) => {
                         self.error = None;
-                        self.notice = Some(match receipt.outcome {
+                        self.set_notice(match receipt.outcome {
                             ChangeOutcome::Applied => {
                                 "The reviewed startup setting changed and was verified. A restore receipt was saved.".into()
                             }
@@ -425,7 +513,7 @@ impl App {
                     Ok(receipt) => match receipt.outcome {
                         RemovalOutcome::Removed => {
                             self.error = None;
-                            self.notice = Some(
+                            self.set_notice(
                                 "The exact current-user Run value was removed transactionally and verified. A restore receipt was saved.".into(),
                             );
                         }
@@ -451,13 +539,13 @@ impl App {
                     Ok(receipt) => match receipt.outcome {
                         RemovalRestoreOutcome::Restored => {
                             self.error = None;
-                            self.notice = Some(
+                            self.set_notice(
                                 "The exact saved Run value and marker bytes were restored transactionally and verified.".into(),
                             );
                         }
                         RemovalRestoreOutcome::AlreadyRestored => {
                             self.error = None;
-                            self.notice = Some(
+                            self.set_notice(
                                 "The original Run registration was already present. No registry write was made.".into(),
                             );
                         }
@@ -571,6 +659,8 @@ impl App {
             "error_present": self.error.is_some(),
             "notice_present": self.notice.is_some(),
             "synthetic_notice": self.notice.as_deref().is_some_and(|notice| notice.starts_with("Synthetic ")),
+            "history_count": self.startup_ui.history_view.rows.len(),
+            "selected_history": self.startup_ui.selected_history,
         })
     }
 
@@ -586,6 +676,25 @@ impl App {
             .map(|inventory| inventory.entries.as_slice())
             .unwrap_or_default();
         let valid = match label {
+            "Review recovery" | "Review restore" => {
+                !self.busy()
+                    && self.startup_ui.review.is_none()
+                    && self.startup_ui.removal_review.is_none()
+                    && self.startup_ui.history_view.rows.iter().any(|row| {
+                        Some(row.id) == self.startup_ui.selected_history
+                            && (row.action.is_some() || row.removal.is_some())
+                            && (row.state == "uncertain") == (label == "Review recovery")
+                    })
+            }
+            "Select startup history record" => !self.startup_ui.history_view.rows.is_empty(),
+            "Windows services" => {
+                self.startup_ui.loaded
+                    && !self.busy()
+                    && self
+                        .startup_ui
+                        .inventories
+                        .contains_key(&StartupSection::WindowsServices)
+            }
             "Enable startup item" => entries.iter().any(|entry| {
                 entry.can_change_enabled
                     && matches!(&entry.enabled, EnabledState::Disabled)
@@ -630,6 +739,23 @@ impl App {
     pub(crate) fn qa_startup_action_state(&self, label: &str) -> Result<serde_json::Value, String> {
         let state = self.qa_startup_state();
         let valid = match label {
+            "Review recovery" => {
+                state["review_kind"] == "recovery" || state["removal_review_kind"] == "restore"
+            }
+            "Review restore" => {
+                state["review_kind"] == "restore" || state["removal_review_kind"] == "restore"
+            }
+            "Select startup history record" => self
+                .startup_ui
+                .history_view
+                .rows
+                .iter()
+                .any(|row| Some(row.id) == self.startup_ui.selected_history),
+            "Windows services" => {
+                state["section"] == "Windows services"
+                    && state["selected"] == false
+                    && state["worker_active"] == false
+            }
             "Enable startup item" | "Disable startup item" => state["review_kind"] == "change",
             "More" => state["more_open"] == true,
             "Show details" => state["details_open"] == true,
@@ -662,7 +788,7 @@ impl App {
                 Ok(inventory) => {
                     self.startup_ui
                         .inventories
-                        .insert(inventory.section, inventory);
+                        .insert(inventory.section, Arc::new(inventory));
                     self.startup_ui.last_refresh = Some(std::time::Instant::now());
                 }
                 Err(mpsc::TryRecvError::Empty) => self.startup_ui.background_read = Some(receiver),
@@ -704,22 +830,17 @@ impl App {
 
     pub(super) fn startup_footer(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let busy = self.busy();
+        let history = self.startup_ui.history_view.clone();
         let selected_history = self
             .startup_ui
             .selected_history
-            .and_then(|id| {
-                self.startup_ui
-                    .history
-                    .iter()
-                    .find(|record| record.id == id)
-            })
-            .cloned();
+            .and_then(|id| history.rows.iter().find(|record| record.id == id));
         let history_action = selected_history
             .as_ref()
-            .and_then(|record| history_review_action(record, &self.startup_ui.history));
+            .and_then(|record| record.action.as_ref());
         let removal_history_source = selected_history
             .as_ref()
-            .and_then(|record| history_removal_source(record, &self.startup_ui.history));
+            .and_then(|record| record.removal.as_ref());
         let section = self.startup_ui.section;
         let mut inventory_summary = self
             .startup_ui
@@ -727,9 +848,9 @@ impl App {
             .get(&section)
             .map(|inventory| {
                 format!(
-                    "{} · {} entries · {:?}",
+                    "{} · {} · {:?}",
                     section.label(),
-                    inventory.entries.len(),
+                    theme::counted_label(inventory.entries.len(), "entry", "entries"),
                     inventory.quality
                 )
             })
@@ -796,9 +917,9 @@ impl App {
         }
         if open_history_review {
             if let Some(action) = history_action {
-                self.startup_ui.review = Some(action);
+                self.startup_ui.review = Some(action.clone());
             } else if let Some(source) = removal_history_source {
-                self.begin_startup_removal_restore_review(source, ctx);
+                self.begin_startup_removal_restore_review(source.clone(), ctx);
             }
         }
     }
@@ -817,7 +938,11 @@ impl App {
                         .max_height((ctx.content_rect().height() - 190.).clamp(140., 520.))
                         .show(ui, |ui| self.entry_details(ui, t));
                     ui.add_space(12.);
-                    close = theme::secondary(ui, "Close", true);
+                    ui.separator();
+                    ui.add_space(8.);
+                    theme::centered_dialog_actions(ui, &["Close"], |actions| {
+                        close = theme::primary(actions, "Close", t, true);
+                    });
                 });
             if close || modal.should_close() {
                 self.startup_ui.details_open = false;
@@ -890,16 +1015,18 @@ impl App {
                         );
                     }
                 });
-            ui.add_space(14.);
-            ui.horizontal(|ui| {
+            ui.add_space(12.);
+            ui.separator();
+            ui.add_space(8.);
+            let confirm_label = if self.qa_fixture_mode() {
+                "Confirm fixture review"
+            } else {
+                action.label()
+            };
+            theme::centered_dialog_actions(ui, &["Cancel", confirm_label], |ui| {
                 if theme::secondary(ui, "Cancel", true) {
                     cancel = true;
                 }
-                let confirm_label = if self.qa_fixture_mode() {
-                    "Confirm fixture review"
-                } else {
-                    action.label()
-                };
                 if theme::primary(ui, confirm_label, t, !self.busy()) {
                     accept = true;
                 }
@@ -916,7 +1043,7 @@ impl App {
         } else if accept && !self.busy() {
             self.startup_ui.review = None;
             if self.qa_fixture_mode() {
-                self.notice = Some(
+                self.set_notice(
                     "Synthetic review accepted. No Windows startup setting was changed.".into(),
                 );
             } else {
@@ -994,15 +1121,16 @@ impl App {
                         }
                     });
                 ui.separator();
-                ui.horizontal(|ui| {
+                ui.add_space(8.);
+                let confirm = if self.qa_fixture_mode() {
+                    "Confirm fixture review"
+                } else {
+                    confirm_label
+                };
+                theme::centered_dialog_actions(ui, &["Cancel", confirm], |ui| {
                     if theme::secondary(ui, "Cancel", true) {
                         cancel = true;
                     }
-                    let confirm = if self.qa_fixture_mode() {
-                        "Confirm fixture review"
-                    } else {
-                        confirm_label
-                    };
                     if theme::primary(ui, confirm, t, !self.busy()) {
                         accept = true;
                     }
@@ -1022,7 +1150,7 @@ impl App {
         } else if accept && !self.busy() {
             self.startup_ui.removal_review = None;
             if self.qa_fixture_mode() {
-                self.notice = Some(
+                self.set_notice(
                     "Synthetic removal review accepted. No registry state or journal was changed."
                         .into(),
                 );
@@ -1040,8 +1168,9 @@ impl App {
         self.progress = "Reading native startup inventories and operation history…".into();
         self.cancel = Arc::new(AtomicBool::new(false));
         let root = self.data_dir.clone();
+        let cancel = self.cancel.clone();
         let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let mut platform = WindowsStartupPlatform::new();
@@ -1049,7 +1178,8 @@ impl App {
                 .into_iter()
                 .map(|section| platform.inventory(section))
                 .collect();
-            let history = effects::history(&root, "startup");
+            let history = effects::history(&root, "startup")
+                .and_then(|records| PreparedHistory::prepare(records, &cancel));
             let _ = tx.send(Event::Startup(StartupEvent::Loaded {
                 inventories,
                 history,
@@ -1088,7 +1218,7 @@ impl App {
         self.progress = "Re-reading the selected native item for review…".into();
         self.cancel = Arc::new(AtomicBool::new(false));
         let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let mut manager = StartupManager::new(WindowsStartupPlatform::new());
@@ -1129,7 +1259,7 @@ impl App {
         self.startup_ui.selected = Some(id.clone());
         self.progress = "Re-reading the exact Run value and marker for removal review…".into();
         self.cancel = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let context = ctx.clone();
         thread::spawn(move || {
@@ -1156,7 +1286,7 @@ impl App {
         self.startup_ui.removal_review = None;
         self.progress = "Re-reading the selected Run slots for a guarded restore review…".into();
         self.cancel = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let context = ctx.clone();
         thread::spawn(move || {
@@ -1195,7 +1325,7 @@ impl App {
         let cancel = self.cancel.clone();
         let root = self.data_dir.clone();
         let context = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             match action {
@@ -1239,7 +1369,7 @@ impl App {
         let cancel = self.cancel.clone();
         let root = self.data_dir.clone();
         let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let result = match action {
@@ -1265,7 +1395,7 @@ impl App {
                     self.startup_ui.section == section,
                     startup_section_icon(section),
                     section.label(),
-                    startup_cached_tab_count(inventory),
+                    startup_cached_tab_count(inventory.map(Arc::as_ref)),
                     theme::tokens(self.prefs.dark),
                 );
                 let description = startup_section_description(section);
@@ -1279,6 +1409,7 @@ impl App {
                     Some(InventoryQuality::Complete) | None => description.to_owned(),
                 };
                 let response = response.on_hover_text(tooltip);
+                theme::focus_ring(ui, &response, 18);
                 if response.clicked() {
                     self.startup_ui.section = section;
                     self.startup_ui.selected = None;
@@ -1323,7 +1454,7 @@ impl App {
     }
 
     fn sources_panel(&self, ui: &mut egui::Ui, t: Tokens, inventory: &StartupInventory) {
-        egui::CollapsingHeader::new("Inventory sources and access")
+        theme::Disclosure::new("Inventory sources and access")
             .id_salt(("startup-sources", inventory.section.label()))
             .default_open(inventory.quality != InventoryQuality::Complete)
             .show(ui, |ui| {
@@ -1357,17 +1488,9 @@ impl App {
             .filter(|entry| {
                 query.is_empty() || searchable_entry_text(entry).to_lowercase().contains(&query)
             })
-            .cloned()
             .collect::<Vec<_>>();
         let sort = self.startup_ui.sort;
-        entries.sort_by(|left, right| {
-            let order = sort_key(left, sort).cmp(&sort_key(right, sort));
-            if self.startup_ui.descending {
-                order.reverse()
-            } else {
-                order
-            }
-        });
+        sort_startup_entries(&mut entries, sort, self.startup_ui.descending);
 
         if entries.is_empty() {
             theme::card(t).show(ui, |ui| {
@@ -1393,7 +1516,10 @@ impl App {
             let available = ui.available_width().max(320.);
             let wide = available >= 900.;
             let action_width = 34.;
-            let state_width = if wide { 120. } else { 96. };
+            let state_text_width = ["Enabled", "Disabled", "Unknown"].into_iter()
+                .map(|text| ui.painter().layout_no_wrap(text.into(), egui::FontId::proportional(theme::FONT_BODY), t.foreground).size().x)
+                .fold(0., f32::max);
+            let state_width = (36. + 4. + state_text_width + 8.).max(if wide { 120. } else { 96. }).ceil();
             let publisher_width = if wide { 180. } else { (available * 0.17).clamp(96., 110.) };
             let path_width = if wide { 260. } else { (available * 0.24).clamp(120., 160.) };
             let columns = 5;
@@ -1487,11 +1613,12 @@ impl App {
                             };
                             self.app_icons.show(ui, resource, 22.);
                             ui.spacing_mut().button_padding = Vec2::ZERO;
-                            ui.add_sized(
+                            theme::frameless_button(ui,
                             [(program_width - 30.).max(40.), 36.],
                             egui::Button::new((
                                 RichText::new(program.clone())
                                     .family(theme::semibold())
+                                    .size(theme::FONT_BODY)
                                     .color(t.foreground),
                                 egui::Atom::grow(),
                             ))
@@ -1500,6 +1627,7 @@ impl App {
                             .frame(false)
                             .truncate(),
                         )}).inner;
+                        theme::focus_ring(ui, &response, 18);
                         if response.clicked() {
                             self.startup_ui.selected = Some(entry.id.clone());
                         }
@@ -1535,12 +1663,13 @@ impl App {
                                     EnabledState::Unknown { reason } => Some(reason.as_str()),
                                     _ => None,
                                 });
-                            switch.on_hover_text(reason.map(str::to_owned).unwrap_or_else(|| enabled_tooltip(&entry.enabled)));
-                            ui.add_sized(
+                            let state_label = ui.add_sized(
                                 [ui.available_width(), 36.],
                                 egui::Label::new(RichText::new(state_text).size(theme::FONT_BODY)).truncate(),
-                            )
-                            .on_hover_text(enabled_tooltip(&entry.enabled));
+                            );
+                            if let Some(reason) = reason {
+                                state_label.on_hover_text(reason);
+                            }
                         });
                         ui.allocate_ui_with_layout([action_width, 36.].into(), Layout::left_to_right(Align::Center), |ui| {
                             ui.set_min_size([action_width, 36.].into());
@@ -1653,7 +1782,7 @@ impl App {
         }
         if let Some(path) = open_location {
             match open_in_explorer(&path) {
-                Ok(()) => self.notice = Some("The file location was opened in Explorer.".into()),
+                Ok(()) => self.set_notice("The file location was opened in Explorer.".into()),
                 Err(error) => {
                     self.error = Some(format!("The file location could not be opened: {error}"))
                 }
@@ -1693,10 +1822,10 @@ impl App {
 
     fn history_panel(&mut self, ui: &mut egui::Ui, t: Tokens) {
         let history_error = self.startup_ui.history_error.clone();
-        let history = self.startup_ui.history.clone();
-        egui::CollapsingHeader::new("Change history and recovery")
+        let history = self.startup_ui.history_view.clone();
+        theme::Disclosure::new("Change history and recovery")
             .id_salt("startup-effect-history")
-            .default_open(history.iter().any(|record| record.state == "uncertain"))
+            .default_open(history.has_uncertain)
             .show(ui, |ui| {
                 if let Some(error) = history_error {
                     theme::muted(
@@ -1704,23 +1833,16 @@ impl App {
                         format!("Native operation history is unavailable: {error}"),
                         t,
                     );
-                } else if history.is_empty() {
+                } else if history.rows.is_empty() {
                     theme::muted(ui, "No startup changes have been recorded.", t);
                 }
-                for record in &history {
-                    let action = history_review_action(record, &history);
-                    let removal_action = history_removal_source(record, &history);
-                    let summary = history_record_summary(record);
-                    let label = format!(
-                        "{} · {} · {}",
-                        record.date,
-                        history_state_label(record),
-                        summary
-                    );
-                    if ui
-                        .selectable_label(
+                for record in &history.rows {
+                    let action = record.action.as_ref();
+                    let removal_action = record.removal.as_ref();
+                    let response = theme::stable_selectable(
+                            ui,
                             self.startup_ui.selected_history == Some(record.id),
-                            egui::RichText::new(label).size(theme::FONT_CAPTION).family(
+                            egui::RichText::new(&record.label).size(theme::FONT_CAPTION).family(
                                 if self.startup_ui.selected_history == Some(record.id) {
                                     theme::semibold()
                                 } else {
@@ -1732,9 +1854,10 @@ impl App {
                             "Outcome not confirmed. Review the typed saved intent before attempting guarded recovery."
                         } else {
                             "Select this record to inspect a safe restore or recovery action."
-                        })
-                        .clicked()
-                    {
+                        });
+                    #[cfg(debug_assertions)]
+                    theme::record_fixture_control(ui, "Select startup history record", &response);
+                    if response.clicked() {
                         self.startup_ui.selected_history = Some(record.id);
                     }
                     if record.state == "uncertain" {
@@ -1785,7 +1908,7 @@ impl App {
         }
         let mut inventories = StartupSection::ALL
             .into_iter()
-            .filter_map(|section| self.startup_ui.inventories.get(&section).cloned())
+            .filter_map(|section| self.startup_ui.inventories.get(&section).map(Arc::as_ref))
             .collect::<Vec<_>>();
         inventories.sort_by_key(|inventory| {
             StartupSection::ALL
@@ -1805,7 +1928,7 @@ impl App {
             .map_err(|error| error.to_string())
             .and_then(|bytes| std::fs::write(path, bytes).map_err(|error| error.to_string()))
         {
-            Ok(()) => self.notice = Some("Startup inventory exported.".into()),
+            Ok(()) => self.set_notice("Startup inventory exported.".into()),
             Err(error) => {
                 self.error = Some(format!("Startup inventory could not be exported: {error}"))
             }
@@ -1835,7 +1958,7 @@ impl App {
             .collect::<Vec<_>>()
             .join("\r\n");
         if self.qa_fixture_mode() {
-            self.notice = Some(format!(
+            self.set_notice(format!(
                 "Synthetic TSV preview prepared ({} bytes); no file was written.",
                 contents.len()
             ));
@@ -1851,7 +1974,7 @@ impl App {
         };
         match std::fs::write(path, contents) {
             Ok(()) => {
-                self.notice = Some(if matches!(&inventory.quality, InventoryQuality::Partial) {
+                self.set_notice(if matches!(&inventory.quality, InventoryQuality::Partial) {
                     "Text file saved. It includes only entries from sources Windows allowed DCleaner to read.".into()
                 } else {
                     "Startup entries saved to a text file.".into()
@@ -2675,14 +2798,14 @@ fn removal_source_matches_history(
 fn history_record_summary(record: &EffectHistory) -> String {
     if let Ok(intent) = serde_json::from_value::<ChangeIntent>(record.intent.clone()) {
         format!(
-            "{} · {} → {}",
+            "{} · {} to {}",
             identity_summary(&intent.before.identity),
             enabled_label(&intent.before.enabled),
             enabled_label(&intent.expected_after.enabled)
         )
     } else if let Ok(receipt) = serde_json::from_value::<ChangeReceipt>(record.intent.clone()) {
         format!(
-            "{} · {} → {}",
+            "{} · {} to {}",
             identity_summary(&receipt.before.identity),
             enabled_label(&receipt.before.enabled),
             enabled_label(&receipt.after.enabled)
@@ -2839,6 +2962,14 @@ fn sort_key(entry: &StartupEntry, sort: SortColumn) -> String {
     .to_lowercase()
 }
 
+fn sort_startup_entries(entries: &mut [&StartupEntry], sort: SortColumn, descending: bool) {
+    if descending {
+        entries.sort_by_cached_key(|entry| std::cmp::Reverse(sort_key(entry, sort)));
+    } else {
+        entries.sort_by_cached_key(|entry| sort_key(entry, sort));
+    }
+}
+
 fn searchable_entry_text(entry: &StartupEntry) -> String {
     format!(
         "{} {} {} {} {} {}",
@@ -2852,11 +2983,14 @@ fn searchable_entry_text(entry: &StartupEntry) -> String {
 }
 
 fn field_cell(ui: &mut egui::Ui, width: f32, field: &FieldValue<String>) {
-    let response = theme::table_cell(ui, field_text(field), width, 36.);
-    if let Some(reason) = field_reason(field) {
-        response.on_hover_text(reason);
-    } else if let FieldValue::Known { value } = field {
-        response.on_hover_text(value);
+    let tooltip = field_reason(field).or_else(|| match field {
+        FieldValue::Known { value } => Some(value.as_str()),
+        _ => None,
+    });
+    if let Some(tooltip) = tooltip {
+        theme::table_cell_with_tooltip(ui, field_text(field), width, 36., tooltip);
+    } else {
+        theme::table_cell(ui, field_text(field), width, 36.);
     }
 }
 
@@ -2873,15 +3007,14 @@ fn sortable_header(
     } else {
         "↕"
     };
-    let response = ui.add_sized(
+    let response = theme::frameless_button(
+        ui,
         [width, 24.],
         egui::Button::new((
-            RichText::new(label)
-                .size(theme::FONT_CAPTION)
-                .color(t.muted),
+            RichText::new(label).size(theme::FONT_BODY).color(t.muted),
             egui::Atom::grow(),
             RichText::new(arrow)
-                .size(theme::FONT_CAPTION)
+                .size(theme::FONT_BODY)
                 .color(if selected { t.primary } else { t.muted }),
         ))
         .frame(false),
@@ -2932,13 +3065,10 @@ fn startup_enabled_switch(
         })
         .inner;
 
+    let track_rect = egui::Rect::from_center_size(response.rect.center(), Vec2::new(28.8, 17.6));
     let (track, knob_x, label) = match current {
-        Some(true) => (
-            t.primary,
-            response.rect.right() - 10.,
-            "Disable startup item",
-        ),
-        Some(false) => (t.border, response.rect.left() + 10., "Enable startup item"),
+        Some(true) => (t.primary, track_rect.right() - 8.8, "Disable startup item"),
+        Some(false) => (t.border, track_rect.left() + 8.8, "Enable startup item"),
         None => (
             t.canvas,
             response.rect.center().x,
@@ -2946,10 +3076,10 @@ fn startup_enabled_switch(
         ),
     };
     let painter = ui.painter();
-    painter.rect_filled(response.rect, 10., track);
+    painter.rect_filled(track_rect, 8.8, track);
     painter.rect_stroke(
-        response.rect,
-        10.,
+        track_rect,
+        8.8,
         egui::Stroke::new(
             1.,
             if current.is_some() {
@@ -2961,8 +3091,17 @@ fn startup_enabled_switch(
         egui::StrokeKind::Inside,
     );
     let knob_center = egui::pos2(knob_x, response.rect.center().y);
-    painter.circle_filled(knob_center, 7., t.card);
-    painter.circle_stroke(knob_center, 7., egui::Stroke::new(1., t.border));
+    painter.circle_filled(
+        knob_center,
+        6.4,
+        if current == Some(true) {
+            t.primary_text
+        } else {
+            t.foreground
+        },
+    );
+    painter.circle_stroke(knob_center, 6.4, egui::Stroke::new(0.8, t.border));
+    theme::keyboard_focus_ring(ui, &response, 12);
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
             egui::WidgetType::Checkbox,
@@ -3004,13 +3143,6 @@ fn known_enabled_value(state: &EnabledState) -> Option<bool> {
         EnabledState::Enabled => Some(true),
         EnabledState::Disabled => Some(false),
         EnabledState::Unknown { .. } => None,
-    }
-}
-
-fn enabled_tooltip(state: &EnabledState) -> String {
-    match state {
-        EnabledState::Unknown { reason } => reason.clone(),
-        _ => enabled_label(state),
     }
 }
 
@@ -3128,6 +3260,449 @@ fn review_detail(ui: &mut egui::Ui, label: &str, value: &str, t: Tokens) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn expanded_startup_history_frame_cost() {
+        let stage = std::env::var("DCLEANER_BENCH_STAGE").unwrap_or_else(|_| "ordinary".into());
+        for count in [64usize, 192] {
+            let context = egui::Context::default();
+            let mut app = App::new_fixture_with_context(&context, "startup-history").unwrap();
+            let seed = app.startup_ui.inventories[&StartupSection::StartupApps].entries[0].clone();
+            let mut history = Vec::new();
+            for index in 0..count {
+                let mut intent = startup_qa_intent(&seed, false).unwrap();
+                intent.intent_id = Uuid::from_u128(index as u128 + 1);
+                let receipt = ChangeReceipt {
+                    schema_version: intent.schema_version,
+                    intent_id: intent.intent_id,
+                    id: intent.id.clone(),
+                    before: intent.before.clone(),
+                    after: intent.expected_after.clone(),
+                    outcome: ChangeOutcome::Applied,
+                };
+                assert!(valid_change_receipt(&receipt));
+                history.push(if index == 0 {
+                    EffectHistory {
+                        id: intent.intent_id,
+                        feature: "startup".into(),
+                        date: "2026-10-17T00:00:00Z".into(),
+                        intent: serde_json::to_value(&intent).unwrap(),
+                        state: "uncertain".into(),
+                        receipt: None,
+                    }
+                } else {
+                    EffectHistory {
+                        id: intent.intent_id,
+                        feature: "startup".into(),
+                        date: "2026-10-17T00:00:00Z".into(),
+                        intent: serde_json::to_value(&receipt).unwrap(),
+                        state: if index % 2 == 0 {
+                            "applied"
+                        } else {
+                            "restored"
+                        }
+                        .into(),
+                        receipt: if index % 2 == 0 {
+                            Some(serde_json::to_value(&receipt).unwrap())
+                        } else {
+                            None
+                        },
+                    }
+                });
+            }
+            let preparation_started = std::time::Instant::now();
+            let history = PreparedHistory::prepare(history, &AtomicBool::new(false)).unwrap();
+            let preparation_ms = preparation_started.elapsed().as_secs_f64() * 1000.;
+            app.startup_ui.history = history.records;
+            app.startup_ui.history_view = history.view;
+            app.startup_ui.selected_history = Some(Uuid::from_u128(1));
+            let mut samples = Vec::new();
+            for tick in 0..8 {
+                let started = std::time::Instant::now();
+                let mut output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(920., 612.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| app.paint(ui),
+                );
+                if tick >= 3 {
+                    samples.push(started.elapsed().as_secs_f64() * 1000.);
+                }
+                assert!(!output.shapes.is_empty());
+                output.textures_delta.clear();
+            }
+            eprintln!(
+                "EXPANDED_HISTORY_BENCH {}",
+                serde_json::json!({"stage":stage,"records":count,"history_expanded":true,"preparation_ms":preparation_ms,"warm_layout_ms":samples,"synthetic":true,"native_window":false,"physical_input":false})
+            );
+        }
+    }
+
+    fn synthetic_history_record(id: Uuid, text: &str) -> EffectHistory {
+        EffectHistory {
+            id,
+            feature: "startup".into(),
+            date: "2026-10-17T00:00:00Z".into(),
+            intent: serde_json::json!({"synthetic":true,"text":text}),
+            state: "cancelled".into(),
+            receipt: None,
+        }
+    }
+
+    #[test]
+    fn prepared_history_preserves_recovery_rules_across_restore_generations() {
+        let receipt = ChangeReceipt {
+            schema_version: dcleaner::startup::CHANGE_SCHEMA_VERSION,
+            intent_id: Uuid::new_v4(),
+            id: fake_task_state(true).id.clone(),
+            before: fake_task_state(true),
+            after: fake_task_state(false),
+            outcome: ChangeOutcome::Applied,
+        };
+        assert!(valid_change_receipt(&receipt));
+        let applied = EffectHistory {
+            id: receipt.intent_id,
+            feature: "startup".into(),
+            date: "2026-10-17T00:00:00Z".into(),
+            intent: serde_json::to_value(&receipt).unwrap(),
+            state: "applied".into(),
+            receipt: Some(serde_json::to_value(&receipt).unwrap()),
+        };
+        let mut uncertain = applied.clone();
+        uncertain.id = Uuid::new_v4();
+        uncertain.state = "uncertain".into();
+        uncertain.receipt = None;
+        let mut unsupported = synthetic_history_record(Uuid::new_v4(), "opaque");
+        unsupported.state = "uncertain".into();
+        let records = vec![applied.clone(), uncertain, unsupported];
+        let before = PreparedHistory::prepare(records.clone(), &AtomicBool::new(false)).unwrap();
+        assert_eq!(before.records.len(), before.view.rows.len());
+        assert!(before.view.has_uncertain);
+        assert!(matches!(
+            before.view.rows[0].action,
+            Some(ReviewAction::Restore(_))
+        ));
+        assert!(matches!(
+            before.view.rows[1].action,
+            Some(ReviewAction::RecoverReceipt(_))
+        ));
+        assert!(before.view.rows[2].action.is_none());
+        assert!(before.view.rows.iter().all(|row| row.removal.is_none()));
+        for (record, row) in before.records.iter().zip(&before.view.rows) {
+            assert_eq!(record.id, row.id);
+            assert_eq!(
+                row.label,
+                format!(
+                    "{} · {} · {}",
+                    record.date,
+                    history_state_label(record),
+                    history_record_summary(record)
+                )
+            );
+        }
+        let restored_receipt = ChangeReceipt {
+            after: receipt.before.clone(),
+            outcome: ChangeOutcome::Restored,
+            ..receipt
+        };
+        assert!(valid_change_receipt(&restored_receipt));
+        let mut restored = applied;
+        restored.id = Uuid::new_v4();
+        restored.state = "restored".into();
+        restored.receipt = Some(serde_json::to_value(restored_receipt).unwrap());
+        let mut records = records;
+        records.push(restored);
+        let after = PreparedHistory::prepare(records, &AtomicBool::new(false)).unwrap();
+        assert!(after.view.rows[0].action.is_none());
+        assert!(matches!(
+            before.view.rows[0].action,
+            Some(ReviewAction::Restore(_))
+        ));
+        assert!(!Arc::ptr_eq(&before.view, &after.view));
+        assert!(
+            PreparedHistory::prepare(before.records.as_ref().clone(), &AtomicBool::new(true))
+                .is_err()
+        );
+        assert!(PreparedHistory::prepare(Vec::new(), &AtomicBool::new(true)).is_err());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn startup_history_worker_result_is_published_as_one_generation() {
+        let context = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&context, "startup-history").unwrap();
+        let records = app.startup_ui.history.as_ref().clone();
+        let old_view = app.startup_ui.history_view.clone();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let prepared = PreparedHistory::prepare(records, &AtomicBool::new(false)).unwrap();
+            ready_tx.send(()).unwrap();
+            release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            result_tx.send(prepared).unwrap();
+        });
+        ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(
+            result_rx.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
+        let mut output = context.run_ui(Default::default(), |ui| app.paint(ui));
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+        assert!(Arc::ptr_eq(&old_view, &app.startup_ui.history_view));
+        release_tx.send(()).unwrap();
+        let prepared = result_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let prepared_view = prepared.view.clone();
+        app.startup_event(StartupEvent::Loaded {
+            inventories: Vec::new(),
+            history: Ok(prepared),
+        });
+        assert!(Arc::ptr_eq(&prepared_view, &app.startup_ui.history_view));
+        assert!(!Arc::ptr_eq(&old_view, &app.startup_ui.history_view));
+        assert_eq!(
+            app.startup_ui.history[0].id,
+            app.startup_ui.history_view.rows[0].id
+        );
+        assert!(matches!(
+            app.startup_ui.history_view.rows[0].action,
+            Some(ReviewAction::RecoverIntent(_))
+        ));
+        worker.join().unwrap();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn startup_loaded_generations_preserve_retained_readers_and_current_selection() {
+        let context = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&context, "startup-populated").unwrap();
+        let mut inventory = app.startup_ui.inventories[&StartupSection::StartupApps]
+            .as_ref()
+            .clone();
+        let entry_id = inventory.entries[0].id.clone();
+        let old_program = inventory.entries[0].program.clone();
+        let operation = Uuid::new_v4();
+        app.startup_event(StartupEvent::Loaded {
+            inventories: vec![inventory.clone()],
+            history: PreparedHistory::prepare(
+                vec![synthetic_history_record(operation, "before")],
+                &AtomicBool::new(false),
+            ),
+        });
+        app.startup_ui.selected = Some(entry_id.clone());
+        app.startup_ui.selected_history = Some(operation);
+        let prior_inventory = app.startup_ui.inventories[&StartupSection::StartupApps].clone();
+        let prior_history = app.startup_ui.history.clone();
+        let prior_view = app.startup_ui.history_view.clone();
+        inventory.entries[0].program = FieldValue::Known {
+            value: "Replacement synthetic startup entry".into(),
+        };
+        app.startup_event(StartupEvent::Loaded {
+            inventories: vec![inventory],
+            history: PreparedHistory::prepare(
+                vec![synthetic_history_record(operation, "after")],
+                &AtomicBool::new(false),
+            ),
+        });
+        let current_inventory = app.startup_ui.inventories[&StartupSection::StartupApps].clone();
+        let current_history = app.startup_ui.history.clone();
+        assert!(!Arc::ptr_eq(&prior_inventory, &current_inventory));
+        assert!(!Arc::ptr_eq(&prior_history, &current_history));
+        assert!(!Arc::ptr_eq(&prior_view, &app.startup_ui.history_view));
+        assert_eq!(prior_view.rows[0].id, prior_history[0].id);
+        assert_eq!(
+            app.startup_ui.history_view.rows[0].id,
+            current_history[0].id
+        );
+        assert_eq!(prior_inventory.entries[0].program, old_program);
+        assert_eq!(prior_history[0].intent["text"], "before");
+        assert_eq!(current_history[0].intent["text"], "after");
+        assert_eq!(app.startup_ui.selected, Some(entry_id));
+        assert_eq!(app.startup_ui.selected_history, Some(operation));
+        let mut output = context.run_ui(Default::default(), |ui| app.paint(ui));
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+        assert!(Arc::ptr_eq(
+            &current_inventory,
+            &app.startup_ui.inventories[&StartupSection::StartupApps]
+        ));
+        assert!(Arc::ptr_eq(&current_history, &app.startup_ui.history));
+        assert_eq!(prior_inventory.entries[0].program, old_program);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn startup_failed_history_reload_clears_current_records_without_invalidating_retained_reader() {
+        let context = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&context, "startup-populated").unwrap();
+        let inventory = app.startup_ui.inventories[&StartupSection::StartupApps]
+            .as_ref()
+            .clone();
+        let operation = Uuid::new_v4();
+        app.startup_event(StartupEvent::Loaded {
+            inventories: vec![inventory.clone()],
+            history: PreparedHistory::prepare(
+                vec![synthetic_history_record(operation, "retained")],
+                &AtomicBool::new(false),
+            ),
+        });
+        let prior = app.startup_ui.history.clone();
+        app.startup_ui.selected_history = Some(operation);
+        app.startup_event(StartupEvent::Loaded {
+            inventories: vec![inventory],
+            history: Err("Synthetic unreadable operation history".into()),
+        });
+        assert!(app.startup_ui.history.is_empty());
+        assert!(app.startup_ui.history_view.rows.is_empty());
+        assert!(app.startup_ui.selected_history.is_none());
+        assert!(!Arc::ptr_eq(&prior, &app.startup_ui.history));
+        assert_eq!(prior[0].id, operation);
+        assert_eq!(prior[0].intent["text"], "retained");
+        assert_eq!(
+            app.startup_ui.history_error.as_deref(),
+            Some("Synthetic unreadable operation history")
+        );
+        let mut output = context.run_ui(Default::default(), |ui| app.paint(ui));
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+        assert!(app.startup_ui.history.is_empty());
+        assert_eq!(prior[0].intent["text"], "retained");
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn cached_startup_sort_preserves_case_folded_ties_and_each_column_direction() {
+        let seed = startup_qa_entry(StartupSection::StartupApps, EnabledState::Enabled);
+        let entries: Vec<_> = ["Zeta", "Alpha", "alpha"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| {
+                let mut entry = seed.clone();
+                entry.id = StartupId(format!("{index:064x}"));
+                entry.program = FieldValue::Known { value: name.into() };
+                entry.publisher = FieldValue::Known {
+                    value: ["Same", "same", "Other"][index].into(),
+                };
+                entry.file_path = FieldValue::Known {
+                    value: [r"C:\Z", r"c:\a", r"C:\A"][index].into(),
+                };
+                entry.enabled = [
+                    EnabledState::Enabled,
+                    EnabledState::Disabled,
+                    EnabledState::Unknown {
+                        reason: "Synthetic unknown".into(),
+                    },
+                ][index]
+                    .clone();
+                entry
+            })
+            .collect();
+        for (sort, ascending, descending) in [
+            (SortColumn::Program, [1, 2, 0], [0, 1, 2]),
+            (SortColumn::Publisher, [2, 0, 1], [0, 1, 2]),
+            (SortColumn::FilePath, [1, 2, 0], [0, 1, 2]),
+            (SortColumn::Enabled, [1, 0, 2], [2, 0, 1]),
+        ] {
+            for (reverse, expected) in [(false, ascending), (true, descending)] {
+                let mut rows = entries.iter().collect::<Vec<_>>();
+                sort_startup_entries(&mut rows, sort, reverse);
+                assert_eq!(
+                    rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>(),
+                    expected.map(|index| entries[index].id.clone())
+                );
+            }
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn startup_inventory_frame_cost() {
+        let stage = std::env::var("DCLEANER_BENCH_STAGE").unwrap_or_else(|_| "ordinary".into());
+        for count in [128usize, 1024] {
+            let context = egui::Context::default();
+            let mut app = App::new_fixture_with_context(&context, "startup-populated").unwrap();
+            let mut inventory = app.startup_ui.inventories[&StartupSection::StartupApps]
+                .as_ref()
+                .clone();
+            let seed = inventory.entries[0].clone();
+            inventory.entries = (0..count)
+                .map(|slot| {
+                    let index = (slot * 997) % count;
+                    let mut entry = seed.clone();
+                    entry.id = StartupId(format!("{index:064x}"));
+                    entry.program = FieldValue::Known {
+                        value: format!("Synthetic startup {index:04}"),
+                    };
+                    entry.command = FieldValue::Known {
+                        value: format!(
+                            "SYNTHETIC_NOT_EXECUTABLE_{index}_{}",
+                            "metadata ".repeat(448)
+                        ),
+                    };
+                    entry
+                })
+                .collect();
+            app.startup_ui
+                .inventories
+                .insert(StartupSection::StartupApps, Arc::new(inventory));
+            let history = PreparedHistory::prepare((0..count.min(1000))
+                .map(|index| EffectHistory {
+                    id: Uuid::from_u128(index as u128 + 1),
+                    feature: "startup".into(),
+                    date: "2026-10-17T00:00:00Z".into(),
+                    intent: serde_json::json!({"synthetic":true,"opaque": "history ".repeat(512)}),
+                    state: "cancelled".into(),
+                    receipt: None,
+                })
+                .collect(), &AtomicBool::new(false)).unwrap();
+            app.startup_ui.history = history.records;
+            app.startup_ui.history_view = history.view;
+            app.startup_ui.selected = None;
+            let pointer = app.startup_ui.inventories[&StartupSection::StartupApps]
+                .entries
+                .as_ptr();
+            let mut samples = Vec::new();
+            for tick in 0..8 {
+                let started = std::time::Instant::now();
+                let mut output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(920., 612.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| app.paint(ui),
+                );
+                if tick >= 3 {
+                    samples.push(started.elapsed().as_secs_f64() * 1000.);
+                }
+                assert!(!output.shapes.is_empty());
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                app.startup_ui.inventories[&StartupSection::StartupApps]
+                    .entries
+                    .as_ptr(),
+                pointer
+            );
+            assert_eq!(
+                app.startup_ui.inventories[&StartupSection::StartupApps]
+                    .entries
+                    .len(),
+                count
+            );
+            eprintln!(
+                "STARTUP_FRAME_BENCH {}",
+                serde_json::json!({"stage":stage,"rows":count,"history_records":count.min(1000),"history_expanded":false,"warm_layout_ms":samples,"synthetic":true,"physical_input":false,"native_window":false})
+            );
+        }
+    }
 
     #[test]
     fn startup_tabs_only_show_exact_counts_from_complete_cached_inventories() {

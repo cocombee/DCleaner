@@ -1,0 +1,1405 @@
+{
+  "authority": "Owned paths and actual Windows PathMatchSpecW over retained ordered declarations; the leading profile wildcard is assumed resolved to the selected owned profile. Not original enumeration/runtime or variable-expansion evidence.",
+  "cases": [
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "SESSIONSTORE.JS",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "SessionStore.JSONLZ4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore.bak",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore.bak-old",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore.baklz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionCheckpoints.json",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey2"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "session.json",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey3"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "prefs.js",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "recovery.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "unknown",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore.js-wal",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\recovery.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\previous.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\prefs.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "FileTextExclude",
+        "parameters": [
+          "kmeleon.plugins.sessions2"
+        ]
+      },
+      "status": "FileTextExclude"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\nested\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\nested\\prefs.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "FileTextExclude",
+        "parameters": [
+          "kmeleon.plugins.sessions2"
+        ]
+      },
+      "status": "FileTextExclude"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\nested\\raw",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "SESSIONSTORE-BACKUPS\\CURRENT",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "sessionstore-backups-like\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "other\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "other\\sessionstore.bak",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Mozilla\\mozilla.session\\Default",
+      "relative": "other\\session.json",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "SESSIONSTORE.JS",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "SessionStore.JSONLZ4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore.bak",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore.bak-old",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore.baklz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionCheckpoints.json",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey2"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "session.json",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey3"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "prefs.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "recovery.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "unknown",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore.js-wal",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\recovery.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\previous.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\prefs.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "FileTextExclude",
+        "parameters": [
+          "kmeleon.plugins.sessions2"
+        ]
+      },
+      "status": "FileTextExclude"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\nested\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\nested\\prefs.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "FileTextExclude",
+        "parameters": [
+          "kmeleon.plugins.sessions2"
+        ]
+      },
+      "status": "FileTextExclude"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups\\nested\\raw",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "SESSIONSTORE-BACKUPS\\CURRENT",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey4"
+      ],
+      "owner": {
+        "key": "OnFile4",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "sessionstore-backups-like\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "other\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "other\\sessionstore.bak",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "mozilla.session",
+      "root": "C:\\Owned\\Session Storage\\mozilla.session\\Default",
+      "relative": "other\\session.json",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "SESSIONSTORE.JS",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "SessionStore.JSONLZ4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore.bak",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore.bak-old",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore.baklz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionCheckpoints.json",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey2"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "session.json",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey3"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "prefs.js",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "recovery.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "unknown",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore.js-wal",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\recovery.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\previous.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\prefs.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.jsonlz4",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\nested\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\nested\\prefs.js",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\nested\\raw",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "SESSIONSTORE-BACKUPS\\CURRENT",
+      "layout": "normal",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups-like\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "other\\sessionstore.js",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "other\\sessionstore.bak",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Mozilla\\thunderbird.session\\Default",
+      "relative": "other\\session.json",
+      "layout": "normal",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "SESSIONSTORE.JS",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "SessionStore.JSONLZ4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore.bak",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore.bak-old",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore.baklz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey1"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionCheckpoints.json",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey2"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "session.json",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey3"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "prefs.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "recovery.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "unknown",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore.js-wal",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\recovery.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\previous.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\prefs.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\sessionstore.jsonlz4",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile2",
+        "handler": "SessionMozilla",
+        "parameters": [
+          "LZ4"
+        ]
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\nested\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile1",
+        "handler": "SessionMozilla",
+        "parameters": []
+      },
+      "status": "SessionMozilla"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\nested\\prefs.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups\\nested\\raw",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "SESSIONSTORE-BACKUPS\\CURRENT",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [
+        "FileKey5"
+      ],
+      "owner": {
+        "key": "OnFile3",
+        "handler": "FileDelete",
+        "parameters": []
+      },
+      "status": "FileDelete"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "sessionstore-backups-like\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "other\\sessionstore.js",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "other\\sessionstore.bak",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    },
+    {
+      "rule": "thunderbird.session",
+      "root": "C:\\Owned\\Session Storage\\thunderbird.session\\Default",
+      "relative": "other\\session.json",
+      "layout": "chromium-name-ancestor",
+      "matching_filekeys": [],
+      "owner": null,
+      "status": "outside_filekey"
+    }
+  ]
+}

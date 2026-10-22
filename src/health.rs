@@ -8,8 +8,8 @@
 use crate::{
     domain::{Analysis, Candidate},
     privacy::{
-        self, CloseRequestReport, PrivacyCategory, PrivacyPlan, PrivacyReceipt, PrivacyReport,
-        ProfileInventory, RunningBrowser,
+        self, Browser, CloseRequestReport, PrivacyCategory, PrivacyPlan, PrivacyReceipt,
+        PrivacyReport, ProfileInventory, RunningBrowser,
     },
     recycle_bin::{
         self, InventoryCompletion, RecycleBinInventory, RecycleBinOperationReport, RecycleBinSize,
@@ -22,11 +22,23 @@ use crate::{
         ChangeReceipt, EnabledState, FieldValue, InventoryQuality, StartupId, StartupInventory,
     },
 };
-use std::{collections::HashSet, path::Path, sync::atomic::AtomicBool};
+use std::{
+    collections::HashSet,
+    path::Path,
+    sync::{Arc, atomic::AtomicBool},
+};
 use uuid::Uuid;
 
 const HEALTH_FILE_MINIMUM_AGE_DAYS: u32 = 1;
 const MAX_HEALTH_FINDINGS: usize = 50_000;
+
+/// The reference groups download history together with browsing history.
+/// Unsupported per-browser schemas remain explicit partial-scan diagnostics.
+pub const PRIVACY_SCAN_CATEGORIES: &[PrivacyCategory] = &[
+    PrivacyCategory::History,
+    PrivacyCategory::Cookies,
+    PrivacyCategory::Downloads,
+];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum HealthStep {
@@ -101,7 +113,12 @@ pub struct HealthFinding {
     pub category: HealthCategory,
     pub name: String,
     pub detail: Option<String>,
+    /// Display grouping from the typed scan source, never inferred from a name
+    /// or path and never used as authority for a cleanup operation.
+    pub browser: Option<Browser>,
     pub size_bytes: Option<u64>,
+    /// Measured source units owned by this one reviewed finding.
+    pub item_count: usize,
     /// False means the source has no supported reviewed operation for this row.
     pub actionable: bool,
 }
@@ -156,7 +173,7 @@ pub struct HealthStepReport {
 
 impl HealthStepReport {
     /// Build privacy findings from the actual browser and cache scan snapshots.
-    /// `browser_records` should scan only the Health Check categories (cookies and history).
+    /// `browser_records` includes cookies, browsing history and download history.
     pub fn privacy(
         profiles: ProfileInventory,
         browser_records: PrivacyReport,
@@ -178,8 +195,12 @@ impl HealthStepReport {
             ));
         }
 
-        let browser_cache =
-            analysis_category_ids(&browser_cache_files, &["chrome", "edge", "firefox"]);
+        let browser_cache = browser_cache_files
+            .categories
+            .iter()
+            .filter(|item| crate::browser_cache::is_category(&item.id))
+            .map(|item| item.id.clone())
+            .collect::<Vec<_>>();
         categories.push(file_category(
             HealthCategory::InternetTemporaryFiles,
             &browser_cache_files,
@@ -446,7 +467,12 @@ fn file_category(
                 break;
             }
             bytes = bytes.saturating_add(candidate.size);
-            findings.push(file_finding(category, candidate));
+            let browser = if category == HealthCategory::InternetTemporaryFiles {
+                Browser::from_cache_category(&source.id)
+            } else {
+                None
+            };
+            findings.push(file_finding(category, candidate, browser));
         }
     }
     let coverage = if analysis.cancelled {
@@ -477,7 +503,11 @@ fn file_category(
     }
 }
 
-fn file_finding(category: HealthCategory, candidate: &Candidate) -> HealthFinding {
+fn file_finding(
+    category: HealthCategory,
+    candidate: &Candidate,
+    browser: Option<Browser>,
+) -> HealthFinding {
     let name = candidate
         .path
         .file_name()
@@ -489,7 +519,9 @@ fn file_finding(category: HealthCategory, candidate: &Candidate) -> HealthFindin
         category,
         name,
         detail: None,
+        browser,
         size_bytes: Some(candidate.size),
+        item_count: 1,
         actionable: true,
     }
 }
@@ -501,19 +533,27 @@ fn privacy_category(
     report: &PrivacyReport,
 ) -> HealthCategoryReport {
     let found_profiles = !profiles.profiles.is_empty();
-    let scanned = report.categories_scanned.contains(&source_category);
+    let scanned = report.categories_scanned.contains(&source_category)
+        || (source_category == PrivacyCategory::History
+            && report
+                .categories_scanned
+                .contains(&PrivacyCategory::Downloads));
     let mut findings = Vec::new();
     let mut row_limit_reached = false;
     if scanned {
         let source_rows = report
             .records
             .iter()
-            .filter(|row| row.category == source_category)
+            .filter(|row| {
+                row.category == source_category
+                    || (source_category == PrivacyCategory::History
+                        && row.category == PrivacyCategory::Downloads)
+            })
             .collect::<Vec<_>>();
         row_limit_reached = source_rows.len() > MAX_HEALTH_FINDINGS;
         for row in source_rows.into_iter().take(MAX_HEALTH_FINDINGS) {
             let label = if row.site.is_empty() {
-                source_category_label(source_category).to_owned()
+                source_category_label(row.category).to_owned()
             } else {
                 row.site.clone()
             };
@@ -521,9 +561,16 @@ fn privacy_category(
                 id: HealthFindingId::BrowserRecord(row.id),
                 category,
                 name: label,
-                detail: Some(format!("{} · {}", row.browser.label(), row.profile_name)),
-                size_bytes: None,
-                actionable: true,
+                detail: Some(match row.unavailable_reason() {
+                    Some(reason) => {
+                        format!("{} · {} · {reason}", row.browser.label(), row.profile_name)
+                    }
+                    None => format!("{} · {}", row.browser.label(), row.profile_name),
+                }),
+                browser: Some(row.browser),
+                size_bytes: row.size_bytes(),
+                item_count: row.item_count(),
+                actionable: row.actionable(),
             });
         }
     }
@@ -547,7 +594,7 @@ fn privacy_category(
     HealthCategoryReport {
         category,
         coverage,
-        reported_items: findings.len(),
+        reported_items: findings.iter().map(|finding| finding.item_count).sum(),
         reported_bytes: None,
         findings,
     }
@@ -558,6 +605,12 @@ fn source_category_label(category: PrivacyCategory) -> &'static str {
         PrivacyCategory::History => "Browsing history",
         PrivacyCategory::Cookies => "Cookie record",
         PrivacyCategory::Downloads => "Download history",
+        PrivacyCategory::LastDownloadLocation => "Last download location",
+        PrivacyCategory::SnapLocation => "Snap location",
+        PrivacyCategory::Sessions => "Session files",
+        PrivacyCategory::SavedForms => "Saved forms",
+        PrivacyCategory::SavedPasswords => "Saved passwords",
+        PrivacyCategory::SitePreferences => "Site preferences",
     }
 }
 
@@ -582,7 +635,9 @@ fn recycle_bin_category(inventory: &RecycleBinInventory) -> HealthCategoryReport
             category: HealthCategory::RecycleBin,
             name: item.name(),
             detail: Some(item.original_path().to_string_lossy().into_owned()),
+            browser: None,
             size_bytes,
+            item_count: 1,
             actionable: true,
         });
     }
@@ -633,7 +688,9 @@ fn startup_category(inventory: &StartupInventory) -> HealthCategoryReport {
             category: HealthCategory::StartupAppsForReview,
             name,
             detail: None,
+            browser: None,
             size_bytes: None,
+            item_count: 1,
             // Health Check does not have a recommendation classifier yet. Listing
             // an enabled item is not evidence that disabling it is appropriate.
             actionable: false,
@@ -695,12 +752,14 @@ fn software_category(snapshot: &Result<SoftwareSnapshot, String>) -> HealthCateg
             id: HealthFindingId::SoftwareUpdate(SoftwareKey(item.row_key())),
             category: HealthCategory::OutdatedApplications,
             name: item.row.name.clone(),
+            browser: None,
             detail: Some(format!(
                 "{} → {}",
                 item.row.installed_version.as_deref().unwrap_or("unknown"),
                 item.row.available_version.as_deref().unwrap_or("unknown")
             )),
             size_bytes: None,
+            item_count: 1,
             actionable: item.can_update(),
         });
     }
@@ -962,7 +1021,7 @@ pub enum HealthEffectReceipt {
 #[derive(Clone)]
 struct StepRecord {
     status: HealthStepStatus,
-    report: Option<HealthStepReport>,
+    report: Option<Arc<HealthStepReport>>,
     selected: HashSet<HealthFindingId>,
     pending_plan_id: Option<Uuid>,
     pending_receipt_kinds: Vec<HealthActionKind>,
@@ -1020,7 +1079,13 @@ impl HealthCoordinator {
     }
 
     pub fn report(&self, step: HealthStep) -> Option<&HealthStepReport> {
-        self.records[index(step)].report.as_ref()
+        self.records[index(step)].report.as_deref()
+    }
+    /// Cheap immutable UI snapshot; private row locators and file inventories
+    /// stay in the same allocation instead of being deep-copied every redraw.
+    /// This grants no selection/plan authority after the coordinator changes.
+    pub fn report_snapshot(&self, step: HealthStep) -> Option<Arc<HealthStepReport>> {
+        self.records[index(step)].report.clone()
     }
 
     pub fn current_report(&self) -> Option<&HealthStepReport> {
@@ -1252,7 +1317,7 @@ impl HealthCoordinator {
                     .unwrap_or_else(|| "Health Check scan failed.".into()),
             },
         };
-        record.report = Some(report);
+        record.report = Some(Arc::new(report));
         Ok(())
     }
 
@@ -1295,6 +1360,56 @@ impl HealthCoordinator {
             record.selected.remove(&id);
         }
         Ok(())
+    }
+
+    /// Validate a browser/group selection against one current report pass,
+    /// then apply it atomically. Repeated single-row lookups are quadratic for
+    /// large browser groups and can stall the GUI thread.
+    pub fn select_findings(
+        &mut self,
+        ids: &[HealthFindingId],
+        selected: bool,
+    ) -> Result<usize, String> {
+        let step = self
+            .current
+            .ok_or("Health Check is at its final summary.")?;
+        let record = &mut self.records[index(step)];
+        if !matches!(record.status, HealthStepStatus::Reviewing { .. }) {
+            return Err("Findings can be selected only in the current review.".into());
+        }
+        if ids.len() > MAX_HEALTH_FINDINGS * 3 {
+            return Err("The selection exceeds this report's bounded capacity.".into());
+        }
+        let report = record
+            .report
+            .as_ref()
+            .ok_or("The current scan report is unavailable.")?;
+        let requested = ids.iter().collect::<HashSet<_>>();
+        let mut known = HashSet::new();
+        for finding in report
+            .categories
+            .iter()
+            .flat_map(|category| &category.findings)
+        {
+            if requested.contains(&finding.id) {
+                if selected && !finding.actionable {
+                    return Err("A selected finding has no supported reviewed action.".into());
+                }
+                known.insert(&finding.id);
+            }
+        }
+        if known.len() != requested.len() {
+            return Err("A selected finding is not in the current report.".into());
+        }
+        let count = requested.len();
+        for id in requested {
+            if selected {
+                record.selected.insert(id.clone());
+            } else {
+                record.selected.remove(id);
+            }
+        }
+        Ok(count)
     }
 
     pub fn select_category(
@@ -1351,11 +1466,7 @@ impl HealthCoordinator {
             .actionable_findings()
             .map(|finding| finding.id.clone())
             .collect::<Vec<_>>();
-        let count = ids.len();
-        for id in ids {
-            self.select_finding(id, true)?;
-        }
-        Ok(count)
+        self.select_findings(&ids, true)
     }
 
     pub fn deselect_all(&mut self) -> Result<(), String> {
@@ -1944,7 +2055,7 @@ pub fn scan_privacy_step(
     );
     let browser_records = privacy::scan_profiles_with_settings(
         &profiles.profiles,
-        &[PrivacyCategory::History, PrivacyCategory::Cookies],
+        PRIVACY_SCAN_CATEGORIES,
         &cookie_settings,
         cancel,
         |update| {
@@ -1963,7 +2074,7 @@ pub fn scan_privacy_step(
     let cache_categories = crate::platform::categories();
     let cache_ids = cache_categories
         .iter()
-        .filter(|category| ["chrome", "edge", "firefox"].contains(&category.id.as_str()))
+        .filter(|category| crate::browser_cache::is_category(&category.id))
         .map(|category| category.id.clone())
         .collect::<Vec<_>>();
     let (browser_cache_files, cache_error) = match crate::scanner::analyze(

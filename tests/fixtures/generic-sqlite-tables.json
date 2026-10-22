@@ -1,0 +1,1035 @@
+{
+  "authority": "Exact retained installed GenericSQLite3DB rule/handler/table parameter order. Native defaults missing in the source remain null. No original target execution.",
+  "rules": [
+    {
+      "rule": "edge-chromium.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Edge",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<EDGE_CHROMIUM_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "EDGE_CHROMIUM_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "edge-chromium.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Edge",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<EDGE_CHROMIUM_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "EDGE_CHROMIUM_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<EDGE_CHROMIUM_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "EDGE_CHROMIUM_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "avgsecurebrowser.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Avg",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<AVG_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "AVG_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "avgsecurebrowser.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Avg",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<AVG_BROWSER_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "AVG_BROWSER_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<AVG_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "AVG_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "ccleanerbrowser.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Ccleaner",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<CCB_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "CCB_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "ccleanerbrowser.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Ccleaner",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<CCB_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "CCB_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<CCB_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "CCB_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "avastsecurebrowser.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Avast",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<AVAST_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "AVAST_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "avastsecurebrowser.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Avast",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<AVAST_BROWSER_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "AVAST_BROWSER_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<AVAST_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "AVAST_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "mozilla.savedpasswords",
+      "handler": "OnFile1",
+      "browser": "Firefox",
+      "scope": "SavedPasswords",
+      "database": "signons.sqlite",
+      "tables": [
+        "moz_deleted_logins",
+        "moz_logins"
+      ],
+      "native_default": null,
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>|signons.txt;signons2.txt;signons3.txt|RECURSE",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>|signons.sqlite|RECURSE",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey3",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>|logins.json;logins-backup.json|RECURSE",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "mozilla.sitepreferences",
+      "handler": "OnFile3",
+      "browser": "Firefox",
+      "scope": "SitePreferences",
+      "database": "signons.sqlite",
+      "tables": [
+        "moz_disabledHosts"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>\\*|content-prefs.sqlite",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>\\*|permissions.sqlite",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey3",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>\\*|signons.sqlite",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey4",
+          "rule": "<MOZILLA_PROFILE_FOLDERS>\\*|SiteSecurityServiceState.txt",
+          "variables": [
+            "MOZILLA_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "thunderbird.savedpasswords",
+      "handler": "OnFile1",
+      "browser": "Thunderbird",
+      "scope": "SavedPasswords",
+      "database": "signons.sqlite",
+      "tables": [
+        "moz_deleted_logins",
+        "moz_logins"
+      ],
+      "native_default": null,
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>|signons.txt;signons2.txt;signons3.txt|RECURSE",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>|signons.sqlite|RECURSE",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey3",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>|logins.json;logins-backup.json|RECURSE",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "thunderbird.sitepreferences",
+      "handler": "OnFile3",
+      "browser": "Thunderbird",
+      "scope": "SitePreferences",
+      "database": "signons.sqlite",
+      "tables": [
+        "moz_disabledHosts"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>\\*|content-prefs.sqlite",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>\\*|permissions.sqlite",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey3",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>\\*|signons.sqlite",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey4",
+          "rule": "<THUNDERBIRD_PROFILE_FOLDERS>\\*|SiteSecurityServiceState.txt",
+          "variables": [
+            "THUNDERBIRD_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "opera.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Opera",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": null,
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<OPERA_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "OPERA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<OPERA_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "OPERA_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey3",
+          "rule": "<OPERA_PROFILE_FOLDERS>|wand.dat",
+          "variables": [
+            "OPERA_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "opera.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Opera",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<OPERA_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "OPERA_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "google-chrome.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Chrome",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<GOOGLE_CHROME_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "GOOGLE_CHROME_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "google-chrome.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Chrome",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<GOOGLE_CHROME_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "GOOGLE_CHROME_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<GOOGLE_CHROME_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "GOOGLE_CHROME_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "vivaldi.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Vivaldi",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<VIVALDI_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "VIVALDI_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "vivaldi.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Vivaldi",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<VIVALDI_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "VIVALDI_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<VIVALDI_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "VIVALDI_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "brave.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Brave",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<BRAVE_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "BRAVE_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "brave.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Brave",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<BRAVE_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "BRAVE_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<BRAVE_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "BRAVE_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "operagx.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "OperaGx",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": null,
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<OPERAGX_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "OPERAGX_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<OPERAGX_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "OPERAGX_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "operagx.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "OperaGx",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<OPERAGX_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "OPERAGX_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "nortonprivatebrowser.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Norton",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<NORTON_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "NORTON_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "nortonprivatebrowser.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Norton",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<NORTON_BROWSER_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "NORTON_BROWSER_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<NORTON_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "NORTON_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "avirasecurebrowser.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Avira",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<AVIRA_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "AVIRA_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "avirasecurebrowser.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Avira",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<AVIRA_BROWSER_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "AVIRA_BROWSER_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<AVIRA_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "AVIRA_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "arc.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Arc",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<ARC_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "ARC_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "arc.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Arc",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<ARC_BROWSER_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "ARC_BROWSER_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<ARC_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "ARC_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "neobrowser.savedforminformation",
+      "handler": "OnFile1",
+      "browser": "Neo",
+      "scope": "SavedForms",
+      "database": "Web Data",
+      "tables": [
+        "autofill",
+        "autofill_dates",
+        "autofill_profiles",
+        "autofill_profile_emails",
+        "autofill_profile_names",
+        "autofill_profile_phones",
+        "autofill_profiles_trash",
+        "credit_cards",
+        "masked_credit_cards",
+        "unmasked_credit_cards",
+        "autofill_profile_usernames",
+        "local_addresses",
+        "local_addresses_type_tokens",
+        "addresses",
+        "address_type_tokens",
+        "local_ibans",
+        "masked_ibans",
+        "bank_accounts",
+        "masked_bank_accounts",
+        "local_stored_cvc"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<NEO_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "NEO_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    },
+    {
+      "rule": "neobrowser.savedpasswords",
+      "handler": "OnFile2",
+      "browser": "Neo",
+      "scope": "SavedPasswords",
+      "database": "Web Data",
+      "tables": [
+        "ie7_logins",
+        "logins"
+      ],
+      "native_default": "False",
+      "path_rules": [
+        {
+          "key": "FileKey1",
+          "rule": "<NEO_BROWSER_PROFILE_FOLDERS>|Login Data",
+          "variables": [
+            "NEO_BROWSER_PROFILE_FOLDERS"
+          ]
+        },
+        {
+          "key": "FileKey2",
+          "rule": "<NEO_BROWSER_PROFILE_FOLDERS>|Web Data",
+          "variables": [
+            "NEO_BROWSER_PROFILE_FOLDERS"
+          ]
+        }
+      ]
+    }
+  ]
+}

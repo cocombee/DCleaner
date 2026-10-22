@@ -69,6 +69,17 @@ pub fn walk(
     limit: usize,
     mut progress: impl FnMut(usize),
 ) -> WalkResult {
+    walk_matching(root, cutoff, cancel, limit, &mut progress, |_| true)
+}
+
+fn walk_matching(
+    root: &Path,
+    cutoff: u128,
+    cancel: &AtomicBool,
+    limit: usize,
+    mut progress: impl FnMut(usize),
+    includes: impl Fn(&Path) -> bool,
+) -> WalkResult {
     let mut result = WalkResult {
         files: vec![],
         skipped: 0,
@@ -135,6 +146,9 @@ pub fn walk(
             if !metadata.is_file() {
                 continue;
             }
+            if !includes(&file) {
+                continue;
+            }
             let Ok(modified) = metadata.modified() else {
                 result.skipped += 1;
                 continue;
@@ -185,16 +199,32 @@ pub fn analyze(
             group: category.group.clone(),
             files: vec![],
             skipped: 0,
-            available: false,
+            available: crate::browser_cache::is_category(&category.id) && category.roots.is_empty(),
             truncated: false,
         };
         for root in &category.roots {
-            let output = walk(root, cutoff, cancel, MAX_ENTRIES, |n| {
-                progress(&category.name, n)
-            });
+            let category_cutoff = if crate::browser_cache::is_category(&category.id) {
+                timestamp(SystemTime::now())
+            } else {
+                cutoff
+            };
+            let output = walk_matching(
+                root,
+                category_cutoff,
+                cancel,
+                MAX_ENTRIES,
+                |n| progress(&category.name, n),
+                |path| match category.cache_root_scopes.get(root) {
+                    Some(scope) => {
+                        crate::browser_cache::includes_scoped(&category.id, root, path, *scope)
+                    }
+                    None => crate::browser_cache::includes(&category.id, root, path),
+                },
+            );
             group.available |= output.available;
             group.truncated |= output.truncated;
             group.skipped += output.skipped;
+            group.skipped += usize::from(!output.available);
             for file in output.files {
                 if seen.insert(file.path.clone()) {
                     group.files.push(file);

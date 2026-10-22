@@ -2,6 +2,54 @@ use super::*;
 use crate::domain::{Candidate, CategoryResult};
 use std::path::PathBuf;
 
+#[cfg(debug_assertions)]
+#[test]
+fn quota_metadata_counts_are_visible_but_only_owned_target_groups_can_be_selected() {
+    let (profiles, records) = crate::privacy::visual_quota_preview_fixture();
+    let report = HealthStepReport::privacy(profiles, records, empty_analysis());
+    let cookies = report
+        .categories
+        .iter()
+        .find(|r| r.category == HealthCategory::Cookies)
+        .unwrap();
+    assert_eq!(
+        cookies.findings.iter().map(|r| r.item_count).sum::<usize>(),
+        3
+    );
+    assert_eq!(cookies.findings.iter().filter(|r| r.actionable).count(), 1);
+    let unavailable_id = cookies
+        .findings
+        .iter()
+        .find(|r| !r.actionable)
+        .unwrap()
+        .id
+        .clone();
+    assert!(
+        cookies
+            .findings
+            .iter()
+            .find(|r| !r.actionable)
+            .unwrap()
+            .detail
+            .as_ref()
+            .unwrap()
+            .contains("metadata")
+    );
+    let mut workflow = HealthCoordinator::new();
+    workflow.inspect_privacy_browsers(Ok(Vec::new())).unwrap();
+    workflow.begin_scan(HealthStep::Privacy).unwrap();
+    workflow.complete_scan(report).unwrap();
+    assert!(workflow.select_finding(unavailable_id, true).is_err());
+    assert_eq!(
+        workflow
+            .select_category(HealthCategory::Cookies, true)
+            .unwrap(),
+        1
+    );
+    let plan = workflow.build_action_plan(true).unwrap();
+    assert_eq!(plan.selected_count(), 1);
+}
+
 struct FixtureBin {
     items: Vec<recycle_bin::PortItem>,
 }
@@ -77,6 +125,143 @@ fn privacy_fixture_report(file_id: Uuid) -> HealthStepReport {
         empty_privacy_report(),
         analysis_with_file(file_id),
     )
+}
+
+#[test]
+fn shared_report_snapshots_reuse_the_allocation_and_cannot_restore_stale_action_authority() {
+    let mut workflow = HealthCoordinator::new();
+    let first_id = Uuid::new_v4();
+    workflow.inspect_privacy_browsers(Ok(Vec::new())).unwrap();
+    workflow.begin_scan(HealthStep::Privacy).unwrap();
+    workflow
+        .complete_scan(privacy_fixture_report(first_id))
+        .unwrap();
+    workflow.select_all().unwrap();
+    let first = workflow.report_snapshot(HealthStep::Privacy).unwrap();
+    let again = workflow.report_snapshot(HealthStep::Privacy).unwrap();
+    assert!(Arc::ptr_eq(&first, &again));
+    let old_plan = workflow.build_action_plan(false).unwrap();
+    workflow.cancel_action_review(old_plan.id()).unwrap();
+    workflow.begin_scan(HealthStep::Privacy).unwrap();
+    assert!(workflow.report_snapshot(HealthStep::Privacy).is_none());
+    assert!(
+        first
+            .finding(HealthFindingId::FileCandidate(first_id))
+            .is_some()
+    );
+    let second_id = Uuid::new_v4();
+    workflow
+        .complete_scan(privacy_fixture_report(second_id))
+        .unwrap();
+    let second = workflow.report_snapshot(HealthStep::Privacy).unwrap();
+    assert!(!Arc::ptr_eq(&first, &second));
+    assert!(
+        workflow
+            .select_finding(HealthFindingId::FileCandidate(first_id), true)
+            .is_err()
+    );
+    workflow.select_all().unwrap();
+    let fresh = workflow.build_action_plan(false).unwrap();
+    assert!(workflow.begin_effects(&old_plan, true, false).is_err());
+    assert!(
+        matches!(workflow.status(HealthStep::Privacy),HealthStepStatus::ActionReview{plan_id,..} if *plan_id==fresh.id())
+    );
+}
+
+#[test]
+fn large_group_selection_is_atomic_bounded_and_keeps_exact_current_ids() {
+    let mut analysis = analysis_with_file(Uuid::new_v4());
+    let prototype = analysis.categories[0].files[0].clone();
+    let ids = (0..5000).map(|_| Uuid::new_v4()).collect::<Vec<_>>();
+    analysis.categories[0].files = ids
+        .iter()
+        .map(|id| {
+            let mut file = prototype.clone();
+            file.id = *id;
+            file
+        })
+        .collect();
+    let mut report = HealthStepReport::privacy(
+        ProfileInventory::default(),
+        empty_privacy_report(),
+        analysis,
+    );
+    report.categories[0].findings[0].actionable = false;
+    let mut workflow = HealthCoordinator::new();
+    workflow.inspect_privacy_browsers(Ok(Vec::new())).unwrap();
+    workflow.begin_scan(HealthStep::Privacy).unwrap();
+    workflow.complete_scan(report).unwrap();
+    let started = std::time::Instant::now();
+    assert_eq!(workflow.select_all().unwrap(), 4999);
+    let valid = HealthFindingId::FileCandidate(ids[1]);
+    let unsupported = HealthFindingId::FileCandidate(ids[0]);
+    assert!(
+        workflow
+            .select_findings(&[valid.clone(), unsupported], true)
+            .is_err()
+    );
+    assert_eq!(workflow.selected_ids(HealthStep::Privacy).len(), 4999);
+    assert!(
+        workflow
+            .select_findings(
+                &[
+                    valid.clone(),
+                    HealthFindingId::FileCandidate(Uuid::new_v4())
+                ],
+                false
+            )
+            .is_err()
+    );
+    assert!(workflow.selected_ids(HealthStep::Privacy).contains(&valid));
+    assert_eq!(
+        workflow
+            .select_findings(&[valid.clone(), valid.clone()], false)
+            .unwrap(),
+        1
+    );
+    assert!(!workflow.selected_ids(HealthStep::Privacy).contains(&valid));
+    let rest = ids
+        .iter()
+        .skip(2)
+        .map(|id| HealthFindingId::FileCandidate(*id))
+        .collect::<Vec<_>>();
+    assert_eq!(workflow.select_findings(&rest, false).unwrap(), 4998);
+    assert!(workflow.selected_ids(HealthStep::Privacy).is_empty());
+    eprintln!(
+        "HEALTH_BATCH_SELECTION records=5000 elapsed_ms={} unknown_or_unsupported_request_atomic=true native_effects=false",
+        started.elapsed().as_millis()
+    );
+}
+
+#[test]
+fn browser_grouping_uses_scan_category_ids_without_changing_cleanup_identity() {
+    let id = Uuid::new_v4();
+    let mut analysis = analysis_with_file(id);
+    analysis.categories[0].name = "Misleading Firefox display name".into();
+    analysis.categories[0].files[0].path = PathBuf::from("fixture/firefox-looking-name.tmp");
+    let report = HealthStepReport::privacy(
+        ProfileInventory::default(),
+        empty_privacy_report(),
+        analysis,
+    );
+    let finding = report.finding(HealthFindingId::FileCandidate(id)).unwrap();
+    assert_eq!(finding.browser, Some(Browser::Chrome));
+    assert_eq!(finding.id, HealthFindingId::FileCandidate(id));
+    let space = HealthStepReport::space(
+        analysis_with_file(id),
+        recycle_bin::inventory(
+            &mut FixtureBin { items: vec![] },
+            &AtomicBool::new(false),
+            |_, _| {},
+        ),
+    );
+    assert!(
+        space
+            .categories
+            .iter()
+            .flat_map(|c| &c.findings)
+            .all(|f| f.browser.is_none())
+    );
 }
 
 #[test]

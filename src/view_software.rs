@@ -19,7 +19,7 @@ use std::{cmp::Ordering, collections::HashSet, sync::atomic::AtomicBool};
 #[derive(Default)]
 pub(super) struct SoftwareUi {
     intro_fixture: bool,
-    snapshot: Option<SoftwareSnapshot>,
+    snapshot: Option<Arc<SoftwareSnapshot>>,
     attempted: bool,
     loading: bool,
     load_error: Option<String>,
@@ -408,7 +408,7 @@ impl App {
             snapshot: if case == "software-error" {
                 None
             } else {
-                Some(snapshot)
+                Some(Arc::new(snapshot))
             },
             attempted: true,
             loading: false,
@@ -502,6 +502,7 @@ impl App {
                     count,
                     t,
                 );
+                theme::focus_ring(ui, &response, 18);
                 if response.clicked() {
                     self.software_ui.tab = tab;
                     (self.software_ui.sort, self.software_ui.descending) = sort_for_tab_change(
@@ -540,15 +541,18 @@ impl App {
             status_card(ui, t, "Software inventory unavailable", &error);
         }
         if let Some(error) = self.software_ui.settings_error.as_deref() {
-            ui.add_space(8.);
-            status_card(
-                ui,
-                t,
-                "Saved updater choices are unavailable",
-                &format!(
-                    "{error} Existing bytes are preserved; skip and ignore controls are disabled until this is resolved."
-                ),
-            );
+            if !self.page_choice_failure_visible(error) {
+                ui.add_space(8.);
+                theme::status_banner(
+                    ui,
+                    &format!(
+                        "Saved updater choices are unavailable. {error} Refresh before updating or changing skip and ignore choices."
+                    ),
+                    theme::StatusKind::Error,
+                    false,
+                    false,
+                );
+            }
         }
         if let Some(report) = self.software_ui.batch_report.as_ref() {
             ui.add_space(8.);
@@ -560,7 +564,7 @@ impl App {
         if self.software_ui.history_error.is_some() {
             self.software_history(ui, t);
         } else {
-            egui::CollapsingHeader::new(format!(
+            theme::Disclosure::new(format!(
                 "Updater history ({})",
                 self.software_ui.history.len()
             ))
@@ -569,7 +573,7 @@ impl App {
             .show(ui, |ui| self.software_history(ui, t));
         }
         ui.add_space(12.);
-        egui::CollapsingHeader::new("Updater details")
+        theme::Disclosure::new("Updater details")
             .default_open(false)
             .id_salt("software-updater-details")
             .show(ui, |ui| {
@@ -625,6 +629,14 @@ impl App {
             theme::muted(
                 ui,
                 "Wait for the current background operation to finish.",
+                t,
+            );
+            return;
+        }
+        if self.software_ui.settings_error.is_some() {
+            theme::muted(
+                ui,
+                "Refresh to verify saved updater choices before reviewing updates.",
                 t,
             );
             return;
@@ -707,7 +719,12 @@ impl App {
                             .show(ui, |body| self.software_details(body, t, &item));
                         ui.add_space(8.);
                         ui.separator();
-                        theme::action_row(ui, |ui| {
+                        let labels: Vec<&str> = match item.status {
+                            SoftwareStatus::Ignored => vec!["Stop ignoring updates", "Close"],
+                            SoftwareStatus::SkippedVersion => vec!["Unskip update", "Close"],
+                            _ => vec!["Skip update", "Ignore updates", "Close"],
+                        };
+                        theme::centered_dialog_actions(ui, &labels, |ui| {
                             let enabled = !self.busy()
                                 && self.software_ui.settings_error.is_none()
                                 && item.identity.is_some();
@@ -741,9 +758,7 @@ impl App {
                                     close |= self.error.is_none();
                                 }
                             }
-                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                close |= theme::primary(ui, "Close", t, true);
-                            });
+                            close |= theme::primary(ui, "Close", t, true);
                         });
                     });
                 if close || response.should_close() {
@@ -781,7 +796,7 @@ impl App {
                                 review_row(body, "Source", &request.source_id, t);
                                 review_row(body, "Installed version", &request.installed_version, t);
                                 review_row(body, "Requested version", &request.target_version, t);
-                                egui::CollapsingHeader::new("Command details")
+                                theme::Disclosure::new("Command details")
                                     .default_open(false)
                                     .show(body, |body| {
                                         body.add(
@@ -806,7 +821,7 @@ impl App {
                             if theme::secondary(actions, "Cancel", can_dismiss) {
                                 cancel = true;
                             }
-                            if theme::primary(actions, "Run reviewed update", t, can_dismiss) {
+                            if theme::primary(actions, "Run reviewed update", t, can_dismiss && self.software_ui.settings_error.is_none()) {
                                 accept = true;
                             }
                         });
@@ -848,7 +863,13 @@ impl App {
                                     body.group(|row| {
                                         row.set_width(row.available_width());
                                         row.label(RichText::new(&request.display_name).family(theme::semibold()));
-                                        theme::muted(row, format!("{} · {} → {}", request.package_id, request.installed_version, request.target_version), t);
+                                        row.horizontal_wrapped(|version| {
+                                            version.spacing_mut().item_spacing.x = 4.;
+                                            theme::muted(version, format!("{} · {}", request.package_id, request.installed_version), t);
+                                            let (arrow, _) = version.allocate_exact_size(egui::vec2(14., 14.), egui::Sense::hover());
+                                            theme::paint_icon(version.painter(), arrow, theme::Icon::Forward, t.muted);
+                                            theme::muted(version, &request.target_version, t);
+                                        });
                                     });
                                 }
                                 if review.not_selected > 0 {
@@ -878,12 +899,16 @@ impl App {
                             if theme::secondary(actions, "Cancel", can_dismiss) {
                                 cancel = true;
                             }
-                            let run_label = format!("Run {} reviewed updates", review.requests.len());
+                            let run_label = format!(
+                                "Run {}",
+                                theme::counted_label(review.requests.len(), "reviewed update", "reviewed updates")
+                            );
                             if theme::primary(
                                 actions,
                                 &run_label,
                                 t,
                                 can_dismiss
+                                    && self.software_ui.settings_error.is_none()
                                     && !review.requests.is_empty()
                                     && review.error.is_none(),
                             ) {
@@ -934,7 +959,7 @@ impl App {
                         self.software_ui.snapshot_revision =
                             self.software_ui.snapshot_revision.saturating_add(1);
                         let eligible_keys = batch_eligible_keys(&snapshot);
-                        self.software_ui.snapshot = Some(snapshot);
+                        self.software_ui.snapshot = Some(Arc::new(snapshot));
                         self.software_ui.load_error = None;
                         self.software_ui.eligible_updates = eligible_keys.clone();
                         self.software_ui
@@ -983,7 +1008,7 @@ impl App {
                 match result {
                     Ok(receipt) if receipt.request_id == request_id => {
                         self.error = None;
-                        self.notice = Some(match receipt.verification {
+                        self.set_notice(match receipt.verification {
                             UpdateVerification::Verified => format!(
                                 "{} now reports version {} in both WinGet and its registration. The requested update is verified.{}",
                                 display_name,
@@ -1004,6 +1029,18 @@ impl App {
                                     .unwrap_or_default()
                             ),
                         });
+                        self.notice_kind = if receipt.verification == UpdateVerification::Verified
+                            && journal_error.is_none()
+                        {
+                            theme::StatusKind::Success
+                        } else {
+                            theme::StatusKind::Info
+                        };
+                        if receipt.verification != UpdateVerification::Verified
+                            || journal_error.is_some()
+                        {
+                            self.notice_deadline = None;
+                        }
                     }
                     Ok(_) => {
                         self.error = Some("The update receipt did not match the reviewed request; the result is uncertain.".into());
@@ -1051,7 +1088,7 @@ impl App {
                     .iter()
                     .filter(|outcome| outcome.state == BatchItemState::NotAttempted)
                     .count();
-                self.notice = Some(format!(
+                self.set_notice(format!(
                     "Batch review finished: {verified} verified, {uncertain} uncertain, {failed} failed, {not_attempted} not started. Review the per-package results before trying again."
                 ));
                 self.software_ui.batch_report = Some(report);
@@ -1070,7 +1107,7 @@ impl App {
         self.progress = "Reading WinGet package inventory".into();
         let root = self.data_dir.clone();
         let previous_settings = self.software_ui.settings.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1109,6 +1146,11 @@ impl App {
     }
 
     fn begin_software_update(&mut self, request: UpdateRequest, ctx: &egui::Context) {
+        if self.software_ui.settings_error.is_some() {
+            self.error =
+                Some("Refresh to verify saved updater choices before starting an update.".into());
+            return;
+        }
         if self.busy() || self.qa_fixture_mode() {
             return;
         }
@@ -1117,7 +1159,7 @@ impl App {
         self.progress = format!("Preparing durable update intent for {display_name}");
         self.error = None;
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1165,6 +1207,11 @@ impl App {
     }
 
     fn open_batch_review(&mut self, selected_only: bool) {
+        if self.software_ui.settings_error.is_some() {
+            self.error =
+                Some("Refresh to verify saved updater choices before reviewing updates.".into());
+            return;
+        }
         let Some(snapshot) = self.software_ui.snapshot.as_ref() else {
             self.error =
                 Some("Read the installed software inventory before reviewing updates.".into());
@@ -1190,19 +1237,22 @@ impl App {
         review: &BatchReview,
         ctx: &egui::Context,
     ) -> Result<(), String> {
+        if self.software_ui.settings_error.is_some() {
+            return Err("Refresh to verify saved updater choices before starting updates.".into());
+        }
         if self.busy() || self.qa_fixture_mode() {
             return Err("Batch updates cannot start while another operation is running.".into());
         }
         validate_batch_review(
             review,
-            self.software_ui.snapshot.as_ref(),
+            self.software_ui.snapshot.as_deref(),
             self.software_ui.snapshot_revision,
         )?;
         let requests = review.requests.clone();
         let skipped = review.skipped.clone();
         let not_selected = review.not_selected;
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         self.cancel = Arc::new(AtomicBool::new(false));
         let cancel = self.cancel.clone();
@@ -1259,9 +1309,9 @@ impl App {
         let preference_actions_enabled =
             row_actions_enabled && self.software_ui.settings_error.is_none();
         let eligible_keys = self.software_ui.eligible_updates.clone();
-        let mut items: Vec<SoftwareItem> = snapshot
+        let mut items: Vec<&SoftwareItem> = snapshot
             .items
-            .into_iter()
+            .iter()
             .filter(|item| tab_matches(self.software_ui.tab, item))
             .filter(|item| matches_query(item, &self.software_ui.query))
             .collect();
@@ -1448,7 +1498,7 @@ impl App {
                                     );
                                 }
                                 let label_width = (table_width - 68.0).max(60.0);
-                                let group_label = row.add_sized(
+                                let group_label = theme::frameless_button(row,
                                     [label_width, 40.],
                                     egui::Button::new((
                                         RichText::new(format!("App updates ({})", items.len()))
@@ -1466,6 +1516,7 @@ impl App {
                                 };
                                 let disclosure =
                                     theme::disclosure(row, disclosure_label, app_updates_expanded);
+                                theme::focus_ring(row, &group_label, 18);
                                 if group_label.clicked() || disclosure.clicked() {
                                     self.software_ui.app_updates_collapsed =
                                         !self.software_ui.app_updates_collapsed;
@@ -1484,7 +1535,7 @@ impl App {
                     if has_app_updates_group && !app_updates_expanded {
                         continue;
                     }
-                    let Some(item) = items.get(index) else {
+                    let Some(&item) = items.get(index) else {
                         continue;
                     };
                     let key = item.row_key();
@@ -1557,7 +1608,7 @@ impl App {
                                                 cell.visuals_mut().selection.stroke.color =
                                                     t.foreground;
                                                 cell.spacing_mut().button_padding.x = 0.;
-                                                cell.add_sized(
+                                                theme::frameless_button(cell,
                                                     [
                                                         (name_width - 98.).clamp(48., name_width),
                                                         40.,
@@ -1579,11 +1630,11 @@ impl App {
                                         },
                                     )
                                     .inner;
+                                theme::focus_ring(row, &name, 18);
                                 if name.clicked() {
                                     self.software_ui.selected = Some(key.clone());
                                 }
-                                name.on_hover_text(&item.row.name)
-                                    .on_hover_text(&item.row.package_id);
+                                name.on_hover_text(format!("{}\n{}",item.row.name,item.row.package_id));
                                 theme::table_cell(
                                     row,
                                     RichText::new(
@@ -1603,13 +1654,11 @@ impl App {
                                     40.,
                                 );
                                 if self.software_ui.tab == SoftwareTab::Outdated {
-                                    theme::table_cell(
+                                    theme::table_cell_with_tooltip(
                                         row,
                                         RichText::new("Unavailable").color(t.muted),
                                         state_width,
-                                        40.,
-                                    )
-                                    .on_hover_text("WinGet does not provide an importance rating.");
+                                        40., "WinGet does not provide an importance rating.");
                                 } else {
                                     theme::table_cell(
                                         row,
@@ -1630,7 +1679,7 @@ impl App {
                                             primary_clicked = theme::row_action(
                                                 primary,
                                                 "Update",
-                                                row_actions_enabled,
+                                                preference_actions_enabled,
                                             )
                                             .on_hover_text("Review this update before starting it")
                                             .clicked();
@@ -1794,7 +1843,7 @@ impl App {
         }
         if !snapshot.registration_issues.is_empty() {
             ui.add_space(8.);
-            egui::CollapsingHeader::new("Registration read issues")
+            theme::Disclosure::new("Registration read issues")
                 .id_salt("software-registration-errors")
                 .show(ui, |ui| {
                     for issue in &snapshot.registration_issues {
@@ -1823,7 +1872,7 @@ impl App {
         detail(ui, "Importance", "Unavailable", t);
         detail(ui, "Last updated", "Unknown", t);
         ui.add_space(8.);
-        egui::CollapsingHeader::new("Advanced details").id_salt("software-details-advanced").default_open(false).show(ui, |ui| {
+        theme::Disclosure::new("Advanced details").id_salt("software-details-advanced").default_open(false).show(ui, |ui| {
             theme::muted(ui, "WinGet does not provide an importance rating or a reliable last-update date.", t);
             detail(ui, "Status", status_label(item), t);
             detail(ui, "Publisher", item.registration.as_ref().and_then(|program| program.publisher.as_deref()).unwrap_or("Not exposed by WinGet"), t);
@@ -1905,7 +1954,7 @@ impl App {
             }
             if !report.skipped.is_empty() {
                 ui.add_space(8.);
-                egui::CollapsingHeader::new(format!("Not included in the review ({})", report.skipped.len()))
+                theme::Disclosure::new(format!("Not included in the review ({})", report.skipped.len()))
                     .id_salt("software-batch-skipped-results")
                     .show(ui, |ui| {
                         for skipped in &report.skipped {
@@ -2028,22 +2077,30 @@ impl App {
         self.save_proposed_software_settings(proposed);
     }
 
-    fn save_proposed_software_settings(&mut self, proposed: SoftwareSettings) {
+    pub(super) fn save_proposed_software_settings(&mut self, proposed: SoftwareSettings) {
         if self.qa_fixture_mode() {
             return;
         }
-        match software::save_settings(&self.data_dir, &proposed) {
-            Ok(()) => {
-                self.software_ui.settings = proposed;
-                self.rebuild_software_snapshot();
-                self.error = None;
-                self.notice = Some(
-                    "The updater choice was saved and can be restored from this package row."
-                        .into(),
-                );
-            }
-            Err(error) => self.error = Some(error.to_string()),
+        if let Err(error) =
+            self.queue_page_choices(super::page_choice_save::Change::Software(proposed))
+        {
+            self.error = Some(error);
         }
+    }
+
+    pub(super) fn apply_saved_software_choices(&mut self, proposed: SoftwareSettings) {
+        self.software_ui.settings = proposed;
+        self.software_ui.settings_error = None;
+        self.rebuild_software_snapshot();
+    }
+
+    pub(super) fn software_choices_unverified(&mut self, error: &str) {
+        self.software_ui.settings_error = Some(error.into());
+    }
+
+    #[cfg(test)]
+    pub(super) fn software_choices_for_test(&self) -> &SoftwareSettings {
+        &self.software_ui.settings
     }
 
     fn rebuild_software_snapshot(&mut self) {
@@ -2056,12 +2113,12 @@ impl App {
             .iter()
             .filter_map(|item| item.registration.clone())
             .collect();
-        self.software_ui.snapshot = Some(software::build_snapshot(
+        self.software_ui.snapshot = Some(Arc::new(software::build_snapshot(
             rows,
             &registrations,
             current.registration_issues.clone(),
             &self.software_ui.settings,
-        ));
+        )));
         self.software_ui.snapshot_revision = self.software_ui.snapshot_revision.saturating_add(1);
         if let Some(snapshot) = self.software_ui.snapshot.as_ref() {
             let eligible_keys = batch_eligible_keys(snapshot);
@@ -2456,10 +2513,13 @@ fn matches_query(item: &SoftwareItem, query: &str) -> bool {
     .any(|value| value.to_lowercase().contains(&query))
 }
 
-fn visible_eligible_keys(items: &[SoftwareItem], eligible: &HashSet<String>) -> Vec<String> {
+fn visible_eligible_keys<T: std::borrow::Borrow<SoftwareItem>>(
+    items: &[T],
+    eligible: &HashSet<String>,
+) -> Vec<String> {
     items
         .iter()
-        .map(SoftwareItem::row_key)
+        .map(|item| item.borrow().row_key())
         .filter(|key| eligible.contains(key))
         .collect()
 }
@@ -2492,8 +2552,14 @@ fn sort_for_tab_change(
     }
 }
 
-fn sort_items(items: &mut [SoftwareItem], sort: SoftwareSort, descending: bool) {
+fn sort_items<T: std::borrow::Borrow<SoftwareItem>>(
+    items: &mut [T],
+    sort: SoftwareSort,
+    descending: bool,
+) {
     items.sort_by(|left, right| {
+        let left: &SoftwareItem = left.borrow();
+        let right: &SoftwareItem = right.borrow();
         let ordering = match sort {
             SoftwareSort::Name => left
                 .row
@@ -2633,6 +2699,7 @@ fn sortable_heading(
     descending: bool,
     t: Tokens,
 ) -> egui::Response {
+    let background = ui.painter().add(egui::Shape::Noop);
     let indicator = if selected {
         if descending { " ↓" } else { " ↑" }
     } else {
@@ -2662,6 +2729,15 @@ fn sortable_heading(
         } else {
             format!("Sort by {label}")
         });
+    theme::paint_frameless_hover_behind(
+        ui,
+        &response,
+        (response.rect.height() / 2.) as u8,
+        background,
+    );
+    if response.has_focus() {
+        theme::focus_ring(ui, &response, (response.rect.height() / 2.) as u8 + 2);
+    }
     #[cfg(debug_assertions)]
     theme::record_fixture_control(ui, &format!("Sort {label}"), &response);
     response
@@ -2737,6 +2813,160 @@ fn history_state(state: &str) -> &str {
 #[cfg(all(test, debug_assertions))]
 mod batch_tests {
     use super::*;
+
+    #[test]
+    fn verified_choice_rebuild_keeps_an_existing_software_reader_unchanged() {
+        let context = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&context, "software-populated").unwrap();
+        let prior = app.software_ui.snapshot.clone().unwrap();
+        let target = prior.items.iter().find(|item| item.can_update()).unwrap();
+        let identity = target.identity.clone().unwrap();
+        let prior_revision = app.software_ui.snapshot_revision;
+        let mut proposed = app.software_ui.settings.clone();
+        proposed
+            .set(SoftwarePreference {
+                identity: identity.clone(),
+                state: SoftwarePreferenceState::Ignored,
+                skipped_version: None,
+            })
+            .unwrap();
+        app.apply_saved_software_choices(proposed);
+        let current = app.software_ui.snapshot.clone().unwrap();
+        assert!(!Arc::ptr_eq(&prior, &current));
+        assert_eq!(app.software_ui.snapshot_revision, prior_revision + 1);
+        assert_eq!(
+            prior
+                .items
+                .iter()
+                .find(|item| item.identity.as_ref() == Some(&identity))
+                .unwrap()
+                .status,
+            SoftwareStatus::UpdateAvailable
+        );
+        assert_eq!(
+            current
+                .items
+                .iter()
+                .find(|item| item.identity.as_ref() == Some(&identity))
+                .unwrap()
+                .status,
+            SoftwareStatus::Ignored
+        );
+        let mut output = context.run_ui(Default::default(), |ui| app.paint(ui));
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+        assert!(Arc::ptr_eq(
+            &current,
+            app.software_ui.snapshot.as_ref().unwrap()
+        ));
+    }
+
+    #[test]
+    fn filtered_software_inventory_frame_cost() {
+        let stage = std::env::var("DCLEANER_BENCH_STAGE").unwrap_or_else(|_| "ordinary".into());
+        for count in [128, 1024] {
+            let context = egui::Context::default();
+            let mut app = App::new_fixture_with_context(&context, "software-populated").unwrap();
+            let seed = app.software_ui.snapshot.as_ref().unwrap().items[0].clone();
+            let items = (0..count)
+                .map(|index| {
+                    let mut item = seed.clone();
+                    item.row.name = format!("Synthetic item {index:04}");
+                    item.row.package_id = format!("Synthetic.Item{index}");
+                    item.association_note =
+                        Some("Synthetic hidden inventory metadata ".repeat(128));
+                    if let Some(identity) = &mut item.identity {
+                        identity.package_id = item.row.package_id.to_lowercase();
+                        identity.registration.key_name = format!("fixture-{index}");
+                    }
+                    item
+                })
+                .collect();
+            let snapshot = SoftwareSnapshot {
+                items,
+                registration_issues: Vec::new(),
+            };
+            app.software_ui.eligible_updates = batch_eligible_keys(&snapshot);
+            app.software_ui.snapshot = Some(Arc::new(snapshot));
+            app.software_ui.tab = SoftwareTab::UpToDate;
+            let pointer = app.software_ui.snapshot.as_ref().unwrap().items.as_ptr();
+            let mut samples = Vec::new();
+            for tick in 0..8 {
+                let started = std::time::Instant::now();
+                let mut output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(920., 612.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| app.paint(ui),
+                );
+                if tick >= 3 {
+                    samples.push(started.elapsed().as_secs_f64() * 1000.);
+                }
+                assert!(!output.shapes.is_empty());
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                app.software_ui.snapshot.as_ref().unwrap().items.as_ptr(),
+                pointer
+            );
+            assert_eq!(
+                app.software_ui.snapshot.as_ref().unwrap().items.len(),
+                count
+            );
+            eprintln!(
+                "INVENTORY_FRAME_BENCH {}",
+                serde_json::json!({"stage":stage,"page":"software","rows":count,"warm_layout_ms":samples,"synthetic":true,"filtered_empty_tab":true,"physical_input":false,"native_window":false})
+            );
+        }
+    }
+
+    #[test]
+    fn unreadable_choices_block_single_and_batch_update_entrypoints_before_native_gates() {
+        let context = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&context, "software-populated").unwrap();
+        let snapshot = app.software_ui.snapshot.as_ref().unwrap();
+        let request = software::prepare_update(
+            snapshot
+                .items
+                .iter()
+                .find(|item| item.can_update())
+                .unwrap(),
+        )
+        .unwrap();
+        let review =
+            prepare_batch_review(snapshot, &HashSet::new(), app.software_ui.snapshot_revision)
+                .unwrap();
+        app.software_choices_unverified("Synthetic unreadable choices");
+        app.begin_software_update(request, &context);
+        assert!(
+            app.error
+                .take()
+                .unwrap()
+                .contains("verify saved updater choices")
+        );
+        assert!(
+            app.begin_software_batch(&review, &context)
+                .unwrap_err()
+                .contains("verify saved updater choices")
+        );
+        app.open_batch_review(false);
+        assert!(
+            app.error
+                .as_deref()
+                .unwrap()
+                .contains("verify saved updater choices")
+        );
+        assert!(app.worker.is_none());
+        assert!(app.software_ui.dialog.is_none());
+        assert!(
+            app.qa_fixture_mode(),
+            "independent fixture guard prevents native effects if a refusal regresses"
+        );
+    }
 
     #[test]
     fn filtered_header_selection_excludes_hidden_and_ineligible_updates() {

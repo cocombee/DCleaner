@@ -1,9 +1,12 @@
 use super::*;
+use dcleaner::program_uninstall_batch::{self, BatchItemOutcome, BatchPlan, BatchReport};
 use dcleaner::programs::{
     self, InstalledProgram, InventorySnapshot, ProgramIdentity, RegistryHive, RegistrySource,
     RegistryView, UninstallHandoffReceipt, UninstallRequest,
 };
 use serde::Serialize;
+
+type BatchSelectionKey = (ProgramIdentity, RegistrySource);
 
 #[derive(Default)]
 pub(super) struct ProgramsUi {
@@ -19,6 +22,8 @@ pub(super) struct ProgramsUi {
     sort: ProgramSort,
     descending: bool,
     selected: Option<ProgramIdentity>,
+    batch_selection: HashSet<BatchSelectionKey>,
+    batch_report: Option<BatchReport>,
     dialog: Option<ProgramsDialog>,
     journal: Vec<dcleaner::effects::EffectHistory>,
     journal_loaded: bool,
@@ -46,6 +51,15 @@ enum ProgramSort {
 enum ProgramsDialog {
     Details(ProgramIdentity),
     UninstallReview(UninstallRequest),
+    UninstallBatchReview(UninstallBatchReview),
+    UninstallBatchProgress(UninstallBatchReview),
+    UninstallBatchResult(BatchReport),
+}
+
+#[derive(Clone, Debug)]
+struct UninstallBatchReview {
+    plan: BatchPlan,
+    target_names: Vec<String>,
 }
 
 pub(super) enum ProgramsEvent {
@@ -57,6 +71,8 @@ pub(super) enum ProgramsEvent {
         result: Result<UninstallHandoffReceipt, String>,
         journal_error: Option<String>,
     },
+    UninstallBatchProgress(String),
+    UninstallBatchComplete(BatchReport),
 }
 
 #[derive(Serialize)]
@@ -76,6 +92,9 @@ impl App {
             "programs-intro"
                 | "programs-empty"
                 | "programs-populated"
+                | "programs-batch-review"
+                | "programs-batch-progress"
+                | "programs-batch-result"
                 | "programs-details"
                 | "programs-search"
                 | "programs-error"
@@ -95,7 +114,12 @@ impl App {
 
         let populated = matches!(
             case,
-            "programs-populated" | "programs-details" | "programs-search"
+            "programs-populated"
+                | "programs-details"
+                | "programs-search"
+                | "programs-batch-review"
+                | "programs-batch-progress"
+                | "programs-batch-result"
         );
         let programs = if populated {
             vec![
@@ -139,6 +163,38 @@ impl App {
         self.error = None;
         self.notice = None;
         self.progress.clear();
+        if case.starts_with("programs-batch-") {
+            let inventory = self.program_ui.inventory.as_ref().unwrap();
+            self.program_ui.batch_selection =
+                inventory.programs.iter().map(batch_selection_key).collect();
+            let review =
+                prepare_uninstall_batch_review(inventory, &self.program_ui.batch_selection)?;
+            self.program_ui.dialog = Some(match case {
+                "programs-batch-review" => ProgramsDialog::UninstallBatchReview(review),
+                "programs-batch-progress" => {
+                    self.progress = "Waiting for Example Editor's uninstaller to exit…".into();
+                    ProgramsDialog::UninstallBatchProgress(review)
+                }
+                _ => {
+                    let report = BatchReport {
+                        batch_id: Uuid::new_v4(), selected_count: 3, unstarted_count: 1,
+                        cancelled: false, stopped: true,
+                        stop_reason: Some("The current uninstaller's outcome could not be established. Later launches stopped.".into()),
+                        journal_failures: Vec::new(),
+                        items: inventory.programs.iter().enumerate().map(|(index, program)| program_uninstall_batch::BatchItemResult {
+                            identity: program.identity.clone(), target_name: program.display_name.clone(),
+                            outcome: match index {
+                                0 => BatchItemOutcome::Exited { success: true, exit_code: Some(0), removal_confirmed: false },
+                                1 => BatchItemOutcome::WaitUnknown { message: "Synthetic wait failure; no process was launched.".into() },
+                                _ => BatchItemOutcome::NotStarted,
+                            },
+                        }).collect(),
+                    };
+                    self.program_ui.batch_report = Some(report.clone());
+                    ProgramsDialog::UninstallBatchResult(report)
+                }
+            });
+        }
         Ok(())
     }
 
@@ -183,10 +239,46 @@ impl App {
             "Cancel"
                 if matches!(
                     self.program_ui.dialog,
-                    Some(ProgramsDialog::UninstallReview(_))
+                    Some(
+                        ProgramsDialog::UninstallReview(_)
+                            | ProgramsDialog::UninstallBatchReview(_)
+                    )
                 ) =>
             {
                 Ok(())
+            }
+            "Review selected batch"
+                if !self.program_ui.batch_selection.is_empty()
+                    && self.program_ui.dialog.is_none() =>
+            {
+                Ok(())
+            }
+            _ if (action.starts_with("Select for batch: ")
+                || action.starts_with("Remove from batch: "))
+                && self.program_ui.dialog.is_none() =>
+            {
+                let selecting = action.starts_with("Select for batch: ");
+                let name = action
+                    .strip_prefix("Select for batch: ")
+                    .or_else(|| action.strip_prefix("Remove from batch: "))
+                    .unwrap_or_default();
+                if self.program_ui.inventory.as_ref().is_some_and(|inventory| {
+                    inventory.programs.iter().any(|program| {
+                        program.display_name == name
+                            && program.can_uninstall()
+                            && (self
+                                .program_ui
+                                .batch_selection
+                                .contains(&batch_selection_key(program))
+                                != selecting)
+                    })
+                }) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Program is not selectable for an uninstall batch: {name}"
+                    ))
+                }
             }
             _ => Err(format!(
                 "Programs action is not available in the current safe fixture state: {action}"
@@ -210,6 +302,9 @@ impl App {
         let dialog = match self.program_ui.dialog.as_ref() {
             Some(ProgramsDialog::Details(_)) => "details",
             Some(ProgramsDialog::UninstallReview(_)) => "uninstall_review",
+            Some(ProgramsDialog::UninstallBatchReview(_)) => "uninstall_batch_review",
+            Some(ProgramsDialog::UninstallBatchProgress(_)) => "uninstall_batch_progress",
+            Some(ProgramsDialog::UninstallBatchResult(_)) => "uninstall_batch_result",
             None => "closed",
         };
         let state = serde_json::json!({
@@ -221,6 +316,7 @@ impl App {
             "search_empty": self.program_ui.search.is_empty(),
             "programs": self.program_ui.inventory.as_ref().map(|inventory| inventory.programs.len()),
             "visible_programs": self.program_ui.inventory.as_ref().map(|inventory| inventory.programs.iter().filter(|program| matches_search(program, &self.program_ui.search)).count()),
+            "batch_selection": self.program_ui.batch_selection.iter().map(|(identity, source)| format!("{} · {:?}", identity.stable_id(), source.view)).collect::<Vec<_>>(),
         });
         let valid = match action {
             "Installed" | "Disabled · unavailable" => state["tab"] == action,
@@ -235,7 +331,27 @@ impl App {
             "Sort Size" => state["sort"] == "Size",
             "Details" => state["dialog"] == "details",
             "Uninstall" => state["dialog"] == "uninstall_review",
+            "Review selected batch" => state["dialog"] == "uninstall_batch_review",
             "Close" | "Escape" | "Cancel" | "Close dialog" => state["dialog"] == "closed",
+            _ if action.starts_with("Select for batch: ")
+                || action.starts_with("Remove from batch: ") =>
+            {
+                let selecting = action.starts_with("Select for batch: ");
+                let name = action
+                    .strip_prefix("Select for batch: ")
+                    .or_else(|| action.strip_prefix("Remove from batch: "))
+                    .unwrap_or_default();
+                self.program_ui.inventory.as_ref().is_some_and(|inventory| {
+                    inventory.programs.iter().any(|program| {
+                        program.display_name == name
+                            && (self
+                                .program_ui
+                                .batch_selection
+                                .contains(&batch_selection_key(program))
+                                == selecting)
+                    })
+                })
+            }
             _ => false,
         };
         if !valid {
@@ -330,7 +446,7 @@ impl App {
         if self.program_ui.journal_error.is_some() {
             self.program_operation_history(ui, t);
         } else {
-            egui::CollapsingHeader::new(format!(
+            theme::Disclosure::new(format!(
                 "Uninstall history ({})",
                 self.program_ui.journal.len()
             ))
@@ -338,8 +454,9 @@ impl App {
             .default_open(false)
             .show(ui, |ui| self.program_operation_history(ui, t));
         }
+        self.program_batch_report_panel(ui, t);
         ui.add_space(12.);
-        egui::CollapsingHeader::new("Feature availability")
+        theme::Disclosure::new("Feature availability")
             .default_open(false)
             .id_salt("program-feature-availability")
             .show(ui, |ui| {
@@ -376,35 +493,58 @@ impl App {
             }
             return;
         }
-        ui.horizontal_wrapped(|ui| {
-            let selected = self.selected_program().cloned();
+        let selected = self.selected_program().cloned();
+        let batch_count = self.program_ui.batch_selection.len();
+        let summary = ui.horizontal(|ui| {
             let selected_name = selected
                 .as_ref()
                 .map(|program| program.display_name.as_str())
                 .unwrap_or("No program selected");
             ui.add_sized(
-                [220., 22.],
+                [
+                    (ui.available_width() - if batch_count > 0 { 245. } else { 0. }).max(80.),
+                    22.,
+                ],
                 egui::Label::new(RichText::new(selected_name).family(theme::semibold())).truncate(),
             );
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let remove_enabled = !self.busy()
-                    && selected
-                        .as_ref()
-                        .is_some_and(InstalledProgram::can_uninstall);
-                if theme::secondary(ui, "Review uninstall…", remove_enabled) {
-                    self.open_program_uninstall_review();
-                }
-                if theme::secondary(ui, "Details", selected.is_some()) {
-                    if let Some(program) = selected.as_ref() {
-                        self.program_ui.dialog =
-                            Some(ProgramsDialog::Details(program.identity.clone()));
-                    }
-                }
-                if theme::secondary(ui, "Refresh", !self.busy() && !self.qa_fixture_mode()) {
-                    self.begin_program_inventory(ctx);
-                }
-            });
+            if batch_count > 0 {
+                theme::muted(
+                    ui,
+                    format!("{batch_count} programs selected for batch review"),
+                    t,
+                );
+            }
         });
+        #[cfg(debug_assertions)]
+        theme::record_region(ui, "programs-selection-summary", summary.response.rect, 0);
+        #[cfg(not(debug_assertions))]
+        let _ = summary;
+        ui.add_space(6.);
+        let actions = ui.horizontal_wrapped(|ui| {
+            if theme::secondary(ui, "Refresh", !self.busy() && !self.qa_fixture_mode()) {
+                self.begin_program_inventory(ctx);
+            }
+            if theme::secondary(ui, "Details", selected.is_some()) {
+                if let Some(program) = selected.as_ref() {
+                    self.program_ui.dialog =
+                        Some(ProgramsDialog::Details(program.identity.clone()));
+                }
+            }
+            if theme::secondary(ui, "Review selected batch", !self.busy() && batch_count > 0) {
+                self.open_program_uninstall_batch_review();
+            }
+            let remove_enabled = !self.busy()
+                && selected
+                    .as_ref()
+                    .is_some_and(InstalledProgram::can_uninstall);
+            if theme::secondary(ui, "Review uninstall…", remove_enabled) {
+                self.open_program_uninstall_review();
+            }
+        });
+        #[cfg(debug_assertions)]
+        theme::record_region(ui, "programs-footer-actions", actions.response.rect, 0);
+        #[cfg(not(debug_assertions))]
+        let _ = actions;
     }
 
     pub(super) fn programs_dialog(&mut self, ctx: &egui::Context) {
@@ -426,6 +566,8 @@ impl App {
         let t = theme::tokens(self.prefs.dark);
         let mut close = false;
         let mut start_handoff: Option<UninstallRequest> = None;
+        let mut start_batch: Option<UninstallBatchReview> = None;
+        let mut cancel_batch = false;
         let modal_width = (ctx.content_rect().width() - 32.).min(560.).max(280.);
         let body_height = dialog_body_max_height(ctx);
         let can_dismiss = matches!(&dialog, ProgramsDialog::Details(_)) || !self.busy();
@@ -435,6 +577,9 @@ impl App {
                 .map(|program| program.display_name.clone())
                 .unwrap_or_else(|| "Application details".into()),
             ProgramsDialog::UninstallReview(_) => "Review uninstall".into(),
+            ProgramsDialog::UninstallBatchReview(_) => "Review uninstall batch".into(),
+            ProgramsDialog::UninstallBatchProgress(_) => "Uninstall batch in progress".into(),
+            ProgramsDialog::UninstallBatchResult(_) => "Uninstall batch results".into(),
         };
         let details_icon = if !self.qa_fixture_mode() {
             match &dialog {
@@ -459,7 +604,7 @@ impl App {
                         if matches!(dialog, ProgramsDialog::Details(_)) {
                             self.app_icons.show(title, details_icon.as_deref(), 22.);
                         }
-                        title.add(egui::Label::new(RichText::new(&heading).size(theme::FONT_DISPLAY).family(theme::semibold())).truncate()).on_hover_text(&heading);
+                        title.add(egui::Label::new(RichText::new(&heading).size(theme::FONT_DISPLAY).family(theme::semibold())).truncate().show_tooltip_when_elided(false)).on_hover_text(&heading);
                     });
                     close |= theme::close_button(ui, "Close dialog", can_dismiss);
                 });
@@ -498,7 +643,7 @@ impl App {
                                         .unwrap_or_else(|| "Unknown".into()),
                                     t,
                                 );
-                                egui::CollapsingHeader::new("Advanced details")
+                                theme::Disclosure::new("Advanced details")
                                     .id_salt("program-details-advanced")
                                     .default_open(false)
                                     .show(body, |advanced| {
@@ -584,13 +729,81 @@ impl App {
                                 );
                             }
                         }
+                        ProgramsDialog::UninstallBatchReview(review) => {
+                            body.label(
+                                RichText::new(format!(
+                                    "Start registered uninstallers for {} selected programs?",
+                                    review.plan.requests.len()
+                                ))
+                                .family(theme::semibold())
+                                .size(theme::FONT_BODY),
+                            );
+                            body.add_space(8.);
+                            theme::muted(body, "Each exact registration is re-read immediately before launch. DCleaner starts one uninstaller at a time and waits for its owned process to exit before starting the next. Process exit does not confirm removal.", t);
+                            body.add_space(6.);
+                            theme::muted(body, "Cancel stops later launches; it does not close an uninstaller that has already started.", t);
+                            body.add_space(10.);
+                            for (index, request) in review.plan.requests.iter().enumerate() {
+                                let name = review
+                                    .target_names
+                                    .get(index)
+                                    .map(String::as_str)
+                                    .unwrap_or(request.identity.key_name.as_str());
+                                theme::Disclosure::new(format!("{}. {}", index + 1, name))
+                                    .id_salt(("uninstall-batch-review", index))
+                                    .default_open(review.plan.requests.len() == 1)
+                                    .show(body, |item| {
+                                        detail_row(
+                                            item,
+                                            "Registration",
+                                            source_label(request.source),
+                                            t,
+                                        );
+                                        detail_row(
+                                            item,
+                                            "Stable identity",
+                                            request.identity.stable_id(),
+                                            t,
+                                        );
+                                        item.add_space(4.);
+                                        item.label(
+                                            RichText::new("Exact registered command")
+                                                .family(theme::semibold()),
+                                        );
+                                        item.add(
+                                            egui::Label::new(
+                                                RichText::new(&request.expected_registered_command)
+                                                    .monospace(),
+                                            )
+                                            .wrap(),
+                                        );
+                                    });
+                            }
+                        }
+                        ProgramsDialog::UninstallBatchProgress(review) => {
+                            theme::status_banner(body, self.progress.as_str(), theme::StatusKind::Info, true, false);
+                            body.add_space(8.);
+                            theme::muted(
+                                body,
+                                format!(
+                                    "{} programs in this reviewed batch. The current uninstaller remains owned until it exits.",
+                                    review.plan.requests.len()
+                                ),
+                                t,
+                            );
+                            body.add_space(6.);
+                            theme::muted(body, "Cancellation prevents later launches and waits for the current child to finish. It never terminates the uninstaller.", t);
+                        }
+                        ProgramsDialog::UninstallBatchResult(report) => {
+                            batch_report_contents(body, report, t);
+                        }
                     });
                 ui.add_space(8.);
                 ui.separator();
                 ui.add_space(8.);
                 ui.horizontal_wrapped(|actions| match &dialog {
                     ProgramsDialog::Details(_) => {
-                        if theme::secondary(actions, "Close", true) {
+                        if theme::centered_dialog_actions(actions,&["Close"],|ui|theme::primary(ui,"Close",t,true)).inner {
                             close = true;
                         }
                     }
@@ -606,6 +819,33 @@ impl App {
                             close = true;
                         }
                     }
+                    ProgramsDialog::UninstallBatchReview(review) => {
+                        if theme::secondary(actions, "Cancel", !self.busy()) {
+                            close = true;
+                        }
+                        let enabled = !self.busy() && !self.qa_fixture_mode();
+                        if theme::primary(actions, "Start uninstall batch", t, enabled) {
+                            start_batch = Some(review.clone());
+                        }
+                    }
+                    ProgramsDialog::UninstallBatchProgress(_) => {
+                        if theme::secondary(
+                            actions,
+                            if self.cancel.load(Ordering::Acquire) {
+                                "Cancelling…"
+                            } else {
+                                "Cancel batch"
+                            },
+                            !self.cancel.load(Ordering::Acquire),
+                        ) {
+                            cancel_batch = true;
+                        }
+                    }
+                    ProgramsDialog::UninstallBatchResult(_) => {
+                        if theme::centered_dialog_actions(actions,&["Close"],|ui|theme::primary(ui,"Close",t,true)).inner {
+                            close = true;
+                        }
+                    }
                 });
             });
         if response.should_close() && can_dismiss {
@@ -618,6 +858,14 @@ impl App {
             self.program_ui.dialog = None;
             self.begin_program_uninstall(request, ctx);
         }
+        if let Some(review) = start_batch {
+            self.begin_program_uninstall_batch(review, ctx);
+        }
+        if cancel_batch {
+            self.cancel.store(true, Ordering::Release);
+            self.progress =
+                "Cancellation requested; waiting for the current uninstaller to exit…".into();
+        }
     }
 
     pub(super) fn programs_event(&mut self, event: ProgramsEvent) {
@@ -627,6 +875,7 @@ impl App {
                 self.program_ui.loading = false;
                 match result {
                     Ok(inventory) => {
+                        self.program_ui.batch_selection.clear();
                         let still_exists =
                             self.program_ui.selected.as_ref().is_some_and(|identity| {
                                 inventory
@@ -668,7 +917,7 @@ impl App {
                                 receipt.process_id
                             )
                         };
-                        self.notice = Some(receipt_text);
+                        self.set_notice(receipt_text);
                         if let Some(error) = journal_error {
                             self.error = Some(format!(
                                 "Uninstaller started, but the journal receipt failed: {error}"
@@ -692,6 +941,20 @@ impl App {
                 }
                 let _ = request_id;
             }
+            ProgramsEvent::UninstallBatchProgress(message) => {
+                self.progress = message;
+            }
+            ProgramsEvent::UninstallBatchComplete(report) => {
+                self.worker = None;
+                self.program_ui.loading = false;
+                self.program_ui.batch_selection.clear();
+                self.program_ui.journal_loaded = false;
+                self.program_ui.batch_report = Some(report.clone());
+                self.program_ui.dialog = Some(ProgramsDialog::UninstallBatchResult(report.clone()));
+                self.cancel.store(false, Ordering::Release);
+                self.progress.clear();
+                self.set_notice(report.summary());
+            }
         }
     }
 
@@ -709,6 +972,7 @@ impl App {
         let qa_fixture_mode = self.qa_fixture_mode();
         let mut row_details = None;
         let mut row_uninstall_review = None;
+        let mut batch_selection = self.program_ui.batch_selection.clone();
         if let Some(inventory) = self.program_ui.inventory.as_ref() {
             let mut visible: Vec<_> = inventory
                 .programs
@@ -737,8 +1001,10 @@ impl App {
             let usage_width = if compact_layout { 72.0 } else { 92.0 };
             let size_width = if compact_layout { 78.0 } else { 96.0 };
             let action_width = 152.0;
-            let column_gaps = 32.0;
+            let selection_width = 28.0;
+            let column_gaps = 40.0;
             let name_width = (table_width
+                - selection_width
                 - installed_width
                 - usage_width
                 - size_width
@@ -749,6 +1015,7 @@ impl App {
             ui.spacing_mut().item_spacing.y = 0.;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
+                ui.allocate_space(Vec2::new(selection_width, theme::FIELD_HEIGHT));
                 ui.allocate_ui_with_layout(
                     Vec2::new(name_width, theme::FIELD_HEIGHT),
                     Layout::left_to_right(Align::Center),
@@ -856,7 +1123,7 @@ impl App {
                 .show_rows(ui, theme::TABLE_ROW_HEIGHT, visible.len(), |rows_ui, visible_rows| {
             for index in visible_rows {
                 let program = visible[index];
-                rows_ui.push_id(program.identity.stable_id(), |ui| {
+                rows_ui.push_id((program.identity.stable_id(), program.source), |ui| {
                     let row_response = ui.allocate_ui_with_layout(
                         [table_width, theme::TABLE_ROW_HEIGHT].into(),
                         Layout::left_to_right(Align::Center),
@@ -869,6 +1136,45 @@ impl App {
                             if is_selected {
                                 row.painter().rect_filled(egui::Rect::from_min_size(row.cursor().min, [table_width, theme::TABLE_ROW_HEIGHT].into()), 0., t.tint);
                             }
+                            row.allocate_ui_with_layout(
+                                [selection_width, 40.].into(),
+                                Layout::left_to_right(Align::Center),
+                                |cell| {
+                                    cell.set_min_width(selection_width);
+                                    cell.set_max_width(selection_width);
+                                    let key = batch_selection_key(program);
+                                    let mut checked = batch_selection.contains(&key);
+                                    let label = if checked {
+                                        format!("Remove from batch: {}", program.display_name)
+                                    } else {
+                                        format!("Select for batch: {}", program.display_name)
+                                    };
+                                    let control = theme::checkbox_named(
+                                        cell,
+                                        &mut checked,
+                                        false,
+                                        &label,
+                                        !busy && program.can_uninstall(),
+                                    );
+                                    if control.changed() {
+                                        if checked {
+                                            batch_selection.insert(key);
+                                        } else {
+                                            batch_selection.remove(&key);
+                                        }
+                                    }
+                                    if !program.can_uninstall() {
+                                        control.on_hover_text(
+                                            program
+                                                .removal_block_reasons()
+                                                .iter()
+                                                .map(ToString::to_string)
+                                                .collect::<Vec<_>>()
+                                                .join(" "),
+                                        );
+                                    }
+                                },
+                            );
                             let icon = if qa_fixture_mode {
                                 None
                             } else {
@@ -887,7 +1193,7 @@ impl App {
                                             cell.visuals_mut().selection.bg_fill = t.tint;
                                             cell.visuals_mut().selection.stroke.color = t.foreground;
                                             cell.spacing_mut().button_padding.x = 0.;
-                                            cell.add_sized(
+                                            theme::frameless_button(cell,
                                                 [(name_width - 30.).clamp(60., name_width), 40.],
                                         egui::Button::selectable(
                                             false,
@@ -906,6 +1212,7 @@ impl App {
                                     },
                                 )
                                 .inner;
+                            theme::focus_ring(row, &name, 18);
                             if name.clicked() {
                                 self.program_ui.selected = Some(program.identity.clone());
                             }
@@ -999,7 +1306,7 @@ impl App {
             }
             if !inventory.errors.is_empty() {
                 ui.add_space(8.);
-                egui::CollapsingHeader::new("Registry read issues")
+                theme::Disclosure::new("Registry read issues")
                     .id_salt("program-registry-errors")
                     .show(ui, |ui| {
                         for error in &inventory.errors {
@@ -1023,6 +1330,7 @@ impl App {
         } else if self.program_ui.load_error.is_none() && !self.program_ui.loading {
             theme::muted(ui, "Select Refresh to read registered programs.", t);
         }
+        self.program_ui.batch_selection = batch_selection;
         if let Some(identity) = row_details {
             self.program_ui.selected = Some(identity.clone());
             self.program_ui.dialog = Some(ProgramsDialog::Details(identity));
@@ -1036,7 +1344,7 @@ impl App {
         theme::card(t).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Uninstall handoff history").family(theme::semibold()));
+                ui.label(RichText::new("Uninstall activity").family(theme::semibold()));
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     theme::muted(ui, "Durable local journal", t);
                 });
@@ -1062,12 +1370,29 @@ impl App {
                     let identity = entry
                         .intent
                         .get("identity")
+                        .or_else(|| {
+                            entry
+                                .intent
+                                .get("request")
+                                .and_then(|request| request.get("identity"))
+                        })
                         .and_then(|identity| identity.get("key_name"))
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("program registration");
-                    theme::muted(ui, identity, t);
+                    let target_name = entry
+                        .intent
+                        .get("target_name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(identity);
+                    theme::muted(ui, target_name, t);
                     if entry.state == "handed_off" || entry.state == "uncertain" {
                         theme::muted(ui, "Removal is not confirmed by the handoff record.", t);
+                    } else if entry.state == "completed" {
+                        theme::muted(
+                            ui,
+                            "The uninstaller process exited; removal is not confirmed.",
+                            t,
+                        );
                     }
                 }
             }
@@ -1090,15 +1415,29 @@ impl App {
             .find(|program| &program.identity == identity)
     }
 
+    fn program_batch_report_panel(&self, ui: &mut egui::Ui, t: Tokens) {
+        let Some(report) = self.program_ui.batch_report.as_ref() else {
+            return;
+        };
+        theme::Disclosure::new(format!(
+            "Latest uninstall batch ({})",
+            report.selected_count
+        ))
+        .id_salt("program-uninstall-batch-result")
+        .default_open(false)
+        .show(ui, |ui| batch_report_contents(ui, report, t));
+    }
+
     fn begin_program_inventory(&mut self, ctx: &egui::Context) {
         if self.busy() || self.qa_fixture_mode() {
             return;
         }
         self.program_ui.initial_load_attempted = true;
+        self.program_ui.batch_selection.clear();
         self.program_ui.loading = true;
         self.program_ui.load_error = None;
         self.progress = "Reading installed-program registrations".into();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1132,7 +1471,7 @@ impl App {
         self.program_ui.loading = true;
         self.progress = format!("Revalidating registration for {target_name}");
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1206,6 +1545,57 @@ impl App {
         }
     }
 
+    fn open_program_uninstall_batch_review(&mut self) {
+        let Some(inventory) = self.program_ui.inventory.as_ref() else {
+            self.error =
+                Some("Refresh the installed-program inventory before reviewing a batch.".into());
+            return;
+        };
+        match prepare_uninstall_batch_review(inventory, &self.program_ui.batch_selection) {
+            Ok(review) => {
+                self.error = None;
+                self.program_ui.dialog = Some(ProgramsDialog::UninstallBatchReview(review));
+            }
+            Err(error) => self.error = Some(error),
+        }
+    }
+
+    fn begin_program_uninstall_batch(&mut self, review: UninstallBatchReview, ctx: &egui::Context) {
+        if self.busy() || self.qa_fixture_mode() || review.plan.requests.is_empty() {
+            return;
+        }
+        self.error = None;
+        self.notice = None;
+        self.program_ui.batch_report = None;
+        self.program_ui.loading = true;
+        self.program_ui.dialog = Some(ProgramsDialog::UninstallBatchProgress(review.clone()));
+        self.progress = format!(
+            "Starting reviewed uninstall batch ({} programs)…",
+            review.plan.requests.len()
+        );
+        self.cancel = Arc::new(AtomicBool::new(false));
+        let cancel = self.cancel.clone();
+        let root = self.data_dir.clone();
+        let (tx, rx) = crate::worker_events::channel();
+        self.worker = Some(rx);
+        let repaint = ctx.clone();
+        thread::spawn(move || {
+            let progress_tx = tx.clone();
+            let progress_repaint = repaint.clone();
+            let report =
+                program_uninstall_batch::run_native(&review.plan, &root, &cancel, move |message| {
+                    let _ = progress_tx.send(Event::Programs(
+                        ProgramsEvent::UninstallBatchProgress(message),
+                    ));
+                    progress_repaint.request_repaint();
+                });
+            let _ = tx.send(Event::Programs(ProgramsEvent::UninstallBatchComplete(
+                report,
+            )));
+            repaint.request_repaint();
+        });
+    }
+
     fn load_program_journal(&mut self) {
         if self.qa_fixture_mode() {
             return;
@@ -1214,7 +1604,16 @@ impl App {
             return;
         }
         self.program_ui.journal_loaded = true;
-        match dcleaner::effects::history(&self.data_dir, "program-uninstall") {
+        let result = dcleaner::effects::history(&self.data_dir, "program-uninstall").and_then(
+            |mut history| {
+                let mut batch_history =
+                    dcleaner::effects::history(&self.data_dir, "program-uninstall-batch")?;
+                history.append(&mut batch_history);
+                history.sort_by(|left, right| right.date.cmp(&left.date));
+                Ok(history)
+            },
+        );
+        match result {
             Ok(history) => {
                 self.program_ui.journal = history;
                 self.program_ui.journal_error = None;
@@ -1312,6 +1711,11 @@ fn program_sort_header(
         label.to_owned()
     };
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 22.), egui::Sense::click());
+    let background = ui.painter().add(egui::Shape::Noop);
+    theme::paint_frameless_hover_behind(ui, &response, 11, background);
+    if response.has_focus() {
+        theme::focus_ring(ui, &response, 13);
+    }
     ui.painter().text(
         rect.left_center(),
         egui::Align2::LEFT_CENTER,
@@ -1470,6 +1874,87 @@ fn sort_programs(programs: &mut [&InstalledProgram], sort: ProgramSort, descendi
     });
 }
 
+fn batch_report_contents(ui: &mut egui::Ui, report: &BatchReport, t: Tokens) {
+    theme::status_banner(ui, &report.summary(), theme::StatusKind::Info, false, false);
+    if !report.journal_failures.is_empty() {
+        ui.add_space(6.);
+        ui.label(RichText::new("Journal issues").family(theme::semibold()));
+        for failure in &report.journal_failures {
+            theme::muted(ui, failure, t);
+        }
+    }
+    for item in &report.items {
+        ui.separator();
+        ui.add_space(4.);
+        ui.horizontal_wrapped(|row| {
+            row.label(RichText::new(&item.target_name).family(theme::semibold()));
+            row.with_layout(Layout::right_to_left(Align::Center), |status| {
+                theme::muted(status, item.outcome.status_label(), t);
+            });
+        });
+        match &item.outcome {
+            BatchItemOutcome::Exited {
+                exit_code,
+                removal_confirmed,
+                ..
+            } => {
+                theme::muted(
+                    ui,
+                    format!(
+                        "Exit code: {} · {}",
+                        exit_code
+                            .map(|code| code.to_string())
+                            .unwrap_or_else(|| "not provided".into()),
+                        if *removal_confirmed {
+                            "Removal confirmed"
+                        } else {
+                            "Removal not confirmed"
+                        }
+                    ),
+                    t,
+                );
+            }
+            BatchItemOutcome::NotStarted => {}
+            _ => {
+                if let Some(detail) = item.outcome.detail() {
+                    theme::muted(ui, detail, t);
+                }
+            }
+        }
+    }
+}
+
+fn prepare_uninstall_batch_review(
+    inventory: &InventorySnapshot,
+    selection: &HashSet<BatchSelectionKey>,
+) -> Result<UninstallBatchReview, String> {
+    let selected: Vec<_> = inventory
+        .programs
+        .iter()
+        .filter(|program| selection.contains(&batch_selection_key(program)))
+        .cloned()
+        .collect();
+    let plan = program_uninstall_batch::prepare(&selected)?;
+    let target_names = plan
+        .requests
+        .iter()
+        .map(|request| {
+            selected
+                .iter()
+                .find(|program| {
+                    &program.identity == &request.identity && program.source == request.source
+                })
+                .map(|program| program.display_name.clone())
+                .unwrap_or_else(|| request.identity.key_name.clone())
+        })
+        .collect();
+    Ok(UninstallBatchReview { plan, target_names })
+}
+
+fn batch_selection_key(program: &InstalledProgram) -> BatchSelectionKey {
+    (program.identity.clone(), program.source)
+}
+
 fn source_label(source: RegistrySource) -> String {
     format!(
         "{} · {} view",
@@ -1484,7 +1969,7 @@ fn source_label(source: RegistrySource) -> String {
     )
 }
 
-fn format_install_date(value: &str) -> String {
+pub(super) fn format_install_date(value: &str) -> String {
     if value.len() == 8 && value.bytes().all(|byte| byte.is_ascii_digit()) {
         format!("{}-{}-{}", &value[0..4], &value[4..6], &value[6..8])
     } else if value.is_empty() {
@@ -1518,9 +2003,98 @@ fn format_timestamp(value: &str) -> String {
 fn journal_state_label(state: &str) -> &str {
     match state {
         "handed_off" => "Uninstaller launched · outcome not confirmed",
-        "failed" => "Handoff failed",
-        "completed" => "Completion recorded",
+        "failed" => "Uninstall operation failed",
+        "completed" => "Uninstaller exited · removal unconfirmed",
         "uncertain" => "Outcome uncertain · review before retrying",
         other => other,
+    }
+}
+
+#[cfg(all(test, debug_assertions))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixture_batch_review_cannot_start_a_native_worker() {
+        let ctx = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&ctx, "programs-batch-review").unwrap();
+        let Some(ProgramsDialog::UninstallBatchReview(review)) = app.program_ui.dialog.clone()
+        else {
+            panic!("missing fixture review");
+        };
+        app.begin_program_uninstall_batch(review, &ctx);
+        assert!(app.worker.is_none());
+        assert!(app.progress.is_empty());
+        assert!(app.program_ui.batch_report.is_none());
+        assert!(matches!(
+            app.program_ui.dialog,
+            Some(ProgramsDialog::UninstallBatchReview(_))
+        ));
+    }
+
+    #[test]
+    fn batch_review_keeps_selected_registrations_and_commands_in_inventory_order() {
+        let editor = programs_qa_program("Example Editor", "fixture-editor", "4.2.0");
+        let runtime = programs_qa_program("Example Runtime", "fixture-runtime", "2.8.1");
+        let inventory = InventorySnapshot {
+            programs: vec![editor.clone(), runtime.clone()],
+            errors: Vec::new(),
+        };
+        let selection =
+            HashSet::from([batch_selection_key(&runtime), batch_selection_key(&editor)]);
+
+        let review = prepare_uninstall_batch_review(&inventory, &selection).unwrap();
+
+        assert_eq!(
+            review.target_names,
+            vec!["Example Editor".to_owned(), "Example Runtime".to_owned()]
+        );
+        assert_eq!(review.plan.requests.len(), 2);
+        assert_eq!(review.plan.requests[0].identity, editor.identity);
+        assert_eq!(
+            review.plan.requests[0].expected_registered_command,
+            editor.registered_uninstall_command.unwrap()
+        );
+        assert_eq!(review.plan.requests[1].identity, runtime.identity);
+        assert_eq!(
+            review.plan.requests[1].expected_registered_command,
+            runtime.registered_uninstall_command.unwrap()
+        );
+    }
+
+    #[test]
+    fn batch_review_rejects_a_protected_registration() {
+        let mut program = programs_qa_program("Protected Utility", "fixture-protected", "1.0");
+        program.protected = true;
+        let inventory = InventorySnapshot {
+            programs: vec![program.clone()],
+            errors: Vec::new(),
+        };
+        let selection = HashSet::from([batch_selection_key(&program)]);
+
+        assert!(prepare_uninstall_batch_review(&inventory, &selection).is_err());
+    }
+
+    #[test]
+    fn batch_review_keeps_registry_view_in_registration_selection() {
+        let first = programs_qa_program("Shared registration", "fixture-shared", "1.0");
+        let mut second = first.clone();
+        second.source.view = dcleaner::programs::RegistryView::Registry32;
+        second.display_name = "Shared registration (32-bit view)".into();
+        let inventory = InventorySnapshot {
+            programs: vec![first.clone(), second.clone()],
+            errors: Vec::new(),
+        };
+        let selection = HashSet::from([batch_selection_key(&second)]);
+
+        let review = prepare_uninstall_batch_review(&inventory, &selection).unwrap();
+
+        assert_eq!(
+            review.target_names,
+            vec!["Shared registration (32-bit view)".to_owned()]
+        );
+        assert_eq!(review.plan.requests.len(), 1);
+        assert_eq!(review.plan.requests[0].identity, second.identity);
+        assert_eq!(review.plan.requests[0].source, second.source);
     }
 }

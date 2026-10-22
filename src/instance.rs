@@ -47,16 +47,87 @@ pub use native::{Instance, acquire};
 
 #[cfg(windows)]
 pub fn show_existing() {
+    use windows::{Win32::UI::WindowsAndMessaging::FindWindowW, core::w};
+    unsafe {
+        if let Ok(window) = FindWindowW(None, w!("DCleaner")) {
+            request_restore(window);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn request_restore(window: windows::Win32::Foundation::HWND) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{SW_RESTORE, ShowWindowAsync};
+    // A relaunch must not wait for an unresponsive instance's UI thread.
+    // SW_RESTORE already requests activation; do not follow it with a synchronous
+    // cross-thread foreground call. Windows retains its normal focus policy.
+    unsafe { ShowWindowAsync(window, SW_RESTORE).as_bool() }
+}
+
+#[cfg(all(test, windows))]
+mod restore_tests {
+    use std::{
+        sync::mpsc,
+        thread,
+        time::{Duration, Instant},
+    };
     use windows::{
-        Win32::UI::WindowsAndMessaging::{
-            FindWindowW, SW_RESTORE, SetForegroundWindow, ShowWindow,
+        Win32::{
+            Foundation::HWND,
+            UI::WindowsAndMessaging::{
+                CreateWindowExW, DestroyWindow, HWND_MESSAGE, IsWindowVisible, WINDOW_EX_STYLE,
+                WINDOW_STYLE,
+            },
         },
         core::w,
     };
-    unsafe {
-        if let Ok(window) = FindWindowW(None, w!("DCleaner")) {
-            let _ = ShowWindow(window, SW_RESTORE);
-            let _ = SetForegroundWindow(window);
-        }
+
+    #[test]
+    fn restore_does_not_wait_for_an_unresponsive_message_only_owner() {
+        let (ready, address) = mpsc::sync_channel(1);
+        let (release, blocked) = mpsc::sync_channel(1);
+        let owner = thread::spawn(move || unsafe {
+            // HWND_MESSAGE has no visible surface or z-order. Never create an
+            // ordinary hidden popup here: restoring it would show a real window.
+            let window = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("STATIC"),
+                w!("DCleaner restore fixture"),
+                WINDOW_STYLE::default(),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(!IsWindowVisible(window).as_bool());
+            ready.send(window.0 as usize).unwrap();
+            // No message pump: the target deliberately cannot process restore.
+            let _ = blocked.recv_timeout(Duration::from_secs(5));
+            assert!(!IsWindowVisible(window).as_bool());
+            DestroyWindow(window).unwrap();
+        });
+        let window = HWND(address.recv_timeout(Duration::from_secs(5)).unwrap() as *mut _);
+        let started = Instant::now();
+        let queued = super::request_restore(window);
+        let elapsed = started.elapsed();
+        let _ = release.send(());
+        owner.join().unwrap();
+        assert!(
+            queued,
+            "the native asynchronous restore request must be accepted"
+        );
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "restore waited for the blocked owner: {elapsed:?}"
+        );
+        eprintln!(
+            "ASYNC_RESTORE queued=true elapsed_ms={} message_only=true visible_window=false physical_input=false",
+            elapsed.as_millis()
+        );
     }
 }

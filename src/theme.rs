@@ -18,6 +18,97 @@ pub const FONT_TITLE: f32 = 16.;
 pub const FONT_DISPLAY: f32 = 24.;
 pub const CAPTION_LINE_HEIGHT: f32 = 16.;
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum StatusKind {
+    Info,
+    Success,
+    Error,
+}
+
+pub fn status_banner(
+    ui: &mut egui::Ui,
+    message: &str,
+    kind: StatusKind,
+    progress: bool,
+    can_stop: bool,
+) -> bool {
+    let dark = ui.visuals().dark_mode;
+    let (foreground, background) = match (dark, kind) {
+        (true, StatusKind::Info) => (
+            Color32::from_rgb(235, 204, 112),
+            Color32::from_rgb(57, 49, 29),
+        ),
+        (true, StatusKind::Success) => (
+            Color32::from_rgb(153, 216, 172),
+            Color32::from_rgb(29, 51, 37),
+        ),
+        (true, StatusKind::Error) => (
+            Color32::from_rgb(247, 159, 159),
+            Color32::from_rgb(61, 34, 34),
+        ),
+        (false, StatusKind::Info) => (
+            Color32::from_rgb(112, 79, 0),
+            Color32::from_rgb(255, 246, 214),
+        ),
+        (false, StatusKind::Success) => (
+            Color32::from_rgb(29, 99, 53),
+            Color32::from_rgb(225, 245, 231),
+        ),
+        (false, StatusKind::Error) => (
+            Color32::from_rgb(155, 39, 39),
+            Color32::from_rgb(255, 230, 230),
+        ),
+    };
+    let width = ui.available_width();
+    let mut stop = false;
+    let frame = egui::Frame::new()
+        .fill(background)
+        .corner_radius(u8::MAX)
+        .inner_margin(egui::Margin::symmetric(20, 10))
+        .show(ui, |ui| {
+            ui.set_min_width((width - 40.).max(1.));
+            ui.horizontal(|ui| {
+                ui.set_min_height(26.);
+                if progress {
+                    ui.add(egui::Spinner::new().size(18.).color(foreground));
+                } else {
+                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(18.), egui::Sense::hover());
+                    paint_icon(
+                        ui.painter(),
+                        rect,
+                        if kind == StatusKind::Success {
+                            Icon::Check
+                        } else {
+                            Icon::Info
+                        },
+                        foreground,
+                    );
+                }
+                let label =
+                    egui::Label::new(RichText::new(message).size(FONT_BODY).color(foreground));
+                let text_width = (ui.available_width() - if can_stop { 76. } else { 0. }).max(1.);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(text_width, 26.),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_max_width(text_width);
+                        if progress {
+                            ui.add(label.truncate().show_tooltip_when_elided(false))
+                                .on_hover_text(message);
+                        } else {
+                            ui.add(label.wrap());
+                        }
+                    },
+                );
+                if can_stop {
+                    stop = row_action(ui, "Stop", true).clicked();
+                }
+            });
+        });
+    record_control(ui, "status-banner", frame.response.rect, u8::MAX);
+    stop
+}
+
 #[cfg(test)]
 mod typography_tests {
     use super::*;
@@ -40,6 +131,136 @@ mod typography_tests {
             }
         }
         assert!(FONT_CAPTION < FONT_BODY && FONT_BODY < FONT_TITLE && FONT_TITLE < FONT_DISPLAY);
+    }
+
+    #[test]
+    fn dark_palette_is_neutral_and_light_retains_brand_blue() {
+        let t = tokens(true);
+        for color in [
+            t.sidebar,
+            t.canvas,
+            t.foreground,
+            t.card,
+            t.muted,
+            t.border,
+            t.primary,
+            t.primary_text,
+            t.tint,
+            t.hover,
+        ] {
+            assert_eq!(color.r(), color.g());
+            assert_eq!(color.g(), color.b());
+            assert_eq!(color.a(), 255);
+        }
+        assert!(t.primary.r() > t.card.r() + 150);
+        assert!(t.muted.r() > t.canvas.r() + 100);
+        assert_eq!(tokens(false).primary, dcleaner::brand::BLUE);
+    }
+
+    #[test]
+    fn monochrome_art_keeps_alpha_and_tonal_order() {
+        for alpha in [0, 64, 128, 255] {
+            let color = Color32::from_rgba_unmultiplied(57, 153, 217, alpha);
+            let mono = monochrome(color);
+            assert_eq!(mono.a(), alpha);
+            assert_eq!(mono.r(), mono.g());
+            assert_eq!(mono.g(), mono.b());
+        }
+        assert!(monochrome(Color32::LIGHT_BLUE).r() > monochrome(Color32::DARK_BLUE).r());
+    }
+}
+
+#[cfg(test)]
+mod tooltip_tests {
+    use super::*;
+    fn full_text_count(shape: &egui::Shape, expected: &str) -> usize {
+        match shape {
+            egui::Shape::Text(text) => {
+                usize::from(!text.galley.elided && text.galley.text() == expected)
+            }
+            egui::Shape::Vec(shapes) => shapes
+                .iter()
+                .map(|shape| full_text_count(shape, expected))
+                .sum(),
+            _ => 0,
+        }
+    }
+    #[test]
+    fn elided_cells_have_one_automatic_or_custom_tooltip_in_both_themes() {
+        let full = "Full fixture registration and executable path";
+        let detail = "Matched component identity and full fixture path";
+        for dark in [false, true] {
+            for mode in ["automatic", "same-custom", "richer-custom"] {
+                let context = egui::Context::default();
+                apply(&context, dark);
+                context.style_mut_of(
+                    if dark {
+                        egui::Theme::Dark
+                    } else {
+                        egui::Theme::Light
+                    },
+                    |style| {
+                        style.interaction.tooltip_delay = 0.;
+                        style.interaction.tooltip_grace_time = 0.;
+                    },
+                );
+                let mut point = None;
+                let mut final_counts = (0, 0);
+                for frame in 0..7 {
+                    let mut rect = egui::Rect::NOTHING;
+                    let events = if frame == 1 {
+                        vec![egui::Event::PointerMoved(point.unwrap())]
+                    } else {
+                        vec![]
+                    };
+                    let mut output = context.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                Vec2::new(760., 600.),
+                            )),
+                            focused: true,
+                            time: Some(frame as f64 * 0.2),
+                            events,
+                            ..Default::default()
+                        },
+                        |ui| {
+                            let response = match mode {
+                                "automatic" => table_cell(ui, full, 80., 32.),
+                                "same-custom" => table_cell_with_tooltip(ui, full, 80., 32., full),
+                                _ => table_cell_with_tooltip(ui, full, 80., 32., detail),
+                            };
+                            rect = response.rect;
+                        },
+                    );
+                    if point.is_none() {
+                        point = Some(rect.center());
+                    }
+                    final_counts = (
+                        output
+                            .shapes
+                            .iter()
+                            .map(|s| full_text_count(&s.shape, full))
+                            .sum(),
+                        output
+                            .shapes
+                            .iter()
+                            .map(|s| full_text_count(&s.shape, detail))
+                            .sum(),
+                    );
+                    output.textures_delta.clear();
+                }
+                assert_eq!(
+                    final_counts,
+                    if mode == "richer-custom" {
+                        (0, 1)
+                    } else {
+                        (1, 0)
+                    },
+                    "{dark} {mode}"
+                );
+            }
+        }
     }
 }
 
@@ -77,17 +298,29 @@ struct ControlGeometry {
     label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expanded: Option<bool>,
 }
 #[cfg(debug_assertions)]
 pub fn begin_geometry_frame(ctx: &egui::Context) {
     if std::env::args().any(|arg| arg == "--render-qa" || arg == "--render-offscreen-qa") {
-        ctx.data_mut(|data| {
-            data.insert_temp(
-                egui::Id::new("native-control-geometry"),
-                GeometryFrame::default(),
-            )
-        });
+        reset_geometry_frame(ctx);
     }
+}
+#[cfg(debug_assertions)]
+fn reset_geometry_frame(ctx: &egui::Context) {
+    ctx.data_mut(|data| {
+        data.insert_temp(
+            egui::Id::new("native-control-geometry"),
+            GeometryFrame::default(),
+        )
+    });
+}
+#[cfg(all(test, debug_assertions))]
+pub(crate) fn begin_fixture_geometry_test(ctx: &egui::Context) {
+    reset_geometry_frame(ctx);
 }
 #[cfg(debug_assertions)]
 pub fn geometry_json(ctx: &egui::Context) -> serde_json::Value {
@@ -99,6 +332,34 @@ pub fn geometry_json(ctx: &egui::Context) -> serde_json::Value {
         .unwrap_or_default()
     });
     frame["font_tokens"] = serde_json::json!({"caption":FONT_CAPTION,"body":FONT_BODY,"title":FONT_TITLE,"display":FONT_DISPLAY});
+    if let Some(controls) = frame["controls"].as_array_mut() {
+        for control in controls {
+            let rect = |name: &str| -> Option<egui::Rect> {
+                let values = control[name].as_array()?;
+                Some(egui::Rect::from_min_size(
+                    egui::pos2(
+                        values.get(0)?.as_f64()? as f32,
+                        values.get(1)?.as_f64()? as f32,
+                    ),
+                    egui::vec2(
+                        values.get(2)?.as_f64()? as f32,
+                        values.get(3)?.as_f64()? as f32,
+                    ),
+                ))
+            };
+            let targetable = rect("rect")
+                .zip(rect("clip_rect"))
+                .is_some_and(|(bounds, clip)| {
+                    let center = bounds.center();
+                    control["enabled"] == true
+                        && clip.contains(center)
+                        && ctx
+                            .layer_id_at(center)
+                            .is_some_and(|layer| control["layer"] == format!("{layer:?}"))
+                });
+            control["targetable"] = serde_json::json!(targetable);
+        }
+    }
     frame
 }
 fn record_control(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
@@ -119,11 +380,18 @@ fn record_control(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
                 layer: format!("{:?}", ui.layer_id()),
                 label: None,
                 enabled: None,
+                id: None,
+                expanded: None,
             });
             data.insert_temp(id, frame);
         }
     });
     let _ = (ui, role, rect, radius);
+}
+
+#[cfg(debug_assertions)]
+pub(crate) fn record_region(ui: &egui::Ui, role: &str, rect: egui::Rect, radius: u8) {
+    record_control(ui, role, rect, radius);
 }
 
 fn record_labeled_control(
@@ -149,6 +417,17 @@ fn record_labeled_control(
     let _ = (label, enabled);
 }
 #[cfg(debug_assertions)]
+pub(crate) fn record_fixture_hover_target(ui: &egui::Ui, label: &str, response: &egui::Response) {
+    record_labeled_control(
+        ui,
+        "hover-target",
+        response.rect,
+        0,
+        label,
+        response.enabled(),
+    );
+}
+#[cfg(debug_assertions)]
 pub(crate) fn record_fixture_control(ui: &egui::Ui, label: &str, response: &egui::Response) {
     record_labeled_control(
         ui,
@@ -158,6 +437,28 @@ pub(crate) fn record_fixture_control(ui: &egui::Ui, label: &str, response: &egui
         label,
         response.enabled(),
     );
+    if !ui.ctx().data(|data| {
+        data.get_temp::<GeometryFrame>(egui::Id::new("native-control-geometry"))
+            .is_some()
+    }) {
+        return;
+    }
+    let expanded = egui::collapsing_header::CollapsingState::load(ui.ctx(), response.id)
+        .map(|state| state.is_open());
+    ui.ctx().data_mut(|data| {
+        let id = egui::Id::new("native-control-geometry");
+        if let Some(mut frame) = data.get_temp::<GeometryFrame>(id) {
+            if let Some(control) = frame.controls.last_mut() {
+                control.id = Some(response.id.value());
+                control.expanded = expanded;
+                if expanded.is_some() {
+                    control.role = "disclosure".into();
+                    control.radius = (response.rect.height() / 2.) as u8;
+                }
+            }
+            data.insert_temp(id, frame);
+        }
+    });
 }
 
 fn field_style(ui: &mut egui::Ui) {
@@ -230,6 +531,42 @@ pub fn scroll_vertical() -> egui::ScrollArea {
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
 }
 
+/// Product-details dialogs share the centered action group in the reference.
+/// Labels use the same measured button owner; narrow groups wrap at full width.
+pub fn centered_dialog_actions<R>(
+    ui: &mut egui::Ui,
+    labels: &[&str],
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    let width = ui.available_width();
+    let needed = labels
+        .iter()
+        .map(|label| action_width(ui, label, CONTROL_PADDING_X))
+        .sum::<f32>()
+        + ui.spacing().item_spacing.x * labels.len().saturating_sub(1) as f32;
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, CONTROL_HEIGHT),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |row| {
+            // Text/widget bounds quantize independently; retain subpixel slack
+            // without moving the group's measured center or forcing a wrap.
+            let group_width = needed.ceil().min(width);
+            let rect = egui::Rect::from_min_size(
+                row.cursor().min + Vec2::new((width - needed).max(0.) / 2., 0.),
+                Vec2::new(group_width, CONTROL_HEIGHT),
+            );
+            let group = row.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(rect)
+                    .layout(egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true)),
+                contents,
+            );
+            record_control(row, "centered-dialog-actions", group.response.rect, 0);
+            group.inner
+        },
+    )
+}
+
 pub fn scroll_horizontal() -> egui::ScrollArea {
     egui::ScrollArea::horizontal()
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
@@ -258,7 +595,8 @@ pub fn tabs<R>(
 }
 
 pub fn tab(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
-    let response = ui.selectable_label(
+    let response = stable_selectable(
+        ui,
         selected,
         RichText::new(label).family(if selected {
             semibold()
@@ -278,14 +616,57 @@ pub fn tab(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
 }
 
 pub fn choice(ui: &mut egui::Ui, selected: bool, label: &str) -> egui::Response {
-    ui.selectable_label(
+    let response = stable_selectable(
+        ui,
         selected,
         RichText::new(label).family(if selected {
             semibold()
         } else {
             FontFamily::Proportional
         }),
-    )
+    );
+    record_labeled_control(
+        ui,
+        "choice",
+        response.rect,
+        FIELD_RADIUS,
+        label,
+        ui.is_enabled(),
+    );
+    response
+}
+
+pub(crate) fn stable_selectable(
+    ui: &mut egui::Ui,
+    selected: bool,
+    text: RichText,
+) -> egui::Response {
+    let mut button = egui::Button::selectable(selected, text);
+    if selected
+        && ui.is_enabled()
+        && let Some(response) = ui.ctx().read_response(ui.next_auto_id())
+        && response.enabled()
+        && (response.hovered() || response.is_pointer_button_down_on())
+    {
+        let t = tokens(ui.visuals().dark_mode);
+        let hover = if ui.visuals().dark_mode {
+            Color32::from_gray(210)
+        } else {
+            t.primary.gamma_multiply(0.8)
+        };
+        button = button.fill(if response.is_pointer_button_down_on() {
+            hover.gamma_multiply(0.85)
+        } else {
+            hover
+        });
+    }
+    // Inactive unselected labels have no frame stroke. Keep that same margin
+    // on hover, rather than adding a border that moves this and following tabs.
+    ui.add(if selected {
+        button
+    } else {
+        button.stroke(Stroke::NONE)
+    })
 }
 
 pub fn choice_value<T: PartialEq>(
@@ -326,6 +707,18 @@ pub fn tab_with_icon_count(
         .x
         + 48.;
     let icon_id = ui.id().with(("page-tab-icon", label));
+    let background = ui.painter().add(egui::Shape::Noop);
+    let base = if selected {
+        if ui.visuals().dark_mode {
+            t.card
+        } else {
+            t.canvas
+        }
+    } else if ui.visuals().dark_mode {
+        Color32::TRANSPARENT
+    } else {
+        t.sidebar
+    };
     let painted = ui
         .allocate_ui_with_layout(
             Vec2::new(width, 40.),
@@ -340,14 +733,35 @@ pub fn tab_with_icon_count(
                         .color(t.foreground),
                 ))
                 .selected(selected)
-                .fill(if selected { t.canvas } else { t.sidebar })
-                .stroke(Stroke::new(1., if selected { t.primary } else { t.border }))
+                .fill(Color32::TRANSPARENT)
+                .stroke(Stroke::new(
+                    1.,
+                    if selected && ui.visuals().dark_mode {
+                        t.muted
+                    } else if selected {
+                        t.primary
+                    } else {
+                        t.border
+                    },
+                ))
                 .corner_radius(20)
                 .min_size(Vec2::new(width, 40.))
                 .atom_ui(ui)
             },
         )
         .inner;
+    ui.painter().set(
+        background,
+        egui::Shape::rect_filled(
+            painted.response.rect,
+            20,
+            if painted.response.enabled() && painted.response.hovered() {
+                t.hover
+            } else {
+                base
+            },
+        ),
+    );
     if let Some(rect) = painted.rect(icon_id) {
         paint_icon(ui.painter(), rect, icon, t.primary);
     }
@@ -469,23 +883,58 @@ pub fn input(
     hint: &str,
     enabled: bool,
 ) -> egui::Response {
-    let frame = egui::Frame::new()
-        .fill(ui.visuals().extreme_bg_color)
-        .stroke(ui.visuals().widgets.inactive.bg_stroke)
-        .corner_radius(FIELD_RADIUS)
-        .inner_margin(egui::Margin::symmetric(16, 0));
-    let response = ui.add_enabled(
-        enabled,
-        egui::TextEdit::singleline(value)
-            .desired_width(width.max(60.))
-            .min_size(Vec2::new(width.max(60.), FIELD_HEIGHT))
-            .vertical_align(egui::Align::Center)
-            .frame(frame)
-            .clip_text(true)
-            .hint_text(hint),
-    );
+    let response = ui
+        .add_enabled_ui(enabled, |ui| {
+            let frame = egui::Frame::new()
+                .fill(ui.visuals().extreme_bg_color)
+                .stroke(ui.visuals().widgets.inactive.bg_stroke)
+                .corner_radius(FIELD_RADIUS)
+                .inner_margin(egui::Margin::symmetric(16, 0));
+            // A custom TextEdit frame bypasses egui's automatic hover paint. Keep
+            // its existing metrics while reserving the background before the text.
+            let background = ui.painter().add(egui::Shape::Noop);
+            let invisible = egui::Frame {
+                fill: Color32::TRANSPARENT,
+                stroke: Stroke::new(frame.stroke.width, Color32::TRANSPARENT),
+                ..frame
+            };
+            let response = ui.add(
+                egui::TextEdit::singleline(value)
+                    .interactive(ui.is_enabled())
+                    .desired_width(width.max(60.))
+                    .min_size(Vec2::new(width.max(60.), FIELD_HEIGHT))
+                    .vertical_align(egui::Align::Center)
+                    .frame(invisible)
+                    .clip_text(true)
+                    .hint_text(hint),
+            );
+            let fill = if response.enabled() && response.hovered() {
+                tokens(ui.visuals().dark_mode).hover
+            } else {
+                frame.fill
+            };
+            ui.painter().set(
+                background,
+                egui::Shape::Rect(egui::epaint::RectShape::new(
+                    response.rect,
+                    FIELD_RADIUS,
+                    fill,
+                    frame.stroke,
+                    egui::StrokeKind::Inside,
+                )),
+            );
+            response
+        })
+        .inner;
     focus_ring(ui, &response, FIELD_RADIUS + 2);
-    record_control(ui, "input", response.rect, FIELD_RADIUS);
+    record_labeled_control(
+        ui,
+        "input",
+        response.rect,
+        FIELD_RADIUS,
+        &format!("Text field: {hint}"),
+        enabled,
+    );
     response
 }
 
@@ -518,7 +967,14 @@ pub fn selector<R>(
             .selected_text(selected)
             .show_ui(ui, contents);
         focus_ring(ui, &response.response, FIELD_RADIUS + 2);
-        record_control(ui, "selector", response.response.rect, FIELD_RADIUS);
+        record_labeled_control(
+            ui,
+            "selector",
+            response.response.rect,
+            FIELD_RADIUS,
+            &format!("Select: {selected}"),
+            ui.is_enabled(),
+        );
         response
     })
     .inner
@@ -621,7 +1077,9 @@ pub fn checkbox_mixed<'a>(
                     );
                     visual.fg_stroke = Stroke::new(
                         1.5,
-                        if selected {
+                        if selected && visuals.dark_mode {
+                            t.primary_text
+                        } else if selected {
                             Color32::WHITE
                         } else {
                             t.foreground
@@ -629,6 +1087,19 @@ pub fn checkbox_mixed<'a>(
                     );
                 }
                 visuals.widgets.hovered.bg_stroke = Stroke::new(1.5, t.primary);
+                visuals.widgets.hovered.bg_fill = if selected {
+                    if visuals.dark_mode {
+                        Color32::from_gray(210)
+                    } else {
+                        t.primary.gamma_multiply(0.8)
+                    }
+                } else {
+                    t.hover
+                };
+                visuals.widgets.hovered.weak_bg_fill = visuals.widgets.hovered.bg_fill;
+                visuals.widgets.active.bg_fill =
+                    visuals.widgets.hovered.bg_fill.gamma_multiply(0.85);
+                visuals.widgets.active.weak_bg_fill = visuals.widgets.active.bg_fill;
                 ui.add_enabled(
                     enabled,
                     egui::Checkbox::new(checked, atoms).indeterminate(mixed),
@@ -650,7 +1121,6 @@ pub fn semibold() -> FontFamily {
 }
 #[derive(Clone, Copy)]
 pub struct Tokens {
-    pub rail: Color32,
     pub sidebar: Color32,
     pub attention: Color32,
     pub canvas: Color32,
@@ -667,22 +1137,20 @@ pub fn tokens(dark: bool) -> Tokens {
     let blue = dcleaner::brand::BLUE;
     if dark {
         Tokens {
-            rail: Color32::from_rgb(8, 29, 46),
-            sidebar: Color32::from_rgb(8, 29, 46),
-            attention: Color32::from_rgb(246, 205, 52),
-            canvas: Color32::from_rgb(7, 29, 43),
-            foreground: Color32::from_rgb(239, 244, 247),
-            card: Color32::from_rgb(13, 45, 68),
-            muted: Color32::from_rgb(165, 182, 191),
-            border: Color32::from_rgb(37, 65, 81),
-            primary: blue,
-            primary_text: Color32::from_rgb(7, 29, 43),
-            tint: Color32::from_rgba_unmultiplied(blue.r(), blue.g(), blue.b(), 76),
-            hover: Color32::from_rgba_unmultiplied(blue.r(), blue.g(), blue.b(), 36),
+            sidebar: Color32::from_gray(24),
+            attention: Color32::from_rgb(235, 204, 112),
+            canvas: Color32::from_gray(33),
+            foreground: Color32::from_gray(243),
+            card: Color32::from_gray(47),
+            muted: Color32::from_gray(175),
+            border: Color32::from_gray(65),
+            primary: Color32::from_gray(237),
+            primary_text: Color32::from_gray(24),
+            tint: Color32::from_gray(53),
+            hover: Color32::from_gray(72),
         }
     } else {
         Tokens {
-            rail: Color32::from_rgb(227, 236, 242),
             sidebar: Color32::from_rgb(247, 250, 252),
             attention: Color32::from_rgb(136, 88, 0),
             canvas: Color32::from_rgb(241, 245, 248),
@@ -712,6 +1180,10 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.visuals.selection.bg_fill = t.primary;
     style.visuals.hyperlink_color = t.primary;
     style.visuals.selection.stroke = Stroke::new(1., t.primary_text);
+    if dark {
+        style.visuals.error_fg_color = Color32::from_rgb(247, 159, 159);
+        style.visuals.warn_fg_color = t.attention;
+    }
     for state in [
         &mut style.visuals.widgets.inactive,
         &mut style.visuals.widgets.hovered,
@@ -772,21 +1244,73 @@ pub fn card(t: Tokens) -> egui::Frame {
         .corner_radius(SECTION_RADIUS)
         .inner_margin(CONTENT)
 }
+
+#[derive(Clone, Copy)]
+pub enum JoinedEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+pub fn joined_radius(edge: JoinedEdge) -> egui::CornerRadius {
+    let r = SECTION_RADIUS;
+    match edge {
+        JoinedEdge::Left => egui::CornerRadius {
+            nw: r,
+            sw: r,
+            ne: 0,
+            se: 0,
+        },
+        JoinedEdge::Right => egui::CornerRadius {
+            nw: 0,
+            sw: 0,
+            ne: r,
+            se: r,
+        },
+        JoinedEdge::Top => egui::CornerRadius {
+            nw: r,
+            sw: 0,
+            ne: r,
+            se: 0,
+        },
+        JoinedEdge::Bottom => egui::CornerRadius {
+            nw: 0,
+            sw: r,
+            ne: 0,
+            se: r,
+        },
+    }
+}
+
+pub fn joined_card(t: Tokens, edge: JoinedEdge) -> egui::Frame {
+    card(t)
+        .fill(match edge {
+            JoinedEdge::Left | JoinedEdge::Top => t.sidebar,
+            JoinedEdge::Right | JoinedEdge::Bottom => t.card,
+        })
+        .corner_radius(joined_radius(edge))
+}
 pub fn canvas_background(ui: &egui::Ui, dark: bool) {
     if !dark {
         return;
     }
-    let rect = ui.max_rect();
-    let top = Color32::from_rgb(12, 45, 64);
-    let bottom = Color32::from_rgb(7, 29, 43);
-    let mut mesh = egui::Mesh::default();
-    mesh.colored_vertex(rect.left_top(), top);
-    mesh.colored_vertex(rect.right_top(), top);
-    mesh.colored_vertex(rect.left_bottom(), bottom);
-    mesh.colored_vertex(rect.right_bottom(), bottom);
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(2, 1, 3);
-    ui.painter().add(egui::Shape::mesh(mesh));
+    ui.painter()
+        .rect_filled(ui.max_rect(), 0., tokens(true).canvas);
+}
+
+/// Keep alpha and tonal detail while removing hue from dark-mode artwork.
+pub fn monochrome(color: Color32) -> Color32 {
+    let [r, g, b, a] = color.to_srgba_unmultiplied();
+    let gray = ((r as u32 * 54 + g as u32 * 183 + b as u32 * 19 + 128) / 256) as u8;
+    Color32::from_rgba_unmultiplied(gray, gray, gray, a)
+}
+
+pub fn monochrome_image(mut image: egui::ColorImage) -> egui::ColorImage {
+    for pixel in &mut image.pixels {
+        *pixel = monochrome(*pixel);
+    }
+    image
 }
 pub fn dialog_frame(t: Tokens) -> egui::Frame {
     egui::Frame::new()
@@ -829,6 +1353,7 @@ pub fn close_button(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
             .frame(false)
             .min_size(Vec2::splat(28.)),
     );
+    paint_frameless_hover(ui, &response, 14);
     let center = response.rect.center();
     let stroke = Stroke::new(
         1.05,
@@ -864,6 +1389,9 @@ pub fn icon_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) ->
             )
         })
         .inner;
+    if plain {
+        paint_frameless_hover(ui, &response, 14);
+    }
     let t = tokens(ui.visuals().dark_mode);
     paint_icon(
         ui.painter(),
@@ -880,18 +1408,8 @@ pub fn icon_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) ->
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     response.on_hover_text(label).clicked()
 }
-fn action_button(
-    ui: &mut egui::Ui,
-    label: &str,
-    enabled: bool,
-    primary: Option<Tokens>,
-    height: f32,
-    padding: f32,
-    role: &str,
-) -> egui::Response {
-    let t = tokens(ui.visuals().dark_mode);
-    let colour = primary.map_or(t.foreground, |t| t.primary_text);
-    let icon = match label {
+fn action_icon(label: &str) -> Option<(Icon, bool)> {
+    match label {
         "Configure" | "Cookie settings" => Some((Icon::Settings, false)),
         "Check for updates" => Some((Icon::Update, false)),
         "Rescan" | "Scan again" => Some((Icon::Refresh, true)),
@@ -905,19 +1423,44 @@ fn action_button(
             Some((Icon::Folder, false))
         }
         _ => None,
-    };
+    }
+}
+fn action_width(ui: &egui::Ui, label: &str, padding: f32) -> f32 {
+    let text_width = ui
+        .painter()
+        .layout_no_wrap(
+            label.into(),
+            FontId::new(FONT_BODY, semibold()),
+            ui.visuals().text_color(),
+        )
+        .size()
+        .x;
+    text_width
+        + 2. * padding
+        + if action_icon(label).is_some() {
+            24.
+        } else {
+            0.
+        }
+}
+fn action_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    enabled: bool,
+    primary: Option<Tokens>,
+    height: f32,
+    padding: f32,
+    role: &str,
+) -> egui::Response {
+    let t = tokens(ui.visuals().dark_mode);
+    let colour = primary.map_or(t.foreground, |t| t.primary_text);
+    let icon = action_icon(label);
     let radius = if height == CONTROL_HEIGHT {
         CONTROL_RADIUS
     } else {
         (height / 2.) as u8
     };
-    let font = FontId::new(FONT_BODY, semibold());
-    let text_width = ui
-        .painter()
-        .layout_no_wrap(label.into(), font, colour)
-        .size()
-        .x;
-    let width = text_width + 2. * padding + if icon.is_some() { 24. } else { 0. };
+    let width = action_width(ui, label, padding);
     let icon_id = egui::Id::new("action-button-icon");
     let text = RichText::new(label)
         .family(semibold())
@@ -932,8 +1475,8 @@ fn action_button(
     }
     .corner_radius(radius)
     .min_size(Vec2::new(width, height));
-    if let Some(t) = primary {
-        button = button.fill(t.primary).stroke(Stroke::NONE);
+    if primary.is_some() {
+        button = button.stroke(Stroke::NONE);
     }
     // Allocate the whole control before entering its child UI. A scope starts
     // at the remaining row width, so a long label can grow beyond a wrapped
@@ -945,6 +1488,20 @@ fn action_button(
             |ui| {
                 ui.spacing_mut().button_padding = Vec2::new(padding, 4.);
                 ui.spacing_mut().interact_size.y = height;
+                if let Some(t) = primary {
+                    let visuals = ui.visuals_mut();
+                    visuals.widgets.inactive.bg_fill = t.primary;
+                    visuals.widgets.inactive.weak_bg_fill = t.primary;
+                    let hover = if visuals.dark_mode {
+                        Color32::from_gray(210)
+                    } else {
+                        dcleaner::brand::BLUE.gamma_multiply(0.8)
+                    };
+                    visuals.widgets.hovered.bg_fill = hover;
+                    visuals.widgets.hovered.weak_bg_fill = hover;
+                    visuals.widgets.active.bg_fill = hover.gamma_multiply(0.85);
+                    visuals.widgets.active.weak_bg_fill = visuals.widgets.active.bg_fill;
+                }
                 ui.add_enabled_ui(enabled, |ui| button.atom_ui(ui)).inner
             },
         )
@@ -1021,13 +1578,37 @@ pub fn table_cell(
     width: f32,
     height: f32,
 ) -> egui::Response {
+    table_cell_inner(ui, text.into(), width, height, true)
+}
+/// Custom help replaces the label's automatic ellipsis tooltip, so a truncated
+/// cell has one tooltip owner and retains its richer explanatory content.
+pub fn table_cell_with_tooltip(
+    ui: &mut egui::Ui,
+    text: impl Into<egui::WidgetText>,
+    width: f32,
+    height: f32,
+    tooltip: impl Into<egui::WidgetText>,
+) -> egui::Response {
+    table_cell_inner(ui, text.into(), width, height, false).on_hover_text(tooltip)
+}
+fn table_cell_inner(
+    ui: &mut egui::Ui,
+    text: egui::WidgetText,
+    width: f32,
+    height: f32,
+    automatic_tooltip: bool,
+) -> egui::Response {
     ui.allocate_ui_with_layout(
         Vec2::new(width, height),
         egui::Layout::left_to_right(egui::Align::Center),
         |ui| {
             ui.set_min_size(Vec2::new(width, height));
             ui.set_max_width(width);
-            ui.add(egui::Label::new(text).truncate())
+            ui.add(
+                egui::Label::new(text)
+                    .truncate()
+                    .show_tooltip_when_elided(automatic_tooltip),
+            )
         },
     )
     .inner
@@ -1038,6 +1619,7 @@ pub fn menu_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) ->
     // compact instead of allowing a grow atom to claim the entire page width.
     ui.set_max_width(224.);
     let icon_id = ui.id().with(("option-icon", label));
+    let background = ui.painter().add(egui::Shape::Noop);
     let painted = ui
         .add_enabled_ui(enabled, |ui| {
             ui.spacing_mut().button_padding = Vec2::new(8., 5.);
@@ -1055,6 +1637,7 @@ pub fn menu_action(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) ->
             .atom_ui(ui)
         })
         .inner;
+    paint_frameless_hover_behind(ui, &painted.response, 15, background);
     if let Some(rect) = painted.rect(icon_id) {
         paint_icon(
             ui.painter(),
@@ -1104,6 +1687,7 @@ pub fn disclosure(ui: &mut egui::Ui, label: &str, open: bool) -> egui::Response 
         Vec2::splat(TABLE_ACTION_HEIGHT),
         egui::Button::new("").frame(false),
     );
+    paint_frameless_hover(ui, &response, (TABLE_ACTION_HEIGHT / 2.) as u8);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
     let center = response.rect.center();
     let direction = if open { -1. } else { 1. };
@@ -1133,7 +1717,7 @@ pub fn window_chrome(ui: &mut egui::Ui, t: Tokens) {
     let maximized = ctx.input(|input| input.viewport().maximized.unwrap_or(false));
     let drag_rect = egui::Rect::from_min_max(
         rect.min + Vec2::new(64., 5.),
-        egui::pos2(rect.right() - 132., rect.top() + 32.),
+        egui::pos2(rect.right() - 176., rect.top() + 32.),
     );
     let drag = ui.interact(
         drag_rect,
@@ -1169,7 +1753,7 @@ pub fn window_chrome(ui: &mut egui::Ui, t: Tokens) {
             painter.rect_filled(
                 button_rect,
                 button_rect.height() / 2.,
-                if name == "Close" {
+                if name == "Close" && !ui.visuals().dark_mode {
                     Color32::from_rgb(164, 46, 59)
                 } else {
                     t.hover
@@ -1299,7 +1883,20 @@ pub fn muted(ui: &mut egui::Ui, label: impl Into<String>, t: Tokens) {
             .line_height(Some(CAPTION_LINE_HEIGHT)),
     );
 }
-fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
+pub(crate) fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
+    if response.enabled() && response.hovered() {
+        ui.painter().rect_stroke(
+            response.rect,
+            radius.saturating_sub(2),
+            Stroke::new(1.2, tokens(ui.visuals().dark_mode).muted),
+            egui::StrokeKind::Inside,
+        );
+    }
+    keyboard_focus_ring(ui, response, radius);
+}
+
+/// Switch tracks already express state; only keyboard focus adds an outline.
+pub(crate) fn keyboard_focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
     if response.has_focus() {
         ui.painter().rect_stroke(
             response.rect.expand(2.),
@@ -1307,6 +1904,87 @@ fn focus_ring(ui: &egui::Ui, response: &egui::Response, radius: u8) {
             Stroke::new(2., ui.visuals().selection.bg_fill),
             egui::StrokeKind::Outside,
         );
+    }
+}
+
+fn frameless_hover_shape(ui: &egui::Ui, response: &egui::Response, radius: u8) -> egui::Shape {
+    if response.enabled() && (response.hovered() || response.is_pointer_button_down_on()) {
+        let t = tokens(ui.visuals().dark_mode);
+        egui::Shape::rect_filled(
+            response.rect,
+            radius,
+            if response.is_pointer_button_down_on() {
+                t.tint
+            } else {
+                t.hover
+            },
+        )
+    } else {
+        egui::Shape::Noop
+    }
+}
+
+// Reserve the background before a text button paints, so hover feedback cannot
+// cover its label. Icon-only owners can paint before their own glyph instead.
+pub(crate) fn paint_frameless_hover_behind(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    radius: u8,
+    background: egui::layers::ShapeIdx,
+) {
+    ui.painter()
+        .set(background, frameless_hover_shape(ui, response, radius));
+}
+
+fn paint_frameless_hover(ui: &egui::Ui, response: &egui::Response, radius: u8) {
+    ui.painter()
+        .add(frameless_hover_shape(ui, response, radius));
+}
+
+pub(crate) fn frameless_button(
+    ui: &mut egui::Ui,
+    size: impl Into<Vec2>,
+    button: egui::Button<'_>,
+) -> egui::Response {
+    let background = ui.painter().add(egui::Shape::Noop);
+    let response = ui.add_sized(size, button.frame(false));
+    paint_frameless_hover_behind(
+        ui,
+        &response,
+        (response.rect.height() / 2.) as u8,
+        background,
+    );
+    response
+}
+
+/// The same egui disclosure, identity and layout, with the shared frameless
+/// control feedback painted behind its label. Body controls keep their own
+/// styles, and the resting header introduces no new card or border.
+pub(crate) struct Disclosure(egui::CollapsingHeader);
+impl Disclosure {
+    pub(crate) fn new(text: impl Into<egui::WidgetText>) -> Self {
+        Self(egui::CollapsingHeader::new(text))
+    }
+    pub(crate) fn id_salt(self, id: impl egui::AsIdSalt) -> Self {
+        Self(self.0.id_salt(id))
+    }
+    pub(crate) fn default_open(self, open: bool) -> Self {
+        Self(self.0.default_open(open))
+    }
+    pub(crate) fn show<R>(
+        self,
+        ui: &mut egui::Ui,
+        contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::collapsing_header::CollapsingResponse<R> {
+        let background = ui.painter().add(egui::Shape::Noop);
+        let response = self.0.show(ui, contents);
+        paint_frameless_hover_behind(
+            ui,
+            &response.header_response,
+            (response.header_response.rect.height() / 2.) as u8,
+            background,
+        );
+        response
     }
 }
 
@@ -1374,8 +2052,15 @@ pub fn navigation(
         })
         .inner;
     if selected || (enabled && response.hovered()) {
-        ui.painter()
-            .rect_filled(response.rect, 20, if selected { t.tint } else { t.hover });
+        ui.painter().rect_filled(
+            response.rect,
+            20,
+            if enabled && response.hovered() {
+                t.hover
+            } else {
+                t.tint
+            },
+        );
     }
     let colour = if enabled { t.foreground } else { t.muted };
     let icon_rect = egui::Rect::from_center_size(
@@ -1383,7 +2068,7 @@ pub fn navigation(
             if compact {
                 response.rect.center().x
             } else {
-                response.rect.left() + 18.
+                response.rect.left() + 26.
             },
             response.rect.center().y,
         ),
@@ -1392,7 +2077,7 @@ pub fn navigation(
     paint_icon(ui.painter(), icon_rect, icon, colour);
     if !compact {
         ui.painter().text(
-            egui::pos2(response.rect.left() + 40., response.rect.center().y),
+            egui::pos2(response.rect.left() + 48., response.rect.center().y),
             egui::Align2::LEFT_CENTER,
             label,
             FontId::new(
@@ -1427,7 +2112,7 @@ pub fn navigation(
 
 pub fn paint_icon(p: &egui::Painter, rect: egui::Rect, icon: Icon, colour: Color32) {
     let point = |x: f32, y: f32| rect.min + Vec2::new(x, y) * (rect.width() / 20.);
-    let stroke = Stroke::new(1.2, colour);
+    let stroke = Stroke::new(0.96, colour);
     let line = |coords: &[(f32, f32)]| {
         p.add(egui::Shape::line(
             coords.iter().map(|&(x, y)| point(x, y)).collect(),

@@ -1,4 +1,4 @@
-use super::{App, Event};
+use super::{App, CleanupHistory, Event};
 use crate::theme::{self, Tokens};
 use dcleaner::{
     cleanup::{self, SystemTrash},
@@ -14,11 +14,7 @@ use dcleaner::{
     duplicates::{DuplicateFile, DuplicateGroup},
 };
 use eframe::egui::{self, Align, Layout, RichText, Vec2};
-use std::{
-    path::PathBuf,
-    sync::{Arc, mpsc},
-    thread,
-};
+use std::{path::PathBuf, sync::Arc, thread};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -96,13 +92,22 @@ impl DuplicateUi {
 pub(super) enum DuplicateEvent {
     Progress(String),
     Scanned(DuplicateReport),
-    Cleaning { done: usize, total: usize },
-    Cleaned(Result<CleanupResult, String>),
+    Cleaning {
+        done: usize,
+        total: usize,
+    },
+    Cleaned {
+        result: Result<CleanupResult, String>,
+        history: CleanupHistory,
+    },
 }
 
 impl App {
     #[cfg(debug_assertions)]
     pub(super) fn qa_duplicates_precondition(&self, label: &str) -> Result<(), String> {
+        if label == "Show options" && self.qa_fixture_mode() && !self.busy() {
+            return Ok(());
+        }
         if !self.qa_fixture_mode() || self.duplicate_ui.report.is_none() || self.busy() {
             return Err("Duplicate actions require a completed isolated fixture.".into());
         }
@@ -132,6 +137,9 @@ impl App {
         &self,
         label: &str,
     ) -> Result<serde_json::Value, String> {
+        if label == "Show options" && self.qa_fixture_mode() && self.duplicate_ui.options_open {
+            return Ok(serde_json::json!({"options_open":true,"native_effects":false}));
+        }
         let report = self
             .duplicate_ui
             .report
@@ -176,6 +184,7 @@ impl App {
         if !matches!(
             case,
             "duplicates-intro"
+                | "duplicates-setup"
                 | "duplicates-empty"
                 | "duplicates-populated"
                 | "duplicates-selected"
@@ -185,9 +194,20 @@ impl App {
             return Err(format!("Unsupported Duplicate Finder QA fixture: {case}"));
         }
         self.duplicate_ui = DuplicateUi::inert_fixture();
-        if case == "duplicates-intro" {
+        if matches!(case, "duplicates-intro" | "duplicates-setup") {
             self.duplicate_ui.report = None;
             self.error = None;
+            if case == "duplicates-setup" {
+                self.mark_feature_seen("duplicates");
+                self.duplicate_ui.scope = ScanScope::Drives;
+                self.duplicate_ui.drives = [r"C:\", r"D:\", r"G:\"]
+                    .into_iter()
+                    .map(|path| DriveChoice {
+                        path: PathBuf::from(path),
+                        selected: true,
+                    })
+                    .collect();
+            }
         } else {
             self.mark_feature_seen("duplicates");
             let mut report = duplicate_qa_report(if case == "duplicates-selected" {
@@ -239,13 +259,17 @@ impl App {
             }
             return;
         }
-        self.source_card(ui, t, busy);
-        ui.add_space(if self.duplicate_ui.report.is_some() {
-            4.
+        if self.duplicate_ui.report.is_none() {
+            ui.scope(|ui| {
+                ui.spacing_mut().item_spacing.y = 0.;
+                self.source_card(ui, t, busy);
+                self.options_card(ui, t, busy);
+            });
         } else {
-            10.
-        });
-        self.options_card(ui, t, busy);
+            self.source_card(ui, t, busy);
+            ui.add_space(4.);
+            self.options_card(ui, t, busy);
+        }
         ui.add_space(if self.duplicate_ui.report.is_some() {
             4.
         } else {
@@ -385,11 +409,11 @@ impl App {
                 self.duplicate_ui.edit_locations = false;
                 self.duplicate_ui.options_open = false;
                 if report.cancelled {
-                    self.notice = Some(
+                    self.set_notice(
                         "Duplicate scan cancelled. Review the partial results; they cannot be cleaned until you scan again.".into(),
                     );
                 } else if report.partial {
-                    self.notice = Some(format!(
+                    self.set_notice(format!(
                         "Scan finished with partial results: {} entries skipped, {} skip details shown.",
                         report.skipped_count,
                         report.skipped_entries.len()
@@ -405,14 +429,14 @@ impl App {
             DuplicateEvent::Cleaning { done, total } => {
                 self.progress = format!("Reviewed {done} of {total} selected duplicate files");
             }
-            DuplicateEvent::Cleaned(result) => {
+            DuplicateEvent::Cleaned { result, history } => {
                 self.worker = None;
                 self.duplicate_ui.cleanup_review = false;
                 self.duplicate_ui.acknowledge_all_copies = false;
                 self.duplicate_ui.report = None;
                 match result {
                     Ok(record) => {
-                        self.notice = Some(format!(
+                        self.set_notice(format!(
                             "{} moved to {}. {} files cleaned; {} skipped{}.",
                             size_text(record.bytes),
                             platform_trash_label(),
@@ -431,16 +455,7 @@ impl App {
                         ));
                     }
                 }
-                match store::history(&self.data_dir) {
-                    Ok(history) => {
-                        self.history = history;
-                        self.history_readable = true;
-                    }
-                    Err(error) => {
-                        self.error = Some(error);
-                        self.history_readable = false;
-                    }
-                }
+                self.apply_cleanup_history(history);
             }
         }
     }
@@ -477,30 +492,95 @@ impl App {
             return;
         }
         let mut scope_changed = false;
-        theme::card(t).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new("Where to look").family(theme::semibold()));
-            ui.add_space(8.);
-            ui.horizontal_wrapped(|ui| {
-                ui.add_enabled_ui(!busy, |ui| {
-                    scope_changed |= ui
-                        .radio_value(&mut self.duplicate_ui.scope, ScanScope::Drives, "Drives")
-                        .changed();
-                    scope_changed |= ui
-                        .radio_value(
-                            &mut self.duplicate_ui.scope,
-                            ScanScope::Folders,
-                            "Choose specific folders",
-                        )
-                        .changed();
-                });
+        let frame = (if self.duplicate_ui.report.is_none() {
+            theme::joined_card(t, theme::JoinedEdge::Top)
+        } else {
+            theme::card(t)
+        })
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = theme::LABEL_GAP;
+            let width = ui.available_width();
+            ui.set_min_width(width);
+            let wide = width >= 650.;
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.;
+                ui.allocate_ui_with_layout(
+                    Vec2::new(if wide { width - 252. } else { width }, 210.),
+                    Layout::top_down(Align::Min),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.x = theme::LABEL_GAP;
+                        ui.set_max_width(if wide { width - 252. } else { width });
+                        ui.set_min_width(if wide { width - 252. } else { width });
+                        ui.label(RichText::new("Where to look").family(theme::semibold()));
+                        ui.add_space(12.);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.add_enabled_ui(!busy, |ui| {
+                                scope_changed |= theme::radio_value(
+                                    ui,
+                                    &mut self.duplicate_ui.scope,
+                                    ScanScope::Drives,
+                                    "Drives",
+                                )
+                                .changed();
+                                scope_changed |= theme::radio_value(
+                                    ui,
+                                    &mut self.duplicate_ui.scope,
+                                    ScanScope::Folders,
+                                    "Choose specific folders",
+                                )
+                                .changed();
+                            });
+                        });
+                        ui.add_space(16.);
+                        match self.duplicate_ui.scope {
+                            ScanScope::Drives => self.drive_picker(ui, t, busy),
+                            ScanScope::Folders => self.folder_picker(ui, t, busy),
+                        }
+                    },
+                );
+                if wide {
+                    ui.add_space(24.);
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(228., 210.),
+                        Layout::top_down(Align::Center),
+                        |ui| {
+                            ui.add_space(12.);
+                            self.illustrations.feature(ui, "duplicates", 200.);
+                            ui.add_space(8.);
+                            let count = match self.duplicate_ui.scope {
+                                ScanScope::Drives => self
+                                    .duplicate_ui
+                                    .drives
+                                    .iter()
+                                    .filter(|drive| drive.selected)
+                                    .count(),
+                                ScanScope::Folders => self.duplicate_ui.folders.len(),
+                            };
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} selected",
+                                    theme::counted_label(count, "location", "locations")
+                                ))
+                                .family(theme::semibold()),
+                            );
+                            theme::muted(ui, "Files stay untouched during a scan.", t);
+                        },
+                    );
+                }
             });
-            ui.add_space(8.);
-            match self.duplicate_ui.scope {
-                ScanScope::Drives => self.drive_picker(ui, t, busy),
-                ScanScope::Folders => self.folder_picker(ui, t, busy),
-            }
         });
+        ui.painter().hline(
+            frame.response.rect.x_range(),
+            frame.response.rect.bottom() - 0.5,
+            egui::Stroke::new(1., t.border),
+        );
+        #[cfg(debug_assertions)]
+        theme::record_region(
+            ui,
+            "duplicate-source-pane",
+            frame.response.rect,
+            theme::SECTION_RADIUS,
+        );
         if scope_changed {
             self.invalidate_duplicate_report();
         }
@@ -544,23 +624,28 @@ impl App {
             }
             return;
         }
-        egui::Grid::new("duplicate-drive-choices")
-            .num_columns(2)
-            .spacing(Vec2::new(26., 4.))
-            .show(ui, |ui| {
-                for (index, drive) in self.duplicate_ui.drives.iter_mut().enumerate() {
-                    settings_changed |= theme::checkbox(
-                        ui,
-                        &mut drive.selected,
-                        drive.path.display().to_string(),
-                        !busy,
-                    )
-                    .changed();
-                    if index % 2 == 1 {
-                        ui.end_row();
-                    }
-                }
-            });
+        ui.add_space(12.);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(16., 8.);
+            for drive in &mut self.duplicate_ui.drives {
+                // A drive root is one unbroken label, including its trailing slash.
+                ui.allocate_ui_with_layout(
+                    Vec2::new(88., 32.),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.set_min_width(88.);
+                        settings_changed |= theme::checkbox(
+                            ui,
+                            &mut drive.selected,
+                            drive.path.display().to_string(),
+                            !busy,
+                        )
+                        .changed();
+                    },
+                );
+            }
+        });
+        ui.add_space(12.);
         theme::muted(
             ui,
             "Drive scanning is read-only. Select only the locations you want included.",
@@ -617,8 +702,12 @@ impl App {
             let mut remove_index = None;
             for (index, folder) in self.duplicate_ui.folders.iter().enumerate() {
                 ui.horizontal(|ui| {
-                    ui.add(egui::Label::new(folder.display().to_string()).truncate())
-                        .on_hover_text(folder.display().to_string());
+                    ui.add(
+                        egui::Label::new(folder.display().to_string())
+                            .truncate()
+                            .show_tooltip_when_elided(false),
+                    )
+                    .on_hover_text(folder.display().to_string());
                     if theme::row_action(ui, "Remove", !busy).clicked() {
                         remove_index = Some(index);
                     }
@@ -676,7 +765,8 @@ impl App {
             return;
         }
         let mut scan_option_changed = false;
-        theme::card(t).show(ui, |ui| {
+        let frame = (if self.duplicate_ui.report.is_none() { theme::joined_card(t, theme::JoinedEdge::Bottom) } else { theme::card(t) }).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = theme::LABEL_GAP;
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Scan settings").family(theme::semibold()));
@@ -743,6 +833,15 @@ impl App {
                 );
             }
         });
+        #[cfg(debug_assertions)]
+        theme::record_region(
+            ui,
+            "duplicate-options-pane",
+            frame.response.rect,
+            theme::SECTION_RADIUS,
+        );
+        #[cfg(not(debug_assertions))]
+        let _ = frame;
         if scan_option_changed {
             self.invalidate_duplicate_report();
         }
@@ -783,7 +882,7 @@ impl App {
                             "{} groups · {} duplicate files",
                             report.groups.len(), report.duplicate_files
                         );
-                        ui.add(egui::Label::new(RichText::new(&summary).color(t.muted)).truncate())
+                        ui.add(egui::Label::new(RichText::new(&summary).color(t.muted)).truncate().show_tooltip_when_elided(false))
                             .on_hover_text(format!(
                                 "{} candidates · {} read · {:.1}s elapsed",
                                 report.candidate_files,
@@ -879,7 +978,7 @@ impl App {
                                 selected_in_group,
                                 group.files.len()
                             );
-                            egui::CollapsingHeader::new(title)
+                            theme::Disclosure::new(title)
                                 .id_salt(group.id)
                                 .default_open(expand_qa_details || group_index == 0)
                                 .show(ui, |ui| {
@@ -959,11 +1058,11 @@ impl App {
                                                                 .unwrap_or_else(|| "File".into());
                                                             text.add(egui::Label::new(
                                                                 RichText::new(name).family(theme::semibold()),
-                                                            ).truncate())
+                                                            ).truncate().show_tooltip_when_elided(false))
                                                             .on_hover_text(&path);
                                                             text.add(egui::Label::new(
                                                                 RichText::new(&path).size(theme::FONT_CAPTION).color(t.muted),
-                                                            ).truncate())
+                                                            ).truncate().show_tooltip_when_elided(false))
                                                             .on_hover_text(&path);
                                                             text.add(egui::Label::new(
                                                                 RichText::new(format!(
@@ -1010,7 +1109,7 @@ impl App {
                 }
             }
             if report.skipped_count > 0 {
-                egui::CollapsingHeader::new(format!(
+                theme::Disclosure::new(format!(
                     "Skipped entries · {} total",
                     report.skipped_count
                 ))
@@ -1020,7 +1119,7 @@ impl App {
                         ui.horizontal_wrapped(|ui| {
                             theme::muted(ui, skip_reason_label(&skipped.reason), t);
                             if let Some(path) = &skipped.path {
-                                ui.add(egui::Label::new(path.display().to_string()).truncate())
+                                ui.add(egui::Label::new(path.display().to_string()).truncate().show_tooltip_when_elided(false))
                                     .on_hover_text(path.display().to_string());
                             }
                         });
@@ -1131,7 +1230,7 @@ impl App {
         self.progress = "Preparing duplicate scan…".into();
         self.cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let cancel = self.cancel.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let ctx = ctx.clone();
         thread::spawn(move || {
@@ -1170,7 +1269,7 @@ impl App {
         self.progress = "Checking selected duplicate files…".into();
         self.cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let cancel = self.cancel.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let ctx = ctx.clone();
         thread::spawn(move || {
@@ -1187,15 +1286,24 @@ impl App {
                     },
                 )
             });
-            let _ = tx.send(Event::Duplicate(DuplicateEvent::Cleaned(result)));
+            let _ = tx.send(Event::Duplicate(DuplicateEvent::Progress(
+                "Refreshing cleanup history…".into(),
+            )));
+            ctx.request_repaint();
+            let history = store::history(&root);
+            let _ = tx.send(Event::Duplicate(DuplicateEvent::Cleaned {
+                result,
+                history,
+            }));
             ctx.request_repaint();
         });
     }
 
     fn invalidate_duplicate_report(&mut self) {
         if self.duplicate_ui.report.take().is_some() {
-            self.notice =
-                Some("Scan settings changed. Run a new scan to review matching files.".into());
+            self.set_notice(
+                "Scan settings changed. Run a new scan to review matching files.".into(),
+            );
         }
         self.duplicate_ui.cleanup_review = false;
         self.duplicate_ui.acknowledge_all_copies = false;
@@ -1228,13 +1336,13 @@ fn compact_summary_row(
                 title_width,
                 32.,
             );
-            theme::table_cell(
+            theme::table_cell_with_tooltip(
                 row,
                 RichText::new(summary).color(t.muted),
                 summary_width,
                 32.,
-            )
-            .on_hover_text(summary);
+                summary,
+            );
             row.allocate_ui_with_layout(
                 Vec2::new(action_width, 32.),
                 Layout::right_to_left(Align::Center),

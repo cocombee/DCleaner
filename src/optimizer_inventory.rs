@@ -792,7 +792,7 @@ fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
-fn validate_key(key: &str) -> Result<(), String> {
+pub(crate) fn validate_key(key: &str) -> Result<(), String> {
     if key.len() > MAX_REGISTRATION_NAME_BYTES * 2 + 64 {
         return Err("The installed-program identity exceeds the saved-exclusion bound.".into());
     }
@@ -847,6 +847,16 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Memory-only visual fixture; no disk provenance or native ownership proof.
+    #[cfg(debug_assertions)]
+    pub fn fixture_excluded(key: &str) -> Result<Self, String> {
+        validate_key(key)?;
+        let mut settings = Self::default();
+        settings.excluded_program_keys.insert(key.to_owned());
+        settings.validate()?;
+        Ok(settings)
+    }
+
     pub fn is_excluded(&self, key: &str) -> bool {
         self.excluded_program_keys.contains(key)
     }

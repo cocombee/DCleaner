@@ -653,6 +653,7 @@ mod native {
     };
 
     const ERROR_PATH_NOT_FOUND_RAW: u32 = 3;
+    const ERROR_RM_NOT_ACTIVE_RAW: u32 = 6801;
     const TRANSACTION_TIMEOUT: Duration = Duration::from_secs(30);
 
     struct Key(HKEY);
@@ -822,7 +823,7 @@ mod native {
         access: REG_SAM_FLAGS,
         view: RegistryView,
         transaction: &Transaction,
-    ) -> Result<Key, StartupError> {
+    ) -> Result<Key, TransactedOpenError> {
         let view_flag = match view {
             RegistryView::Registry32 => KEY_WOW64_32KEY.0,
             RegistryView::Registry64 => KEY_WOW64_64KEY.0,
@@ -830,7 +831,8 @@ mod native {
                 return Err(error(
                     StartupErrorKind::Unsupported,
                     "The saved registry view is unknown; no native change was made.",
-                ));
+                )
+                .into());
             }
         };
         let path = wide(path);
@@ -850,15 +852,91 @@ mod native {
             return Err(error(
                 StartupErrorKind::ChangedSinceReview,
                 "A selected registry key disappeared before transactional staging.",
-            ));
+            )
+            .into());
         }
-        if code.0 == ERROR_ACCESS_DENIED.0 {
-            return Err(registry_error("open a transactional registry key", code.0));
+        if code.0 == ERROR_RM_NOT_ACTIVE_RAW {
+            return Err(TransactedOpenError::Unavailable);
         }
         if code != ERROR_SUCCESS {
-            return Err(registry_error("open a transactional registry key", code.0));
+            return Err(registry_error("open a transactional registry key", code.0).into());
         }
         Ok(Key(handle))
+    }
+
+    /// Windows 11 25H2 can refuse transacted opens on the SOFTWARE and user
+    /// hives with ERROR_RM_NOT_ACTIVE. Only that code selects the direct path.
+    enum TransactedOpenError {
+        Unavailable,
+        Failed(StartupError),
+    }
+    impl From<StartupError> for TransactedOpenError {
+        fn from(error: StartupError) -> Self {
+            Self::Failed(error)
+        }
+    }
+
+    /// Direct fallback when registry transactions are unavailable: validate the
+    /// exact reviewed pre-state, write each changed slot, then reobserve. A
+    /// failure before the first write changed nothing; any later failure or
+    /// mismatch is reported as uncertain so the caller never retries it.
+    fn apply_direct_slots(
+        run_path: &str,
+        approval_path: &str,
+        name: &str,
+        view: RegistryView,
+        expected: &RunValueSlots,
+        desired: &RunValueSlots,
+    ) -> Result<(), RemovalPlatformError> {
+        let write_access = REG_SAM_FLAGS(KEY_QUERY_VALUE.0 | KEY_SET_VALUE.0);
+        let run = open_key(run_path, write_access, view)?;
+        let approval = if expected.approval != desired.approval {
+            Some(open_key(approval_path, write_access, view)?)
+        } else {
+            open_key_optional(approval_path, KEY_QUERY_VALUE, view)?
+        };
+        let approval_key = approval.as_ref().map(|key| key.0);
+        if &read_slots_on_keys(run.0, approval_key, name)? != expected {
+            return Err(error(
+                StartupErrorKind::ChangedSinceReview,
+                "The registry values changed after review; no change was made.",
+            )
+            .into());
+        }
+        let run_write = (expected.run != desired.run).then_some((run.0, desired.run.as_ref()));
+        let approval_write = match approval_key {
+            Some(key) if expected.approval != desired.approval => {
+                Some((key, desired.approval.as_ref()))
+            }
+            _ => None,
+        };
+        // Removal drops the Run value first so a later approval failure cannot
+        // leave the entry launching; restore writes approval state first.
+        let writes = if desired.run.is_none() {
+            [run_write, approval_write]
+        } else {
+            [approval_write, run_write]
+        };
+        let mut wrote = false;
+        for (key, value) in writes.into_iter().flatten() {
+            if let Err(failure) = stage_value(key, name, value) {
+                return Err(if wrote {
+                    RemovalPlatformError::CommitUncertain(failure)
+                } else {
+                    failure.into()
+                });
+            }
+            wrote = true;
+        }
+        let observed = read_slots_on_keys(run.0, approval_key, name)
+            .map_err(RemovalPlatformError::CommitUncertain)?;
+        if &observed != desired {
+            return Err(RemovalPlatformError::CommitUncertain(error(
+                StartupErrorKind::VerificationFailed,
+                "The registry values differ from the requested state after a direct change.",
+            )));
+        }
+        Ok(())
     }
 
     fn read_value(key: HKEY, name: &str) -> Result<Option<RegistryValueSnapshot>, StartupError> {
@@ -1026,25 +1104,27 @@ mod native {
         }
         let transaction = Transaction::begin()?;
         let write_access = REG_SAM_FLAGS(KEY_QUERY_VALUE.0 | KEY_SET_VALUE.0);
-        let run_tx = if expected.run != desired.run {
-            Some(open_transacted_key(
-                run_path,
-                write_access,
-                view,
-                &transaction,
-            )?)
-        } else {
-            None
+        let open = |path, changes: bool| -> Result<Option<Key>, TransactedOpenError> {
+            if changes {
+                open_transacted_key(path, write_access, view, &transaction).map(Some)
+            } else {
+                Ok(None)
+            }
         };
-        let approval_tx = if expected.approval != desired.approval {
-            Some(open_transacted_key(
-                approval_path,
-                write_access,
-                view,
-                &transaction,
-            )?)
-        } else {
-            None
+        let opened = open(run_path, expected.run != desired.run).and_then(|run| {
+            Ok((
+                run,
+                open(approval_path, expected.approval != desired.approval)?,
+            ))
+        });
+        let (run_tx, approval_tx) = match opened {
+            Ok(keys) => keys,
+            Err(TransactedOpenError::Failed(failure)) => return Err(failure.into()),
+            Err(TransactedOpenError::Unavailable) => {
+                // Nothing was staged; the unused transaction rolls back on drop.
+                drop(transaction);
+                return apply_direct_slots(run_path, approval_path, name, view, expected, desired);
+            }
         };
         let run_public = open_key(run_path, KEY_QUERY_VALUE, view)?;
         let approval_public = open_key_optional(approval_path, KEY_QUERY_VALUE, view)?;
@@ -1253,6 +1333,25 @@ mod native {
             }
         }
 
+        /// The TxR race fixtures need a live registry resource manager; some
+        /// Windows 11 25H2 hosts report ERROR_RM_NOT_ACTIVE for user hives.
+        fn transactions_available(fixture: &Fixture) -> bool {
+            let transaction = Transaction::begin().unwrap();
+            let available = !matches!(
+                open_transacted_key(
+                    &fixture.run_path,
+                    KEY_QUERY_VALUE,
+                    fixture.view,
+                    &transaction
+                ),
+                Err(TransactedOpenError::Unavailable)
+            );
+            if !available {
+                eprintln!("skipped: registry transactions are unavailable on this host");
+            }
+            available
+        }
+
         fn seed(fixture: &Fixture, slots: &RunValueSlots) {
             let name = "FixtureEntry";
             assert_eq!(write(fixture.run(), name, slots.run.as_ref().unwrap()), 0);
@@ -1317,6 +1416,9 @@ mod native {
         #[test]
         fn transactional_validation_rolls_back_when_public_value_changed_after_staging() {
             let fixture = Fixture::new(RegistryView::Registry64);
+            if !transactions_available(&fixture) {
+                return;
+            }
             let original = test_slots();
             seed(&fixture, &original);
             let foreign = raw(
@@ -1357,6 +1459,9 @@ mod native {
         #[test]
         fn transactional_commit_conflict_never_overwrites_a_successful_foreign_writer() {
             let fixture = Fixture::new(RegistryView::Registry64);
+            if !transactions_available(&fixture) {
+                return;
+            }
             let original = test_slots();
             seed(&fixture, &original);
             let foreign = raw(
@@ -1389,6 +1494,88 @@ mod native {
                 assert!(result.is_ok());
                 assert_eq!(state, RunValueSlots::absent());
             }
+        }
+
+        #[test]
+        fn direct_fallback_removes_and_restores_exact_slots_in_both_views() {
+            for view in [RegistryView::Registry32, RegistryView::Registry64] {
+                let fixture = Fixture::new(view);
+                let original = test_slots();
+                seed(&fixture, &original);
+                let (run, approval) = (&fixture.run_path, &fixture.approval_path);
+                apply_direct_slots(
+                    run,
+                    approval,
+                    "FixtureEntry",
+                    view,
+                    &original,
+                    &RunValueSlots::absent(),
+                )
+                .unwrap();
+                assert_eq!(fixture.read("FixtureEntry"), RunValueSlots::absent());
+                apply_direct_slots(
+                    run,
+                    approval,
+                    "FixtureEntry",
+                    view,
+                    &RunValueSlots::absent(),
+                    &original,
+                )
+                .unwrap();
+                assert_eq!(fixture.read("FixtureEntry"), original);
+            }
+        }
+
+        #[test]
+        fn direct_fallback_changes_nothing_when_values_differ_from_review() {
+            let fixture = Fixture::new(RegistryView::Registry64);
+            let original = test_slots();
+            seed(&fixture, &original);
+            let foreign = raw(1, &[b'f', 0, 0, 0]);
+            assert_eq!(write(fixture.run(), "FixtureEntry", &foreign), 0);
+            let result = apply_direct_slots(
+                &fixture.run_path,
+                &fixture.approval_path,
+                "FixtureEntry",
+                fixture.view,
+                &original,
+                &RunValueSlots::absent(),
+            );
+            assert!(matches!(
+                result,
+                Err(RemovalPlatformError::BeforeCommit(StartupError {
+                    kind: StartupErrorKind::ChangedSinceReview,
+                    ..
+                }))
+            ));
+            let state = fixture.read("FixtureEntry");
+            assert_eq!(state.run, Some(foreign));
+            assert_eq!(state.approval, original.approval);
+        }
+
+        #[test]
+        fn direct_fallback_without_approval_key_never_creates_it() {
+            let fixture = Fixture::without_approval_key(RegistryView::Registry64);
+            let original = RunValueSlots {
+                run: Some(raw(1, &[b'a', 0, 0, 0])),
+                approval: None,
+            };
+            seed(&fixture, &original);
+            apply_direct_slots(
+                &fixture.run_path,
+                &fixture.approval_path,
+                "FixtureEntry",
+                fixture.view,
+                &original,
+                &RunValueSlots::absent(),
+            )
+            .unwrap();
+            assert_eq!(fixture.read("FixtureEntry"), RunValueSlots::absent());
+            assert!(
+                open_key_optional(&fixture.approval_path, KEY_QUERY_VALUE, fixture.view)
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 }

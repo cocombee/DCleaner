@@ -4,6 +4,8 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Category {
+    #[serde(default)]
+    pub cache_root_scopes: std::collections::HashMap<PathBuf, crate::browser_cache::RootScope>,
     pub id: String,
     pub name: String,
     pub group: String,

@@ -269,7 +269,12 @@ fn settings_are_persisted_and_corrupt_bytes_are_preserved() {
     let path = root.join("software-settings.json");
     std::fs::write(&path, b"{broken").unwrap();
     assert!(load_settings(root).is_err());
-    assert_eq!(std::fs::read(path).unwrap(), b"{broken");
+    assert!(save_settings(root, &settings).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), b"{broken");
+    let future = br#"{"schema":999,"preferences":[]}"#;
+    std::fs::write(&path, future).unwrap();
+    assert!(save_settings(root, &settings).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), future);
 }
 
 #[test]

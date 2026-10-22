@@ -29,6 +29,14 @@ pub enum JournalEvent {
 }
 pub trait JournalSink {
     fn append(&mut self, event: &JournalEvent) -> Result<(), String>;
+    /// Return only after every event is durable. Default sinks retain their
+    /// individual-write behavior; the file sink can share one flush.
+    fn append_batch(&mut self, events: &[JournalEvent]) -> Result<(), String> {
+        for event in events {
+            self.append(event)?;
+        }
+        Ok(())
+    }
 }
 /// Opens no file until the effect owner has completed its preflight and writes
 /// its first event. A rejected request must not leave an empty history record.
@@ -59,6 +67,19 @@ impl JournalSink for DeferredJournal {
             .expect("journal opened above")
             .append(event)
     }
+    fn append_batch(&mut self, events: &[JournalEvent]) -> Result<(), String> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        if self.journal.is_none() {
+            self.append(&events[0])?;
+            return self.append_batch(&events[1..]);
+        }
+        self.journal
+            .as_mut()
+            .expect("journal opened above")
+            .append_batch(events)
+    }
 }
 pub struct Journal {
     file: File,
@@ -76,10 +97,19 @@ impl Journal {
 }
 impl JournalSink for Journal {
     fn append(&mut self, event: &JournalEvent) -> Result<(), String> {
-        let mut line = serde_json::to_vec(event).map_err(|e| e.to_string())?;
-        line.push(b'\n');
+        self.append_batch(std::slice::from_ref(event))
+    }
+    fn append_batch(&mut self, events: &[JournalEvent]) -> Result<(), String> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        let mut lines = Vec::new();
+        for event in events {
+            serde_json::to_writer(&mut lines, event).map_err(|e| e.to_string())?;
+            lines.push(b'\n');
+        }
         self.file
-            .write_all(&line)
+            .write_all(&lines)
             .and_then(|_| self.file.sync_all())
             .map_err(|e| format!("Could not preserve the cleanup journal: {e}"))
     }

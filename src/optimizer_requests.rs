@@ -19,11 +19,13 @@ use std::time::Duration;
 use uuid::Uuid;
 
 const APPLICATION_ID: i64 = 0x4443_4f50;
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 4;
 const MAX_RECORDS: i64 = 4096;
 const MAX_DB_BYTES: i64 = 16 * 1024 * 1024;
 const MAX_REVIEW_BATCH: usize = 64;
-const SCHEMA: &str = r#"CREATE TABLE invocations (
+mod context;
+pub(crate) use context::ContextBinding;
+const LEGACY_SCHEMA: &str = r#"CREATE TABLE invocations (
     account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
     session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
     invocation BLOB NOT NULL CHECK(length(invocation)=16 AND invocation!=zeroblob(16)),
@@ -36,11 +38,65 @@ const SCHEMA: &str = r#"CREATE TABLE invocations (
           (phase!=0 AND instance IS NOT NULL AND nonce IS NOT NULL)),
     PRIMARY KEY(account,session,invocation)
 ) STRICT, WITHOUT ROWID"#;
+const LOGON_SCHEMA: &str = r#"CREATE TABLE invocations (
+    account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
+    session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
+    logon TEXT NOT NULL DEFAULT '' CHECK(length(logon)<=64 AND instr(logon,char(0))=0),
+    invocation BLOB NOT NULL CHECK(length(invocation)=16 AND invocation!=zeroblob(16)),
+    lease BLOB NOT NULL CHECK(length(lease)=16 AND lease!=zeroblob(16)),
+    revision BLOB NOT NULL CHECK(length(revision)=16 AND revision!=zeroblob(16)),
+    phase INTEGER NOT NULL CHECK(phase BETWEEN 0 AND 5),
+    instance BLOB CHECK(instance IS NULL OR (length(instance)=16 AND instance!=zeroblob(16))),
+    nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
+    CHECK((phase=0 AND instance IS NULL AND nonce IS NULL) OR
+          (phase!=0 AND instance IS NOT NULL AND nonce IS NOT NULL)),
+    PRIMARY KEY(account,session,logon,invocation)
+) STRICT, WITHOUT ROWID"#;
+const BOOT_SCHEMA: &str = r#"CREATE TABLE invocations (
+    account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
+    session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
+    logon TEXT NOT NULL DEFAULT '' CHECK(length(logon)<=64 AND instr(logon,char(0))=0),
+    boot BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(boot)=16),
+    invocation BLOB NOT NULL CHECK(length(invocation)=16 AND invocation!=zeroblob(16)),
+    lease BLOB NOT NULL CHECK(length(lease)=16 AND lease!=zeroblob(16)),
+    revision BLOB NOT NULL CHECK(length(revision)=16 AND revision!=zeroblob(16)),
+    phase INTEGER NOT NULL CHECK(phase BETWEEN 0 AND 5),
+    instance BLOB CHECK(instance IS NULL OR (length(instance)=16 AND instance!=zeroblob(16))),
+    nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
+    CHECK((phase=0 AND instance IS NULL AND nonce IS NULL) OR
+          (phase!=0 AND instance IS NOT NULL AND nonce IS NOT NULL)),
+    PRIMARY KEY(account,session,logon,boot,invocation)
+) STRICT, WITHOUT ROWID"#;
+const SCHEMA: &str = r#"CREATE TABLE invocations (
+    account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
+    session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
+    logon TEXT NOT NULL DEFAULT '' CHECK(length(logon)<=64 AND instr(logon,char(0))=0),
+    boot BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(boot)=16),
+    invocation BLOB NOT NULL CHECK(length(invocation)=16 AND invocation!=zeroblob(16)),
+    lease BLOB NOT NULL CHECK(length(lease)=16 AND lease!=zeroblob(16)),
+    revision BLOB NOT NULL CHECK(length(revision)=16 AND revision!=zeroblob(16)),
+    phase INTEGER NOT NULL CHECK(phase BETWEEN 0 AND 5),
+    instance BLOB CHECK(instance IS NULL OR (length(instance)=16 AND instance!=zeroblob(16))),
+    nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
+    context BLOB CHECK(context IS NULL OR length(context)=32),
+    CHECK((phase=0 AND instance IS NULL AND nonce IS NULL) OR
+          (phase!=0 AND instance IS NOT NULL AND nonce IS NOT NULL)),
+    PRIMARY KEY(account,session,logon,boot,invocation)
+) STRICT, WITHOUT ROWID"#;
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Layout {
+    Fresh,
+    Legacy,
+    Logon,
+    Boot,
+    Current,
+}
 
 #[derive(Debug)]
 pub(crate) enum LedgerError {
     Sql(rusqlite::Error),
     InvalidIdentity,
+    ContextHash,
     RequestMismatch,
     UnsupportedDatabase,
     CorruptDatabase,
@@ -63,11 +119,26 @@ impl std::fmt::Display for LedgerError {
 impl std::error::Error for LedgerError {}
 
 /// Runtime callers derive this from authenticated native identity, not JSON.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Logon is part of the durable key. A stored key is not an authenticated native
+/// caller: only native-origin snapshots can supply a fresh owner preflight.
+/// Native origin does not prove that a snapshot is still current at effect time.
+#[derive(Clone, Debug)]
 pub(crate) struct Caller {
     account: String,
     session: u32,
+    logon_sid: Option<String>,
+    boot_id: Option<Uuid>,
+    native_origin: bool,
 }
+impl PartialEq for Caller {
+    fn eq(&self, other: &Self) -> bool {
+        self.account == other.account
+            && self.session == other.session
+            && self.logon_sid == other.logon_sid
+            && self.boot_id == other.boot_id
+    }
+}
+impl Eq for Caller {}
 impl Caller {
     pub(crate) fn account(&self) -> &str {
         &self.account
@@ -75,12 +146,43 @@ impl Caller {
     pub(crate) fn session(&self) -> u32 {
         self.session
     }
+    pub(crate) fn logon_sid(&self) -> Option<&str> {
+        self.logon_sid.as_deref()
+    }
+    pub(crate) fn boot_id(&self) -> Option<Uuid> {
+        self.boot_id
+    }
+    fn boot_key(&self) -> [u8; 16] {
+        boot_key(self.boot_id)
+    }
     #[cfg(test)]
     pub(crate) fn fixture(account: &str, session: u32) -> Self {
         Self {
             account: account.into(),
             session,
+            logon_sid: None,
+            boot_id: None,
+            native_origin: true,
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture_logon(account: &str, session: u32, logon_sid: &str) -> Self {
+        let mut caller = Self::fixture(account, session);
+        caller.logon_sid = Some(logon_sid.into());
+        caller.validate().unwrap();
+        caller
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture_boot(
+        account: &str,
+        session: u32,
+        logon_sid: &str,
+        boot_id: Uuid,
+    ) -> Self {
+        let mut caller = Self::fixture_logon(account, session, logon_sid);
+        caller.boot_id = Some(boot_id);
+        caller.validate().unwrap();
+        caller
     }
     #[cfg(windows)]
     pub(crate) fn authenticated(
@@ -93,6 +195,12 @@ impl Caller {
         let caller = Self {
             account,
             session: request.caller().session_id(),
+            logon_sid: request
+                .caller()
+                .logon_sid()
+                .map_err(|_| LedgerError::InvalidIdentity)?,
+            boot_id: Some(request.caller().boot_id()),
+            native_origin: true,
         };
         caller.validate()?;
         Ok(caller)
@@ -103,12 +211,37 @@ impl Caller {
             || !self.account.is_ascii()
             || self.account.contains('\0')
             || !self.account.starts_with("S-1-")
+            || self
+                .boot_id
+                .is_some_and(|id| id.is_nil() || self.logon_sid.is_none())
+            || self
+                .logon_sid
+                .as_deref()
+                .is_some_and(|s| !canonical_logon_sid(s))
         {
             Err(LedgerError::InvalidIdentity)
         } else {
             Ok(())
         }
     }
+}
+
+pub(crate) fn canonical_logon_sid(s: &str) -> bool {
+    if s.len() > 64 || !s.is_ascii() || !s.starts_with("S-1-5-5-") {
+        return false;
+    }
+    let parts: Vec<_> = s.split('-').collect();
+    parts.len() == 6
+        && parts[4..]
+            .iter()
+            .all(|p| p.parse::<u32>().ok().is_some_and(|n| n.to_string() == *p))
+}
+pub(crate) fn boot_key(id: Option<Uuid>) -> [u8; 16] {
+    *id.unwrap_or(Uuid::nil()).as_bytes()
+}
+fn stored_boot(bytes: Vec<u8>) -> Result<Option<Uuid>, LedgerError> {
+    let id = Uuid::from_slice(&bytes).map_err(|_| LedgerError::CorruptDatabase)?;
+    Ok((!id.is_nil()).then_some(id))
 }
 
 /// Constructed by the trusted lease owner after fresh ownership/generation
@@ -118,21 +251,51 @@ pub(crate) struct LeasePreflight {
     owner: Caller,
     lease: Uuid,
     revision: Uuid,
+    context: ContextBinding,
 }
 impl LeasePreflight {
     pub(crate) fn from_owner_observation(
         owner: Caller,
         lease: Uuid,
         revision: Uuid,
+        context: ContextBinding,
     ) -> Result<Self, LedgerError> {
         owner.validate()?;
+        if !owner.native_origin {
+            return Err(LedgerError::NotAuthorized);
+        }
         valid_id(lease)?;
         valid_id(revision)?;
         Ok(Self {
             owner,
             lease,
             revision,
+            context,
         })
+    }
+}
+
+/// Native owner-death evidence, never supplied by a request or reconstructed
+/// from a database UUID alone. Reconciliation consumes no effect authority.
+pub(crate) struct StoppedOwner {
+    instance: Uuid,
+}
+impl StoppedOwner {
+    /// # Safety
+    /// The exclusive protected runtime must bind this ID to its validated
+    /// persisted epoch and prove that epoch's process has ended using native
+    /// process identity/exit observations. A released lock is insufficient.
+    #[cfg(windows)]
+    pub(crate) unsafe fn from_native_exit(instance: Uuid) -> Result<Self, LedgerError> {
+        valid_id(instance)?;
+        Ok(Self { instance })
+    }
+    pub(crate) fn instance(&self) -> Uuid {
+        self.instance
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture(instance: Uuid) -> Self {
+        Self { instance }
     }
 }
 
@@ -193,6 +356,8 @@ pub(crate) struct QueueTicket {
     invocation: Uuid,
     lease: Uuid,
     revision: Uuid,
+    // None is preserved only for older records, never a claimable context.
+    context: Option<ContextBinding>,
 }
 impl QueueTicket {
     pub(crate) fn owner(&self) -> &Caller {
@@ -271,11 +436,12 @@ impl Ledger {
         let HelperRequest::Reactivate {
             lease_id,
             invocation_id,
+            original,
         } = &request.request().request
         else {
             return Err(LedgerError::RequestMismatch);
         };
-        if *lease_id != preflight.lease {
+        if *lease_id != preflight.lease || ContextBinding::observe(original)? != preflight.context {
             return Err(LedgerError::RequestMismatch);
         }
         let caller = Caller::authenticated(request)?;
@@ -291,15 +457,19 @@ impl Ledger {
         let HelperRequest::QueryInvocation { invocation_id } = &request.request().request else {
             return Err(LedgerError::RequestMismatch);
         };
-        Ok(
-            match self.query(&Caller::authenticated(request)?, *invocation_id)? {
-                Some(phase) => phase.response(*invocation_id),
-                None => ServiceResponse::Invocation {
-                    invocation_id: *invocation_id,
-                    state: InvocationState::Unknown,
-                },
+        let caller = Caller::authenticated(request)?;
+        Ok(match self.query(&caller, *invocation_id)? {
+            Some(phase) => phase.response(*invocation_id),
+            None if legacy_collision(&self.connection, &caller, *invocation_id)? => {
+                ServiceResponse::Refused {
+                    reason: Refusal::RecoveryRequired,
+                }
+            }
+            None => ServiceResponse::Invocation {
+                invocation_id: *invocation_id,
+                state: InvocationState::Unknown,
             },
-        )
+        })
     }
 
     /// Takes an owned, unshared, file-backed connection from the service's
@@ -338,13 +508,30 @@ impl Ledger {
             return Err(LedgerError::UnsupportedDurability);
         }
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let fresh = validate_header(&transaction)?;
-        if fresh {
+        let layout = validate_header(&transaction)?;
+        if layout == Layout::Fresh {
             transaction.execute_batch(SCHEMA)?;
             transaction.pragma_update(None, "application_id", APPLICATION_ID)?;
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        } else if matches!(layout, Layout::Legacy | Layout::Logon | Layout::Boot) {
+            transaction.execute_batch("ALTER TABLE invocations RENAME TO invocations_old;")?;
+            transaction.execute_batch(SCHEMA)?;
+            transaction.execute_batch(if layout == Layout::Legacy {
+                "INSERT INTO invocations(account,session,logon,invocation,lease,revision,phase,instance,nonce)
+                SELECT account,session,'',invocation,lease,revision,phase,instance,nonce FROM invocations_old;
+                DROP TABLE invocations_old;"
+            } else if layout == Layout::Logon {
+                "INSERT INTO invocations(account,session,logon,invocation,lease,revision,phase,instance,nonce)
+                SELECT account,session,logon,invocation,lease,revision,phase,instance,nonce FROM invocations_old;
+                DROP TABLE invocations_old;"
+            } else {
+                "INSERT INTO invocations(account,session,logon,boot,invocation,lease,revision,phase,instance,nonce)
+                SELECT account,session,logon,boot,invocation,lease,revision,phase,instance,nonce FROM invocations_old;
+                DROP TABLE invocations_old;"
+            })?;
+            transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
-        validate_schema(&transaction)?;
+        validate_schema(&transaction, Layout::Current)?;
         validate_integrity(&transaction)?;
         transaction.commit()?;
         Ok(Self { connection })
@@ -368,28 +555,33 @@ impl Ledger {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let existing = lookup(&tx, caller, invocation)?;
-        let result = if let Some((lease, _stored_revision, phase)) = existing {
+        let result = if let Some((lease, _stored_revision, phase, context)) = existing {
             // Revision is a worker generation guard, not a field supplied by
             // the client. A same-request retry returns its historical state;
             // it cannot replace the original revision or issue a new ticket.
-            if lease != preflight.lease {
+            if lease != preflight.lease || context != Some(preflight.context) {
                 Admission::Conflict
             } else {
                 Admission::Existing(phase)
             }
+        } else if legacy_collision(&tx, caller, invocation)? {
+            // Unknown legacy identity is not another known login. Do not turn
+            // a retry of its nonce into a second launch or reveal its phase.
+            Admission::Conflict
         } else {
             let count: i64 =
                 tx.query_row("SELECT count(*) FROM invocations", [], |row| row.get(0))?;
             if count >= MAX_RECORDS {
                 return Err(LedgerError::Capacity);
             }
-            tx.execute("INSERT INTO invocations(account,session,invocation,lease,revision,phase) VALUES(?1,?2,?3,?4,?5,0)",
-                params![caller.account,caller.session,invocation.as_bytes().as_slice(),preflight.lease.as_bytes().as_slice(),preflight.revision.as_bytes().as_slice()])?;
+            tx.execute("INSERT INTO invocations(account,session,logon,invocation,lease,revision,phase,boot,context) VALUES(?1,?2,?3,?4,?5,?6,0,?7,?8)",
+                params![caller.account,caller.session,caller.logon_sid.as_deref().unwrap_or(""),invocation.as_bytes().as_slice(),preflight.lease.as_bytes().as_slice(),preflight.revision.as_bytes().as_slice(),caller.boot_key().as_slice(),preflight.context.bytes()])?;
             Admission::New(QueueTicket {
                 owner: caller.clone(),
                 invocation,
                 lease: preflight.lease,
                 revision: preflight.revision,
+                context: Some(preflight.context),
             })
         };
         tx.commit()?;
@@ -399,7 +591,7 @@ impl Ledger {
     fn query(&self, caller: &Caller, invocation: Uuid) -> Result<Option<Phase>, LedgerError> {
         caller.validate()?;
         valid_id(invocation)?;
-        Ok(lookup(&self.connection, caller, invocation)?.map(|(_, _, phase)| phase))
+        Ok(lookup(&self.connection, caller, invocation)?.map(|(_, _, phase, _)| phase))
     }
 
     /// Fresh service-owned lease authorization is required again at claim.
@@ -414,6 +606,7 @@ impl Ledger {
         if preflight.owner != ticket.owner
             || preflight.lease != ticket.lease
             || preflight.revision != ticket.revision
+            || Some(preflight.context) != ticket.context
         {
             return Err(LedgerError::StaleLease);
         }
@@ -421,8 +614,8 @@ impl Ledger {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let changed=tx.execute("UPDATE invocations SET phase=1,instance=?1,nonce=?2 WHERE account=?3 AND session=?4 AND invocation=?5 AND lease=?6 AND revision=?7 AND phase=0",
-            params![instance.as_bytes().as_slice(),nonce.as_bytes().as_slice(),ticket.owner.account,ticket.owner.session,ticket.invocation.as_bytes().as_slice(),ticket.lease.as_bytes().as_slice(),ticket.revision.as_bytes().as_slice()])?;
+        let changed=tx.execute("UPDATE invocations SET phase=1,instance=?1,nonce=?2 WHERE account=?3 AND session=?4 AND invocation=?5 AND lease=?6 AND revision=?7 AND logon=?8 AND boot=?9 AND context=?10 AND phase=0",
+            params![instance.as_bytes().as_slice(),nonce.as_bytes().as_slice(),ticket.owner.account,ticket.owner.session,ticket.invocation.as_bytes().as_slice(),ticket.lease.as_bytes().as_slice(),ticket.revision.as_bytes().as_slice(),ticket.owner.logon_sid.as_deref().unwrap_or(""),ticket.owner.boot_key().as_slice(),preflight.context.bytes()])?;
         if changed != 1 {
             return Err(LedgerError::StaleClaim);
         }
@@ -446,8 +639,8 @@ impl Ledger {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let ticket = &claim.ticket;
-        let changed=tx.execute("UPDATE invocations SET phase=?1 WHERE account=?2 AND session=?3 AND invocation=?4 AND lease=?5 AND revision=?6 AND instance=?7 AND nonce=?8 AND phase=1",
-            params![phase.code(),ticket.owner.account,ticket.owner.session,ticket.invocation.as_bytes().as_slice(),ticket.lease.as_bytes().as_slice(),ticket.revision.as_bytes().as_slice(),claim.instance.as_bytes().as_slice(),claim.nonce.as_bytes().as_slice()])?;
+        let changed=tx.execute("UPDATE invocations SET phase=?1 WHERE account=?2 AND session=?3 AND invocation=?4 AND lease=?5 AND revision=?6 AND instance=?7 AND nonce=?8 AND logon=?9 AND boot=?10 AND context=?11 AND phase=1",
+            params![phase.code(),ticket.owner.account,ticket.owner.session,ticket.invocation.as_bytes().as_slice(),ticket.lease.as_bytes().as_slice(),ticket.revision.as_bytes().as_slice(),claim.instance.as_bytes().as_slice(),claim.nonce.as_bytes().as_slice(),ticket.owner.logon_sid.as_deref().unwrap_or(""),ticket.owner.boot_key().as_slice(),ticket.context.as_ref().map(ContextBinding::bytes)])?;
         if changed != 1 {
             return Err(LedgerError::StaleClaim);
         }
@@ -455,13 +648,13 @@ impl Ledger {
         Ok(phase)
     }
 
-    /// EXTERNAL PRECONDITION: the runtime has proved this previous instance is
-    /// stopped and holds exclusive recovery ownership. This SQL operation cannot
-    /// establish process death or a singleton. It never makes work runnable.
+    /// Requires a sealed native-death proof and the runtime's exclusive storage
+    /// ownership. This SQL operation never makes work runnable.
     pub(crate) fn mark_stopped_owner_uncertain(
         &mut self,
-        previous_instance: Uuid,
+        proof: &StoppedOwner,
     ) -> Result<usize, LedgerError> {
+        let previous_instance = proof.instance();
         valid_id(previous_instance)?;
         let tx = self
             .connection
@@ -474,19 +667,39 @@ impl Ledger {
         Ok(changed)
     }
 
+    pub(crate) fn has_foreign_running_owner(&self, instance: Uuid) -> Result<bool, LedgerError> {
+        valid_id(instance)?;
+        Ok(self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM invocations WHERE phase=1 AND instance<>?1)",
+            [instance.as_bytes().as_slice()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub(crate) fn requires_review(&self) -> Result<bool, LedgerError> {
+        Ok(self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM invocations WHERE phase IN(0,1,5))",
+            [],
+            |r| r.get(0),
+        )?)
+    }
+
     /// Returns bounded wake hints for explicit fresh lease review. Reading this
     /// list never claims, schedules or replays an effect.
     pub(crate) fn pending_for_review(&self, limit: usize) -> Result<PendingReview, LedgerError> {
         if limit == 0 || limit > MAX_REVIEW_BATCH {
             return Err(LedgerError::Capacity);
         }
-        let mut statement=self.connection.prepare("SELECT account,session,invocation,lease,revision FROM invocations WHERE phase=0 ORDER BY account,session,invocation LIMIT ?1")?;
+        let mut statement=self.connection.prepare("SELECT account,session,invocation,lease,revision,logon,boot,context FROM invocations WHERE phase=0 ORDER BY account,session,logon,boot,invocation LIMIT ?1")?;
         let mut rows = statement.query([limit as i64 + 1])?;
         let mut tickets = Vec::new();
         while let Some(row) = rows.next()? {
             let owner = Caller {
                 account: row.get(0)?,
                 session: row.get(1)?,
+                logon_sid: nonempty_logon(row.get(5)?),
+                boot_id: stored_boot(row.get(6)?)?,
+                native_origin: false,
             };
             owner.validate()?;
             tickets.push(QueueTicket {
@@ -494,6 +707,10 @@ impl Ledger {
                 invocation: row_id(row, 2)?,
                 lease: row_id(row, 3)?,
                 revision: row_id(row, 4)?,
+                context: row
+                    .get::<_, Option<Vec<u8>>>(7)?
+                    .map(ContextBinding::stored)
+                    .transpose()?,
             });
         }
         let has_more = tickets.len() > limit;
@@ -519,20 +736,39 @@ fn lookup(
     connection: &Connection,
     owner: &Caller,
     id: Uuid,
-) -> Result<Option<(Uuid, Uuid, Phase)>, LedgerError> {
-    let raw:Option<(Vec<u8>,Vec<u8>,i64)>=connection.query_row("SELECT lease,revision,phase FROM invocations WHERE account=?1 AND session=?2 AND invocation=?3",
-        params![owner.account,owner.session,id.as_bytes().as_slice()],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional()?;
-    raw.map(|(lease, revision, phase)| {
+) -> Result<Option<(Uuid, Uuid, Phase, Option<ContextBinding>)>, LedgerError> {
+    let raw:Option<(Vec<u8>,Vec<u8>,i64,Option<Vec<u8>>)>=connection.query_row("SELECT lease,revision,phase,context FROM invocations WHERE account=?1 AND session=?2 AND invocation=?3 AND logon=?4 AND boot=?5",
+        params![owner.account,owner.session,id.as_bytes().as_slice(),owner.logon_sid.as_deref().unwrap_or(""),owner.boot_key().as_slice()],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?))).optional()?;
+    raw.map(|(lease, revision, phase, context)| {
         let lease = Uuid::from_slice(&lease).map_err(|_| LedgerError::CorruptDatabase)?;
         let revision = Uuid::from_slice(&revision).map_err(|_| LedgerError::CorruptDatabase)?;
         valid_id(lease).map_err(|_| LedgerError::CorruptDatabase)?;
         valid_id(revision).map_err(|_| LedgerError::CorruptDatabase)?;
-        Ok((lease, revision, Phase::parse(phase)?))
+        Ok((
+            lease,
+            revision,
+            Phase::parse(phase)?,
+            context.map(ContextBinding::stored).transpose()?,
+        ))
     })
     .transpose()
 }
-/// Returns true only for an empty unclaimed database. Unknown data is not reset.
-fn validate_header(connection: &Connection) -> Result<bool, LedgerError> {
+fn nonempty_logon(value: String) -> Option<String> {
+    if value.is_empty() { None } else { Some(value) }
+}
+fn legacy_collision(
+    connection: &Connection,
+    caller: &Caller,
+    invocation: Uuid,
+) -> Result<bool, LedgerError> {
+    if caller.logon_sid.is_none() {
+        return Ok(false);
+    }
+    Ok(connection.query_row("SELECT EXISTS(SELECT 1 FROM invocations WHERE account=?1 AND session=?2 AND invocation=?3 AND boot=zeroblob(16) AND (logon='' OR (?4 AND logon=?5)))",
+        params![caller.account,caller.session,invocation.as_bytes().as_slice(),caller.boot_id.is_some(),caller.logon_sid.as_deref().unwrap_or("")],|r|r.get(0))?)
+}
+/// Unknown data is not reset; a known v1 format can migrate without guessing a login.
+fn validate_header(connection: &Connection) -> Result<Layout, LedgerError> {
     let application: i64 =
         connection.pragma_query_value(None, "application_id", |row| row.get(0))?;
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -547,15 +783,24 @@ fn validate_header(connection: &Connection) -> Result<bool, LedgerError> {
         return Err(LedgerError::Capacity);
     }
     if application == 0 && version == 0 && objects == 0 {
-        return Ok(true);
+        return Ok(Layout::Fresh);
     }
-    if application != APPLICATION_ID || version != SCHEMA_VERSION {
+    if application != APPLICATION_ID || ![1, 2, 3, SCHEMA_VERSION].contains(&version) {
         return Err(LedgerError::UnsupportedDatabase);
     }
-    validate_schema(connection)?;
-    Ok(false)
+    let layout = if version == 1 {
+        Layout::Legacy
+    } else if version == 2 {
+        Layout::Logon
+    } else if version == 3 {
+        Layout::Boot
+    } else {
+        Layout::Current
+    };
+    validate_schema(connection, layout)?;
+    Ok(layout)
 }
-fn validate_schema(connection: &Connection) -> Result<(), LedgerError> {
+fn validate_schema(connection: &Connection, layout: Layout) -> Result<(), LedgerError> {
     let objects: i64 =
         connection.query_row("SELECT count(*) FROM sqlite_schema", [], |row| row.get(0))?;
     let schema: Option<String> = connection
@@ -569,7 +814,12 @@ fn validate_schema(connection: &Connection) -> Result<(), LedgerError> {
         || schema
             .as_deref()
             .map(|sql| sql.trim().trim_end_matches(';'))
-            != Some(SCHEMA.trim())
+            != Some(match layout {
+                Layout::Legacy => LEGACY_SCHEMA.trim(),
+                Layout::Logon => LOGON_SCHEMA.trim(),
+                Layout::Boot => BOOT_SCHEMA.trim(),
+                _ => SCHEMA.trim(),
+            })
     {
         return Err(LedgerError::UnsupportedDatabase);
     }
@@ -577,6 +827,80 @@ fn validate_schema(connection: &Connection) -> Result<(), LedgerError> {
         connection.query_row("SELECT count(*) FROM invocations", [], |row| row.get(0))?;
     if count > MAX_RECORDS {
         return Err(LedgerError::Capacity);
+    }
+    let logon = if layout == Layout::Legacy {
+        "''"
+    } else {
+        "logon"
+    };
+    let boot = if matches!(layout, Layout::Boot | Layout::Current) {
+        "boot"
+    } else {
+        "zeroblob(16)"
+    };
+    let context = if layout == Layout::Current {
+        "context"
+    } else {
+        "NULL"
+    };
+    let mut query = connection.prepare(&format!("SELECT account,session,{logon},invocation,lease,revision,phase,instance,nonce,{boot},{context} FROM invocations LIMIT 4097"))?;
+    for row in query.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, u32>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Vec<u8>>(3)?,
+            row.get::<_, Vec<u8>>(4)?,
+            row.get::<_, Vec<u8>>(5)?,
+            row.get::<_, i64>(6)?,
+            row.get::<_, Option<Vec<u8>>>(7)?,
+            row.get::<_, Option<Vec<u8>>>(8)?,
+            row.get::<_, Vec<u8>>(9)?,
+            row.get::<_, Option<Vec<u8>>>(10)?,
+        ))
+    })? {
+        let (
+            account,
+            session,
+            logon,
+            invocation,
+            lease,
+            revision,
+            phase,
+            instance,
+            nonce,
+            boot,
+            context,
+        ) = row?;
+        Caller {
+            account,
+            session,
+            logon_sid: nonempty_logon(logon),
+            boot_id: stored_boot(boot)?,
+            native_origin: false,
+        }
+        .validate()
+        .map_err(|_| LedgerError::CorruptDatabase)?;
+        for id in [
+            Some(invocation),
+            Some(lease),
+            Some(revision),
+            instance.clone(),
+            nonce.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let id = Uuid::from_slice(&id).map_err(|_| LedgerError::CorruptDatabase)?;
+            valid_id(id).map_err(|_| LedgerError::CorruptDatabase)?;
+        }
+        context.map(ContextBinding::stored).transpose()?;
+        Phase::parse(phase)?;
+        if (phase == 0 && (instance.is_some() || nonce.is_some()))
+            || (phase != 0 && (instance.is_none() || nonce.is_none()))
+        {
+            return Err(LedgerError::CorruptDatabase);
+        }
     }
     Ok(())
 }
@@ -591,6 +915,102 @@ fn validate_integrity(connection: &Connection) -> Result<(), LedgerError> {
 
 #[cfg(test)]
 mod tests {
+    mod boot_scope;
+    mod context_binding;
+    mod logon_migration;
+    #[test]
+    fn live_logon_scope_must_match_both_admission_and_worker_preflight() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut ledger = open(&directory.path().join("requests.db"));
+        let mut first = caller();
+        first.logon_sid = Some("S-1-5-5-1-2".into());
+        let mut second = first.clone();
+        second.logon_sid = Some("S-1-5-5-1-3".into());
+        let invocation = Uuid::new_v4();
+        let lease = Uuid::new_v4();
+        let revision = Uuid::new_v4();
+        assert!(matches!(
+            ledger.admit(&first, invocation, preflight(&second, lease, revision)),
+            Err(LedgerError::NotAuthorized)
+        ));
+        let ticket = match ledger
+            .admit(&first, invocation, preflight(&first, lease, revision))
+            .unwrap()
+        {
+            Admission::New(ticket) => ticket,
+            _ => panic!("fresh invocation required"),
+        };
+        assert!(matches!(
+            ledger.claim(ticket, preflight(&second, lease, revision), Uuid::new_v4()),
+            Err(LedgerError::StaleLease)
+        ));
+        assert_eq!(
+            ledger.query(&first, invocation).unwrap(),
+            Some(Phase::Queued)
+        );
+    }
+
+    #[test]
+    fn persisted_queue_hint_cannot_reconstruct_a_live_logon_caller() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("requests.db");
+        let mut ledger = open(&path);
+        let mut owner = caller();
+        owner.logon_sid = Some("S-1-5-5-1-2".into());
+        let invocation = Uuid::new_v4();
+        let lease = Uuid::new_v4();
+        let revision = Uuid::new_v4();
+        let _ = ledger
+            .admit(&owner, invocation, preflight(&owner, lease, revision))
+            .unwrap();
+        drop(ledger);
+        let mut ledger = open(&path);
+        let mut hints = ledger.pending_for_review(1).unwrap();
+        assert_eq!(hints.tickets.len(), 1);
+        let hint = hints.tickets.remove(0);
+        assert_eq!(hint.owner().logon_sid(), owner.logon_sid());
+        assert!(!hint.owner.native_origin);
+        assert!(matches!(
+            LeasePreflight::from_owner_observation(
+                hint.owner().clone(),
+                lease,
+                revision,
+                crate::optimizer_requests::ContextBinding::fixture_default()
+            ),
+            Err(LedgerError::NotAuthorized)
+        ));
+        let mut changed = owner.clone();
+        changed.logon_sid = Some("S-1-5-5-1-3".into());
+        assert!(matches!(
+            ledger.claim(hint, preflight(&changed, lease, revision), Uuid::new_v4()),
+            Err(LedgerError::StaleLease)
+        ));
+        assert_eq!(
+            ledger.query(&owner, invocation).unwrap(),
+            Some(Phase::Queued)
+        );
+    }
+
+    #[test]
+    fn logon_sid_text_is_canonical_bounded_and_not_a_caller_supplied_account_alias() {
+        for sid in [
+            "S-1-5-18",
+            "S-1-5-5-01-2",
+            "S-1-5-5-1-4294967296",
+            "S-1-5-5-1-2\0",
+            "S-1-5-5-1",
+            "S-1-5-5-1-2-3",
+        ] {
+            let mut owner = caller();
+            owner.logon_sid = Some(sid.into());
+            assert!(owner.validate().is_err());
+        }
+        let mut owner = caller();
+        owner.logon_sid = Some("S-1-5-5-4294967295-4294967295".into());
+        assert!(owner.validate().is_ok());
+        owner.logon_sid = Some("S-1-5-5-".repeat(100));
+        assert!(owner.validate().is_err());
+    }
     use super::*;
     use std::{
         path::Path,
@@ -602,13 +1022,22 @@ mod tests {
         Caller {
             account: "S-1-5-21-1-2-3-1001".into(),
             session: 1,
+            logon_sid: None,
+            boot_id: None,
+            native_origin: true,
         }
     }
     fn open(path: &Path) -> Ledger {
         Ledger::open(Connection::open(path).unwrap()).unwrap()
     }
     fn preflight(owner: &Caller, lease: Uuid, revision: Uuid) -> LeasePreflight {
-        LeasePreflight::from_owner_observation(owner.clone(), lease, revision).unwrap()
+        LeasePreflight::from_owner_observation(
+            owner.clone(),
+            lease,
+            revision,
+            crate::optimizer_requests::ContextBinding::fixture_default(),
+        )
+        .unwrap()
     }
     fn admit(
         ledger: &mut Ledger,
@@ -859,7 +1288,12 @@ mod tests {
         ));
         assert_eq!(ledger.query(&owner, id).unwrap(), Some(Phase::Running));
         clear_commit_fault(&ledger);
-        assert_eq!(ledger.mark_stopped_owner_uncertain(instance).unwrap(), 1);
+        assert_eq!(
+            ledger
+                .mark_stopped_owner_uncertain(&StoppedOwner::fixture(instance))
+                .unwrap(),
+            1
+        );
         assert_eq!(ledger.query(&owner, id).unwrap(), Some(Phase::Uncertain));
     }
 
@@ -880,11 +1314,23 @@ mod tests {
             .unwrap();
         admit(&mut ledger, &owner, queued, lease, revision);
         assert_eq!(
-            ledger.mark_stopped_owner_uncertain(Uuid::new_v4()).unwrap(),
+            ledger
+                .mark_stopped_owner_uncertain(&StoppedOwner::fixture(Uuid::new_v4()))
+                .unwrap(),
             0
         );
-        assert_eq!(ledger.mark_stopped_owner_uncertain(instance).unwrap(), 1);
-        assert_eq!(ledger.mark_stopped_owner_uncertain(instance).unwrap(), 0);
+        assert_eq!(
+            ledger
+                .mark_stopped_owner_uncertain(&StoppedOwner::fixture(instance))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            ledger
+                .mark_stopped_owner_uncertain(&StoppedOwner::fixture(instance))
+                .unwrap(),
+            0
+        );
         assert!(matches!(
             ledger.finish(&claim, WorkerOutcome::VerifiedReenabled),
             Err(LedgerError::StaleClaim)

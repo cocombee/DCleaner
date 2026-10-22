@@ -6,10 +6,15 @@ use std::{
     thread,
 };
 
+const MAX_ICON_RESULTS_PER_FRAME: usize = 16;
+#[cfg(any(windows, test))]
+mod browser_sources;
+
 #[derive(Default)]
 pub struct IconCache {
-    images: HashMap<String, Option<TextureHandle>>,
+    images: HashMap<String, Option<(TextureHandle, TextureHandle)>>,
     pending: HashSet<String>,
+    drained_frame: Option<u64>,
     worker: Option<(
         mpsc::Sender<String>,
         mpsc::Receiver<(String, Option<ColorImage>)>,
@@ -21,21 +26,58 @@ impl IconCache {
     pub fn is_loading(&self) -> bool {
         !self.pending.is_empty()
     }
-    /// Reserves the same slot even when no native icon is available.
-    pub fn show(&mut self, ui: &mut egui::Ui, resource: Option<&str>, size: f32) {
+    fn drain_results(&mut self, ui: &egui::Ui) {
+        let frame = ui.ctx().cumulative_frame_nr();
+        if self.drained_frame == Some(frame) {
+            return;
+        }
+        self.drained_frame = Some(frame);
         if let Some((_, receiver)) = &self.worker {
-            for (key, image) in receiver.try_iter() {
+            let mut processed = 0;
+            while processed < MAX_ICON_RESULTS_PER_FRAME {
+                let Ok((key, image)) = receiver.try_recv() else {
+                    break;
+                };
+                processed += 1;
                 self.pending.remove(&key);
                 let texture = image.map(|image| {
-                    ui.ctx().load_texture(
+                    let mono = ui.ctx().load_texture(
+                        format!("application-icon-mono-{}", self.images.len()),
+                        crate::theme::monochrome_image(image.clone()),
+                        egui::TextureOptions::LINEAR,
+                    );
+                    let color = ui.ctx().load_texture(
                         format!("application-icon-{}", self.images.len()),
                         image,
                         egui::TextureOptions::LINEAR,
-                    )
+                    );
+                    (color, mono)
                 });
                 self.images.insert(key, texture);
             }
+            // Continue a ready backlog next frame. A blocked native extraction
+            // wakes the UI when it returns; it must not cause an idle repaint loop.
+            if processed == MAX_ICON_RESULTS_PER_FRAME {
+                ui.ctx().request_repaint();
+            }
         }
+    }
+
+    /// Reserves the same slot even when no native icon is available.
+    pub fn show(&mut self, ui: &mut egui::Ui, resource: Option<&str>, size: f32) {
+        self.show_with_fallback(ui, resource, size, None);
+    }
+    pub fn show_browser(&mut self, ui: &mut egui::Ui, resource: Option<&str>, size: f32) {
+        self.show_with_fallback(ui, resource, size, Some(crate::theme::Icon::Browser));
+    }
+    fn show_with_fallback(
+        &mut self,
+        ui: &mut egui::Ui,
+        resource: Option<&str>,
+        size: f32,
+        fallback: Option<crate::theme::Icon>,
+    ) {
+        self.drain_results(ui);
         let key = resource.map(str::trim).filter(|key| !key.is_empty());
         if let Some(key) = key {
             if !self.images.contains_key(key) && !self.pending.contains(key) {
@@ -64,16 +106,19 @@ impl IconCache {
             }
         }
         let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
-        if let Some(texture) = key
+        if let Some((color, mono)) = key
             .and_then(|key| self.images.get(key))
             .and_then(Option::as_ref)
         {
+            let texture = if ui.visuals().dark_mode { mono } else { color };
             ui.painter().image(
                 texture.id(),
                 rect,
                 egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1., 1.)),
                 egui::Color32::WHITE,
             );
+        } else if let Some(icon) = fallback {
+            crate::theme::paint_icon(ui.painter(), rect, icon, ui.visuals().weak_text_color());
         } else {
             // A quiet document outline denotes missing artwork; it does not invent a brand.
             let stroke = egui::Stroke::new(1., ui.visuals().weak_text_color());
@@ -84,10 +129,30 @@ impl IconCache {
                 .hline(r.left() + 3. ..=r.right() - 3., r.center().y, stroke);
         }
     }
+    #[cfg(debug_assertions)]
+    pub(crate) fn seed_qa_image(
+        &mut self,
+        context: &egui::Context,
+        key: String,
+        image: ColorImage,
+    ) {
+        let mono = context.load_texture(
+            format!("qa-browser-mono-{}", self.images.len()),
+            crate::theme::monochrome_image(image.clone()),
+            egui::TextureOptions::LINEAR,
+        );
+        let color = context.load_texture(
+            format!("qa-browser-color-{}", self.images.len()),
+            image,
+            egui::TextureOptions::LINEAR,
+        );
+        self.images.insert(key, Some((color, mono)));
+    }
 }
 
-/// Resolve artwork from the executable of an observed browser process. This is
-/// a read-only query performed by the inventory worker, never by the UI thread.
+/// Prefer observed executable artwork; supplement stopped browsers from their
+/// fixed App Paths registrations. Worker-only, read-only artwork metadata:
+/// neither registration nor an icon grants browser identity/cleanup authority.
 pub fn browser_icon_sources(
     processes: &[dcleaner::privacy::RunningBrowser],
 ) -> HashMap<dcleaner::privacy::Browser, String> {
@@ -140,7 +205,7 @@ pub fn browser_icon_sources(
                 resources.insert(process.browser, path.to_string_lossy().into_owned());
             }
         }
-        resources
+        browser_sources::supplement(resources, browser_sources::registered_path)
     }
     #[cfg(not(windows))]
     {
@@ -170,6 +235,12 @@ fn resource_locator(raw: &str) -> Option<(std::path::PathBuf, i32)> {
 }
 
 fn expand_path_variables(raw: &str) -> Option<String> {
+    expand_path_variables_with(raw, |name| std::env::var(name).ok())
+}
+fn expand_path_variables_with(
+    raw: &str,
+    mut lookup: impl FnMut(&str) -> Option<String>,
+) -> Option<String> {
     let mut output = String::new();
     let mut remaining = raw;
     while let Some(start) = remaining.find('%') {
@@ -180,11 +251,11 @@ fn expand_path_variables(raw: &str) -> Option<String> {
         if name.is_empty()
             || !name
                 .bytes()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, b'_' | b'(' | b')'))
         {
             return None;
         }
-        output.push_str(&std::env::var(name).ok()?);
+        output.push_str(&lookup(name)?);
         remaining = &tail[end + 1..];
     }
     output.push_str(remaining);
@@ -400,6 +471,138 @@ fn extract_msi_product(product: &str) -> Option<ColorImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn artwork_expansion_supports_parenthesized_windows_variables_without_shell_parsing() {
+        let result =
+            expand_path_variables_with(r"%ProgramFiles(x86)%\Browser\chrome.exe", |name| {
+                (name == "ProgramFiles(x86)").then(|| r"C:\Program Files (x86)".into())
+            });
+        assert_eq!(
+            result.as_deref(),
+            Some(r"C:\Program Files (x86)\Browser\chrome.exe")
+        );
+        assert!(expand_path_variables_with("%ProgramFiles(x86)%", |_| None).is_none());
+        for bad in ["%bad=name%", "%bad\0name%", "%unterminated"] {
+            assert!(expand_path_variables_with(bad, |_| Some("unexpected".into())).is_none());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "Read-only registered-browser artwork capture; explicit new absolute DCLEANER_QA_BROWSER_CAPTURE_DIR, no browser processes or native app launch"]
+    fn native_registered_browser_artwork_without_processes() {
+        use dcleaner::privacy::Browser;
+        let resources = browser_icon_sources(&[]);
+        let destination =
+            std::env::var_os("DCLEANER_QA_BROWSER_CAPTURE_DIR").map(std::path::PathBuf::from);
+        if let Some(dir) = &destination {
+            assert!(
+                dir.is_absolute() && !dir.exists(),
+                "explicit fresh capture directory required"
+            );
+            std::fs::create_dir(dir).unwrap();
+        }
+        let mut captured = Vec::new();
+        for (browser, name) in [
+            (Browser::Chrome, "chrome"),
+            (Browser::Edge, "edge"),
+            (Browser::Firefox, "firefox"),
+        ] {
+            let Some(resource) = resources.get(&browser) else {
+                continue;
+            };
+            let Some(image) = extract(resource) else {
+                continue;
+            };
+            assert_eq!(image.size, [32, 32]);
+            assert!(image.pixels.iter().any(|p| p.a() > 0));
+            if let Some(dir) = &destination {
+                let file = std::fs::File::create(dir.join(format!("{name}.png"))).unwrap();
+                let mut encoder = png::Encoder::new(file, 32, 32);
+                encoder.set_color(png::ColorType::Rgba);
+                encoder.set_depth(png::BitDepth::Eight);
+                let mut writer = encoder.write_header().unwrap();
+                let bytes = image
+                    .pixels
+                    .iter()
+                    .flat_map(|pixel| pixel.to_srgba_unmultiplied())
+                    .collect::<Vec<_>>();
+                writer.write_image_data(&bytes).unwrap();
+            }
+            captured.push(serde_json::json!({"browser":name,"resource":resource,"file":format!("{name}.png"),"size":[32,32]}));
+        }
+        if let Some(dir) = destination {
+            std::fs::write(dir.join("manifest.json"),serde_json::to_vec_pretty(&serde_json::json!({"kind":"read-only-native-registered-browser-artwork","processes_supplied":0,"native_app_launch":false,"captured":captured})).unwrap()).unwrap();
+        }
+        eprintln!(
+            "REGISTERED_BROWSER_ARTWORK native_sources={} captured={} processes_supplied=0 native_launch=false",
+            resources.len(),
+            captured.len()
+        );
+    }
+
+    #[test]
+    fn ready_icon_backlog_is_bounded_across_all_rows_and_drains_on_later_frames() {
+        let context = egui::Context::default();
+        let (requests, _request_rx) = mpsc::channel();
+        let (results, result_rx) = mpsc::channel();
+        let total = MAX_ICON_RESULTS_PER_FRAME * 2 + 5;
+        let mut cache = IconCache {
+            worker: Some((requests, result_rx)),
+            ..Default::default()
+        };
+        for index in 0..total {
+            let key = format!("synthetic-icon-{index}");
+            cache.pending.insert(key.clone());
+            results
+                .send((key, Some(ColorImage::filled([32, 32], egui::Color32::RED))))
+                .unwrap();
+        }
+        for completed in [16, 32, total] {
+            let mut output = context.run_ui(Default::default(), |ui| {
+                // A table may call show repeatedly. The budget belongs to the
+                // whole frame, not each row or each show call.
+                for _ in 0..100 {
+                    cache.show(ui, None, 22.);
+                }
+            });
+            assert_eq!(cache.images.len(), completed);
+            assert_eq!(cache.pending.len(), total - completed);
+            assert!(output.textures_delta.set.len() <= 2 * MAX_ICON_RESULTS_PER_FRAME + 1);
+            // This fixture checks upload scheduling without a GPU renderer.
+            output.textures_delta.clear();
+        }
+        assert!(cache.images.values().all(Option::is_some));
+    }
+
+    #[test]
+    fn missing_artwork_results_obey_the_same_frame_budget_without_losing_keys() {
+        let context = egui::Context::default();
+        let (requests, _request_rx) = mpsc::channel();
+        let (results, result_rx) = mpsc::channel();
+        let total = MAX_ICON_RESULTS_PER_FRAME + 3;
+        let mut cache = IconCache {
+            worker: Some((requests, result_rx)),
+            ..Default::default()
+        };
+        for index in 0..total {
+            let key = format!("synthetic-missing-icon-{index}");
+            cache.pending.insert(key.clone());
+            results.send((key, None)).unwrap();
+        }
+        for completed in [MAX_ICON_RESULTS_PER_FRAME, total] {
+            let mut output = context.run_ui(Default::default(), |ui| {
+                for _ in 0..100 {
+                    cache.show(ui, None, 22.);
+                }
+            });
+            assert_eq!(cache.images.len(), completed);
+            assert_eq!(cache.pending.len(), total - completed);
+            output.textures_delta.clear();
+        }
+        assert!(cache.images.values().all(Option::is_none));
+    }
     #[test]
     fn locators_do_not_resolve_network_urls_or_commands() {
         for raw in [

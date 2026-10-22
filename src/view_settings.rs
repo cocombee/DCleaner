@@ -247,50 +247,6 @@ fn general(app: &mut App, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         theme::muted(ui, "Only English is currently available in DCleaner.", t);
 
         section_divider(ui);
-        section_title(ui, "Personalize your experience", t);
-        ui.label(
-            RichText::new("Theme")
-                .family(theme::semibold())
-                .size(theme::FONT_BODY),
-        );
-        theme::muted(ui, "Choose how DCleaner looks.", t);
-        ui.add_space(8.);
-        let mut appearance = app.prefs.appearance_mode();
-        let mut appearance_changed = false;
-        let preview_width = ((ui.available_width() - 32.) / 3.).clamp(100., 224.);
-        ui.add_enabled_ui(app.settings_readable && !app.busy(), |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 16.;
-                for (mode, label) in [
-                    (AppearanceMode::Light, "Light"),
-                    (AppearanceMode::Dark, "Dark"),
-                    (AppearanceMode::System, "Auto"),
-                ] {
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(preview_width, preview_width * 0.8 + 32.),
-                        Layout::top_down(Align::Center),
-                        |ui| {
-                            if theme_preview(ui, mode, preview_width, t).clicked() {
-                                appearance = mode;
-                                appearance_changed = true;
-                            }
-                            ui.add_space(6.);
-                            appearance_changed |=
-                                theme::radio_value(ui, &mut appearance, mode, label).changed();
-                        },
-                    );
-                }
-            });
-        });
-        if appearance_changed {
-            let system_dark = ctx.system_theme().map(|system| system == egui::Theme::Dark);
-            match commit_preferences(app, |prefs| prefs.set_appearance(appearance, system_dark)) {
-                Ok(()) => theme::apply(ctx, app.prefs.effective_dark(system_dark)),
-                Err(error) => app.error = Some(error),
-            }
-        }
-
-        section_divider(ui);
         section_title(ui, "Shortcuts", t);
         unavailable_setting(
             ui,
@@ -318,7 +274,11 @@ fn general(app: &mut App, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
                 );
             });
             ui.add_space(16.);
-            if theme::secondary(ui, "Reset", app.settings_readable && !app.busy()) {
+            if theme::secondary(
+                ui,
+                "Reset",
+                app.settings_readable && !app.busy() && !app.preferences_busy(),
+            ) {
                 ctx.data_mut(|data| {
                     data.insert_temp(egui::Id::new(RESET_DIALOG_ID), true);
                     data.insert_temp(egui::Id::new(RESET_ERROR_ID), String::new());
@@ -675,7 +635,7 @@ fn menu_layout(app: &mut App, ui: &mut egui::Ui, t: Tokens) {
         ui.add_space(8.);
         section_title(ui, "Landing page", t);
         theme::muted(ui, "Choose which page opens when DCleaner starts.", t);
-        let editable = app.settings_readable && !app.busy();
+        let editable = app.settings_readable && !app.busy() && !app.preferences_busy();
         let mut landing_page = app.prefs.landing_page;
         let mut pin_landing_page = app.prefs.menu_pin_landing_page;
         let mut changed = false;
@@ -706,10 +666,14 @@ fn menu_layout(app: &mut App, ui: &mut egui::Ui, t: Tokens) {
         });
         ui.add_space(10.);
         if changed {
-            if let Err(error) = commit_preferences(app, |prefs| {
-                prefs.landing_page = landing_page;
-                prefs.menu_pin_landing_page = pin_landing_page;
-            }) {
+            if let Err(error) = commit_preferences(
+                app,
+                |prefs| {
+                    prefs.landing_page = landing_page;
+                    prefs.menu_pin_landing_page = pin_landing_page;
+                },
+                None,
+            ) {
                 app.error = Some(error);
             }
         }
@@ -777,18 +741,21 @@ fn reset_hidden_messages_dialog(app: &mut App, ctx: &egui::Context, t: Tokens) {
                 if theme::secondary(ui, "Cancel", !app.busy()) {
                     close = true;
                 }
-                if theme::primary(ui, "Reset", t, app.settings_readable && !app.busy()) {
+                if theme::primary(ui, "Reset", t, app.settings_readable && !app.busy() && !app.preferences_busy()) {
                     reset = true;
                 }
             });
         });
 
     if reset {
-        match commit_preferences(app, |prefs| prefs.seen_features.clear()) {
+        match commit_preferences(
+            app,
+            |prefs| prefs.seen_features.clear(),
+            Some("DCleaner welcome messages will be shown again."),
+        ) {
             Ok(()) => {
                 close = true;
                 ctx.data_mut(|data| data.insert_temp(egui::Id::new(RESET_ERROR_ID), String::new()));
-                app.notice = Some("DCleaner welcome messages will be shown again.".into());
             }
             Err(error) => {
                 ctx.data_mut(|data| data.insert_temp(egui::Id::new(RESET_ERROR_ID), error.clone()));
@@ -807,21 +774,20 @@ fn reset_hidden_messages_dialog(app: &mut App, ctx: &egui::Context, t: Tokens) {
 fn commit_preferences(
     app: &mut App,
     change: impl FnOnce(&mut dcleaner::domain::Preferences),
+    notice: Option<&str>,
 ) -> Result<(), String> {
     let fixture = app.qa_fixture_mode();
     let readable = app.settings_readable;
-    let root = app.data_dir.clone();
-    let updated = updated_preferences(&app.prefs, change, |preferences| {
+    let updated = updated_preferences(&app.prefs, change, |_preferences| {
         if fixture {
             Ok(())
         } else if !readable {
             Err("Preferences could not be read, so the change was not saved.".into())
         } else {
-            store::save_preferences(&root, preferences)
+            Ok(())
         }
     })?;
-    app.prefs = updated;
-    Ok(())
+    app.queue_preferences(updated, notice)
 }
 
 fn updated_preferences(
@@ -835,80 +801,152 @@ fn updated_preferences(
     Ok(updated)
 }
 
-fn theme_preview(ui: &mut egui::Ui, mode: AppearanceMode, width: f32, t: Tokens) -> egui::Response {
-    let (rect, response) =
-        ui.allocate_exact_size(Vec2::new(width, width * 0.8), egui::Sense::click());
-    let paint = |painter: &egui::Painter, dark: bool| {
-        let palette = theme::tokens(dark);
-        painter.rect_filled(rect, 4., palette.canvas);
-        let scale = rect.width() / 224.;
-        let point = |x: f32, y: f32| rect.min + Vec2::new(x, y) * scale;
-        let box_at = |x: f32, y: f32, w: f32, h: f32| {
-            egui::Rect::from_min_size(point(x, y), Vec2::new(w, h) * scale)
-        };
-        painter.rect_filled(box_at(0., 0., 224., 12.), 3., palette.sidebar);
-        painter.rect_filled(box_at(0., 12., 38., 168.), 0., palette.rail);
-        for row in 0..8 {
-            let y = 28. + row as f32 * 16.;
-            painter.rect_filled(
-                box_at(10., y, 18., 3.),
-                1.,
-                if row == 2 {
-                    t.primary
+const APPEARANCE_POPUP_ID: &str = "application-appearance-menu";
+
+pub(super) fn appearance_control(app: &mut App, root: &mut egui::Ui) {
+    let ctx = root.ctx().clone();
+    let bounds = ctx.content_rect();
+    let right_inset = if cfg!(windows) { 140. } else { 12. };
+    let position = egui::pos2(bounds.right() - right_inset - 32., bounds.top());
+    let current = app.prefs.appearance_mode();
+    let (icon, name) = appearance_option(current);
+    let enabled = app.settings_readable && !app.busy() && !app.preferences_busy();
+    let t = theme::tokens(app.prefs.dark);
+    let mut selected = None;
+    egui::Area::new(egui::Id::new("application-appearance-control"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(position)
+        .show(&ctx, |ui| {
+            let (rect, _) = ui.allocate_exact_size(Vec2::splat(32.), egui::Sense::hover());
+            let response = ui
+                .add_enabled_ui(enabled, |ui| {
+                    ui.put(rect, egui::Button::new("").frame(false).corner_radius(16))
+                })
+                .inner;
+            if response.hovered()
+                || egui::Popup::is_id_open(&ctx, egui::Id::new(APPEARANCE_POPUP_ID))
+            {
+                ui.painter().rect_filled(rect, 16., t.hover);
+            }
+            theme::paint_icon(ui.painter(), rect.shrink(8.), icon, t.muted);
+            theme::focus_ring(ui, &response, 18);
+            #[cfg(test)]
+            ctx.data_mut(|data| {
+                data.insert_temp(egui::Id::new(("appearance-focus", "trigger")), response.id)
+            });
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Button,
+                    enabled,
+                    format!("Theme: {name}"),
+                )
+            });
+            #[cfg(debug_assertions)]
+            theme::record_fixture_control(ui, "Appearance menu", &response);
+            let response = response
+                .on_hover_text(format!("Theme: {name}"))
+                .on_disabled_hover_text(if app.preferences_busy() {
+                    "Saving preferences…"
+                } else if !app.settings_readable {
+                    "Preferences are unavailable."
                 } else {
-                    palette.muted.gamma_multiply(0.6)
-                },
-            );
-            painter.rect_filled(box_at(52., y, 6., 6.), 1., t.primary);
-            painter.rect_filled(
-                box_at(64., y, if row % 2 == 0 { 60. } else { 82. }, 3.),
-                1.,
-                palette.muted.gamma_multiply(0.7),
-            );
-            painter.rect_filled(
-                box_at(172., y, 32., 3.),
-                1.,
-                palette.muted.gamma_multiply(0.4),
-            );
+                    "Wait for the current operation to finish."
+                });
+            egui::Popup::menu(&response)
+                .id(egui::Id::new(APPEARANCE_POPUP_ID))
+                .align(egui::RectAlign::BOTTOM_END)
+                .frame(theme::dialog_frame(t).inner_margin(6.).corner_radius(12))
+                .width(154.)
+                .show(|ui| {
+                    if !enabled {
+                        ui.disable();
+                    }
+                    ui.spacing_mut().item_spacing.y = 0.;
+                    for mode in [
+                        AppearanceMode::Light,
+                        AppearanceMode::Dark,
+                        AppearanceMode::System,
+                    ] {
+                        let (icon, label) = appearance_option(mode);
+                        let icon_id = ui.id().with(("appearance-icon", label));
+                        let check_id = ui.id().with(("appearance-check", label));
+                        ui.spacing_mut().button_padding = Vec2::new(12., 8.);
+                        let painted = egui::Button::new((
+                            egui::Atom::custom(icon_id, Vec2::splat(16.)),
+                            RichText::new(label).size(theme::FONT_BODY).family(
+                                if current == mode {
+                                    theme::semibold()
+                                } else {
+                                    egui::FontFamily::Proportional
+                                },
+                            ),
+                            egui::Atom::grow(),
+                            egui::Atom::custom(check_id, Vec2::splat(12.)),
+                        ))
+                        .gap(12.)
+                        .min_size(Vec2::new(154., 36.))
+                        .fill(if current == mode {
+                            t.tint
+                        } else {
+                            Color32::TRANSPARENT
+                        })
+                        .stroke(egui::Stroke::NONE)
+                        .corner_radius(18)
+                        .atom_ui(ui);
+                        if let Some(rect) = painted.rect(icon_id) {
+                            theme::paint_icon(ui.painter(), rect, icon, t.muted);
+                        }
+                        if current == mode {
+                            if let Some(rect) = painted.rect(check_id) {
+                                theme::paint_icon(
+                                    ui.painter(),
+                                    rect,
+                                    theme::Icon::Check,
+                                    t.foreground,
+                                );
+                            }
+                        }
+                        let response = painted.response;
+                        theme::focus_ring(ui, &response, 20);
+                        #[cfg(test)]
+                        ctx.data_mut(|data| {
+                            data.insert_temp(
+                                egui::Id::new(("appearance-focus", label)),
+                                response.id,
+                            )
+                        });
+                        #[cfg(debug_assertions)]
+                        theme::record_fixture_control(ui, label, &response);
+                        if response.clicked() {
+                            selected = Some(mode);
+                            ui.close();
+                        }
+                    }
+                });
+        });
+    if let Some(mode) = selected {
+        let system_dark = ctx.system_theme().map(|system| system == egui::Theme::Dark);
+        match commit_preferences(app, |prefs| prefs.set_appearance(mode, system_dark), None) {
+            Ok(()) => {
+                theme::apply(&ctx, app.prefs.effective_dark(system_dark));
+                ctx.request_repaint();
+            }
+            Err(error) => app.error = Some(error),
         }
-        painter.rect_filled(box_at(169., 158., 42., 12.), 6., t.primary);
-        painter.rect_stroke(
-            rect,
-            4.,
-            egui::Stroke::new(1., palette.border),
-            egui::StrokeKind::Inside,
-        );
-    };
-    if mode == AppearanceMode::System {
-        paint(
-            &ui.painter().with_clip_rect(egui::Rect::from_min_max(
-                rect.min,
-                egui::pos2(rect.center().x, rect.bottom()),
-            )),
-            true,
-        );
-        paint(
-            &ui.painter().with_clip_rect(egui::Rect::from_min_max(
-                egui::pos2(rect.center().x, rect.top()),
-                rect.max,
-            )),
-            false,
-        );
-    } else {
-        paint(ui.painter(), mode == AppearanceMode::Dark);
     }
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(
-            egui::WidgetType::Button,
-            ui.is_enabled(),
-            match mode {
-                AppearanceMode::Light => "Light theme preview",
-                AppearanceMode::Dark => "Dark theme preview",
-                AppearanceMode::System => "Automatic theme preview",
-            },
-        )
-    });
-    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+fn appearance_option(mode: AppearanceMode) -> (theme::Icon, &'static str) {
+    match mode {
+        AppearanceMode::Light => (theme::Icon::Sun, "Light"),
+        AppearanceMode::Dark => (theme::Icon::Moon, "Dark"),
+        AppearanceMode::System => (theme::Icon::Startup, "System"),
+    }
+}
+
+#[cfg(debug_assertions)]
+pub(super) fn qa_appearance_open(ctx: &egui::Context) -> bool {
+    egui::Popup::is_id_open(ctx, egui::Id::new(APPEARANCE_POPUP_ID))
 }
 
 fn section_title(ui: &mut egui::Ui, text: &str, t: Tokens) {
@@ -1001,8 +1039,9 @@ pub(super) fn qa_action_precondition(app: &App, ctx: &egui::Context, label: &str
         return true;
     }
     match (tab, reset_open, label) {
-        (SettingsTab::General, false, "Light" | "Dark" | "Auto") => true,
-        (SettingsTab::General, false, "Reset") => app.settings_readable && !app.busy(),
+        (SettingsTab::General, false, "Reset") => {
+            app.settings_readable && !app.busy() && !app.preferences_busy()
+        }
         (SettingsTab::General, true, "Reset" | "Cancel" | "Close") => !app.busy(),
         (SettingsTab::Updates, false, "Check for updates") => {
             !app.busy() && !app.settings_ui.is_checking()
@@ -1011,7 +1050,7 @@ pub(super) fn qa_action_precondition(app: &App, ctx: &egui::Context, label: &str
             SettingsTab::MenuLayout,
             false,
             "Health Check" | "Custom Clean" | "Always show the landing page at the top of the menu",
-        ) => app.settings_readable && !app.busy(),
+        ) => app.settings_readable && !app.busy() && !app.preferences_busy(),
         (SettingsTab::About, false, "Open Help") => !app.busy(),
         _ => false,
     }
@@ -1060,6 +1099,86 @@ fn update_check_state_name(state: &UpdateCheckState) -> &'static str {
 mod tests {
     use super::*;
     use dcleaner::domain::AppearanceMode;
+
+    #[test]
+    fn appearance_menu_supports_keyboard_selection_escape_and_system_changes() {
+        let ctx = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&ctx, "startup-populated").unwrap();
+        let mut tick = 0_u32;
+        let mut frame = |app: &mut App, key: Option<egui::Key>, system_theme| {
+            tick += 1;
+            let events = key
+                .map(|key| {
+                    vec![
+                        egui::Event::Key {
+                            key,
+                            physical_key: None,
+                            pressed: true,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                        egui::Event::Key {
+                            key,
+                            physical_key: None,
+                            pressed: false,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ]
+                })
+                .unwrap_or_default();
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(920., 612.),
+                    )),
+                    focused: true,
+                    time: Some(tick as f64 / 30.),
+                    system_theme: Some(system_theme),
+                    events,
+                    ..Default::default()
+                },
+                |root| app.paint(root),
+            );
+            output.textures_delta.clear();
+        };
+        let focus = |name| {
+            let id = ctx
+                .data(|data| data.get_temp::<egui::Id>(egui::Id::new(("appearance-focus", name))))
+                .expect("rendered appearance control");
+            ctx.memory_mut(|memory| memory.request_focus(id));
+        };
+        for _ in 0..4 {
+            frame(&mut app, None, egui::Theme::Dark);
+        }
+        for (label, mode) in [
+            ("Light", AppearanceMode::Light),
+            ("Dark", AppearanceMode::Dark),
+            ("System", AppearanceMode::System),
+        ] {
+            focus("trigger");
+            frame(&mut app, Some(egui::Key::Enter), egui::Theme::Dark);
+            for _ in 0..3 {
+                frame(&mut app, None, egui::Theme::Dark);
+            }
+            assert!(qa_appearance_open(&ctx));
+            focus(label);
+            frame(&mut app, Some(egui::Key::Enter), egui::Theme::Dark);
+            frame(&mut app, None, egui::Theme::Dark);
+            assert!(!qa_appearance_open(&ctx));
+            assert_eq!(app.prefs.appearance_mode(), mode);
+        }
+        frame(&mut app, None, egui::Theme::Light);
+        assert!(!app.prefs.dark);
+        frame(&mut app, None, egui::Theme::Dark);
+        assert!(app.prefs.dark);
+        focus("trigger");
+        frame(&mut app, Some(egui::Key::Enter), egui::Theme::Dark);
+        assert!(qa_appearance_open(&ctx));
+        frame(&mut app, Some(egui::Key::Escape), egui::Theme::Dark);
+        assert!(!qa_appearance_open(&ctx));
+    }
 
     #[test]
     fn failed_preference_persistence_keeps_the_saved_snapshot_unchanged() {

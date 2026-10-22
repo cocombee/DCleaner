@@ -966,20 +966,26 @@ pub fn scan(
             continue;
         }
         let mut rule = rule;
-        let cutoff = now_ns.saturating_sub(u128::from(options.default_age_days) * DAY_NS);
+        let age_days =
+            crate::browser_cache::minimum_age_days(&category.id, options.default_age_days);
+        let cutoff = now_ns.saturating_sub(u128::from(age_days) * DAY_NS);
+        if crate::browser_cache::is_category(&category.id) && category.roots.is_empty() {
+            rule.available = true;
+        }
         for root in &category.roots {
             if cancel.load(Ordering::Relaxed) || builder.matcher.exhausted {
                 break;
             }
             scan_legacy_root(
                 root,
+                category.cache_root_scopes.get(root).copied(),
                 &category.id,
                 &category.name,
                 cutoff,
                 settings,
                 exclusions,
                 now_ns,
-                options.default_age_days,
+                age_days,
                 &mut budget,
                 cancel,
                 &mut builder,
@@ -1604,6 +1610,7 @@ fn hours_to_ns(hours: f64) -> u128 {
 #[allow(clippy::too_many_arguments)]
 fn scan_legacy_root(
     requested_root: &Path,
+    root_scope: Option<crate::browser_cache::RootScope>,
     rule_id: &str,
     rule_name: &str,
     cutoff_ns: u128,
@@ -1761,6 +1768,13 @@ fn scan_legacy_root(
                     Some(path),
                     SkipReason::NonRegularFile,
                 );
+                continue;
+            }
+            let included = match root_scope {
+                Some(scope) => crate::browser_cache::includes_scoped(rule_id, &root, &path, scope),
+                None => crate::browser_cache::includes(rule_id, &root, &path),
+            };
+            if !included {
                 continue;
             }
             let canonical = match dunce::canonicalize(&path) {

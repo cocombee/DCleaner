@@ -33,8 +33,8 @@ const FEATURES: [(&str, &[u8]); 6] = [
 
 #[derive(Default)]
 pub struct Illustrations {
-    cloud: Option<TextureHandle>,
-    features: HashMap<&'static str, TextureHandle>,
+    cloud: HashMap<bool, TextureHandle>,
+    features: HashMap<(&'static str, bool), TextureHandle>,
 }
 
 impl Illustrations {
@@ -42,19 +42,25 @@ impl Illustrations {
         let Some((name, bytes)) = FEATURES.iter().find(|(name, _)| *name == kind) else {
             return;
         };
-        if !self.features.contains_key(name) {
+        let dark = ui.visuals().dark_mode;
+        let key = (*name, dark);
+        if !self.features.contains_key(&key) {
             if let Ok(image) = decode(bytes) {
                 self.features.insert(
-                    name,
+                    key,
                     ui.ctx().load_texture(
-                        format!("{name}-intro-illustration"),
-                        image,
+                        format!("{name}-intro-illustration-{dark}"),
+                        if dark {
+                            crate::theme::monochrome_image(image)
+                        } else {
+                            image
+                        },
                         egui::TextureOptions::LINEAR,
                     ),
                 );
             }
         }
-        if let Some(image) = self.features.get(name) {
+        if let Some(image) = self.features.get(&key) {
             let width = width.min(ui.available_width());
             ui.add(
                 egui::Image::new(image).fit_to_exact_size(Vec2::new(width, width * 260. / 360.)),
@@ -62,16 +68,24 @@ impl Illustrations {
         }
     }
     pub fn cloud(&mut self, ui: &mut egui::Ui, width: f32) {
-        if self.cloud.is_none() {
+        let dark = ui.visuals().dark_mode;
+        if !self.cloud.contains_key(&dark) {
             if let Ok(image) = decode(CLOUD) {
-                self.cloud = Some(ui.ctx().load_texture(
-                    "cloud-cleanup-illustration",
-                    image,
-                    egui::TextureOptions::LINEAR,
-                ));
+                self.cloud.insert(
+                    dark,
+                    ui.ctx().load_texture(
+                        format!("cloud-cleanup-illustration-{dark}"),
+                        if dark {
+                            crate::theme::monochrome_image(image)
+                        } else {
+                            image
+                        },
+                        egui::TextureOptions::LINEAR,
+                    ),
+                );
             }
         }
-        if let Some(image) = &self.cloud {
+        if let Some(image) = self.cloud.get(&dark) {
             let width = width.min(ui.available_width());
             ui.add(
                 egui::Image::new(image).fit_to_exact_size(Vec2::new(width, width * 260. / 360.)),

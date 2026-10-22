@@ -1,4 +1,4 @@
-use super::{App, Event};
+use super::{App, CleanupHistory, Event};
 use crate::theme::{self, Tokens};
 use dcleaner::{
     cleanup::{self, SystemTrash},
@@ -19,7 +19,6 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc,
     },
     thread,
 };
@@ -43,7 +42,6 @@ pub(super) struct HealthUi {
     partial_acknowledged: bool,
     scan_details_open: bool,
     permanent_acknowledged: bool,
-    search: String,
     detail_id: Option<HealthFindingId>,
     action_plan: Option<HealthActionPlan>,
 }
@@ -68,7 +66,6 @@ impl Default for HealthUi {
             partial_acknowledged: false,
             scan_details_open: false,
             permanent_acknowledged: false,
-            search: String::new(),
             detail_id: None,
             action_plan: None,
         }
@@ -101,6 +98,7 @@ pub(super) enum HealthEvent {
         attempted: bool,
         uncertain: bool,
         cancelled_before_any: bool,
+        history: CleanupHistory,
     },
 }
 
@@ -222,6 +220,14 @@ impl App {
     pub(super) fn qa_health_action(&self, label: &str, after: bool) -> Option<bool> {
         let state = self.qa_health_state();
         Some(match label {
+            "Select Google Chrome Temporary internet files" => {
+                self.health_ui.coordinator.current_step() == Some(HealthStep::Privacy)
+                    && self
+                        .health_ui
+                        .expanded_categories
+                        .contains(&HealthCategory::InternetTemporaryFiles)
+                    && !self.health_privacy_rules_blocked()
+            }
             "Scan details" => state["scan_details_open"] == after,
             "Hide scan details" => state["scan_details_open"] == !after,
             "I reviewed the partial-scan warning" => state["partial_acknowledged"] == after,
@@ -230,18 +236,18 @@ impl App {
             "Clean" | "Resolve" => state["review_open"] == after,
             "Back to findings" | "Close Health review" => state["review_open"] == !after,
             "Close finding details" | "Close details" => state["details_open"] == !after,
-            "Show Temporary internet files" => {
+            "Show Temporary internet files" | "Show Browsing history" => {
                 state["expanded"]
                     .as_array()?
                     .iter()
-                    .any(|value| value == "Temporary internet files")
+                    .any(|value| value == label.trim_start_matches("Show "))
                     == after
             }
-            "Hide Temporary internet files" => {
+            "Hide Temporary internet files" | "Hide Browsing history" => {
                 state["expanded"]
                     .as_array()?
                     .iter()
-                    .any(|value| value == "Temporary internet files")
+                    .any(|value| value == label.trim_start_matches("Hide "))
                     == !after
             }
             "Select all Health findings" => {
@@ -310,6 +316,27 @@ impl App {
             return Ok(());
         }
         self.health_ui.started = true;
+        if matches!(
+            case,
+            "health-privacy-multi-profile"
+                | "health-privacy-empty-browsers"
+                | "health-privacy-large"
+        ) {
+            let report = health_browser_fixture_report(case);
+            let coordinator = &mut self.health_ui.coordinator;
+            coordinator.inspect_privacy_browsers(Ok(Vec::new()))?;
+            coordinator.begin_scan(HealthStep::Privacy)?;
+            coordinator.complete_scan(report)?;
+            coordinator.select_all()?;
+            self.health_ui
+                .expanded_categories
+                .push(if case == "health-privacy-empty-browsers" {
+                    HealthCategory::Cookies
+                } else {
+                    HealthCategory::InternetTemporaryFiles
+                });
+            return Ok(());
+        }
         if case == "health-error" {
             let coordinator = &mut self.health_ui.coordinator;
             coordinator.inspect_privacy_browsers(Ok(Vec::new()))?;
@@ -359,12 +386,20 @@ impl App {
         }
         let target = match case {
             "health-privacy"
+            | "health-privacy-row-counts"
             | "health-privacy-expanded"
+            | "health-privacy-cancelled"
+            | "health-privacy-stale"
             | "health-privacy-review"
             | "health-finding-details"
             | "health-cookie-settings"
             | "health-cleaning" => Some(HealthStep::Privacy),
-            "health-space" | "health-space-review" => Some(HealthStep::Space),
+            "health-space"
+            | "health-space-review"
+            | "health-results-complete"
+            | "health-results-partial"
+            | "health-results-cancelled"
+            | "health-results-uncertain" => Some(HealthStep::Space),
             "health-issues" => Some(HealthStep::ResolveIssues),
             "health-summary" => None,
             _ => return Err(format!("Unsupported Health visual fixture: {case}")),
@@ -372,7 +407,33 @@ impl App {
         let coordinator = &mut self.health_ui.coordinator;
         for step in HealthStep::ORDER {
             if target.is_some_and(|target| step == target) {
-                seed_health_fixture_step(coordinator, step)?;
+                if case == "health-privacy-row-counts" {
+                    coordinator.inspect_privacy_browsers(Ok(Vec::new()))?;
+                    coordinator.begin_scan(step)?;
+                    let mut report = health_fixture_report(step);
+                    for category in &mut report.categories {
+                        if category.category == HealthCategory::BrowsingHistory {
+                            for finding in &mut category.findings {
+                                finding.item_count = 6;
+                            }
+                            category.reported_items = category
+                                .findings
+                                .iter()
+                                .map(|finding| finding.item_count)
+                                .sum();
+                        }
+                    }
+                    coordinator.complete_scan(report)?;
+                    coordinator.select_all()?;
+                } else if case == "health-privacy-cancelled" {
+                    coordinator.inspect_privacy_browsers(Ok(Vec::new()))?;
+                    coordinator.begin_scan(step)?;
+                    let mut report = health_fixture_report(step);
+                    report.quality = HealthScanQuality::Cancelled;
+                    coordinator.complete_scan(report)?;
+                } else {
+                    seed_health_fixture_step(coordinator, step)?;
+                }
                 break;
             }
             if target.is_none() || target.is_some_and(|target| step != target) {
@@ -384,10 +445,19 @@ impl App {
                 break;
             }
         }
-        if case == "health-privacy-expanded" {
+        if matches!(
+            case,
+            "health-privacy-expanded" | "health-privacy-cancelled" | "health-privacy-stale"
+        ) {
             self.health_ui
                 .expanded_categories
                 .push(HealthCategory::InternetTemporaryFiles);
+        }
+        if case == "health-privacy-stale" {
+            self.sync_health_cookie_settings(CookieExceptionSettings {
+                schema: 1,
+                keep_domains: vec!["trusted.example".into()],
+            });
         }
         if case == "health-finding-details" {
             self.health_ui.detail_id = self
@@ -421,6 +491,132 @@ impl App {
         }
         if case == "health-cookie-settings" {
             self.open_health_cookie_settings(&egui::Context::default());
+        }
+        if case.starts_with("health-results-") {
+            self.seed_health_result(case)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(debug_assertions)]
+    fn seed_health_result(&mut self, case: &str) -> Result<(), String> {
+        let plan = self.health_ui.coordinator.build_action_plan(false)?;
+        let mut receipts = Vec::new();
+        for action in plan.actions() {
+            let HealthAction::MoveFilesToTrash {
+                analysis,
+                candidate_ids,
+            } = action
+            else {
+                return Err("Unexpected synthetic Health result action.".into());
+            };
+            let mut receipt = dcleaner::domain::CleanupResult {
+                id: Uuid::from_u128(0x4443_4c45_414e_4552_4845_414c_5448_9999),
+                date: "fixture-only".into(),
+                ..Default::default()
+            };
+            match case {
+                "health-results-complete" => {
+                    receipt.cleaned_ids = candidate_ids.clone();
+                    receipt.files = receipt.cleaned_ids.len();
+                    receipt.bytes = analysis
+                        .categories
+                        .iter()
+                        .flat_map(|category| &category.files)
+                        .filter(|file| candidate_ids.contains(&file.id))
+                        .map(|file| file.size)
+                        .sum();
+                }
+                "health-results-partial" => {
+                    for file in analysis
+                        .categories
+                        .iter()
+                        .flat_map(|category| &category.files)
+                        .filter(|file| candidate_ids.contains(&file.id))
+                    {
+                        receipt.failed.push(dcleaner::domain::FileOutcome {
+                            file_id: file.id,
+                            path: file.path.clone(),
+                            size: file.size,
+                            success: false,
+                            reason: Some("Synthetic fixture: source changed.".into()),
+                        });
+                    }
+                }
+                "health-results-cancelled" => receipt.cancelled = true,
+                "health-results-uncertain" => receipt.interrupted = true,
+                _ => return Err("Unknown synthetic Health result state.".into()),
+            }
+            receipts.push(HealthEffectReceipt::Files(receipt));
+        }
+        self.health_ui
+            .coordinator
+            .begin_effects(&plan, true, false)?;
+        self.health_ui
+            .coordinator
+            .complete_effects(plan.id(), receipts)?;
+        self.health_completion_notice();
+        Ok(())
+    }
+
+    /// Explicit pre-captured 32px artwork only. Rendering still reads no host
+    /// browser inventory, process, registry, profile or cleanup data.
+    #[cfg(debug_assertions)]
+    pub(super) fn seed_health_qa_artwork(&mut self, context: &egui::Context) -> Result<(), String> {
+        let Some(directory) = std::env::var_os("DCLEANER_QA_BROWSER_ARTWORK_DIR") else {
+            return Ok(());
+        };
+        if !self.qa_fixture_mode() {
+            return Err("Browser artwork fixtures require isolated fixture mode.".into());
+        }
+        let directory = std::path::PathBuf::from(directory);
+        if !directory.is_absolute() {
+            return Err(
+                "An explicit absolute browser-artwork fixture directory is required.".into(),
+            );
+        }
+        for (browser, name) in [
+            (Browser::Chrome, "chrome"),
+            (Browser::Edge, "edge"),
+            (Browser::Firefox, "firefox"),
+        ] {
+            use std::io::Read;
+            let path = directory.join(format!("{name}.png"));
+            if !path.exists() {
+                continue;
+            }
+            let mut bytes = Vec::new();
+            std::fs::File::open(path)
+                .map_err(|e| e.to_string())?
+                .take(65_537)
+                .read_to_end(&mut bytes)
+                .map_err(|e| e.to_string())?;
+            if bytes.len() > 65_536 {
+                return Err("Browser-artwork fixture exceeds its byte bound.".into());
+            }
+            let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+            decoder.set_limits(png::Limits { bytes: 65_536 });
+            let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+            let info = reader.info();
+            if info.width != 32
+                || info.height != 32
+                || info.color_type != png::ColorType::Rgba
+                || info.bit_depth != png::BitDepth::Eight
+            {
+                return Err("Browser-artwork fixtures must be 32×32 RGBA8.".into());
+            }
+            let mut rgba = vec![0; 32 * 32 * 4];
+            let output = reader.next_frame(&mut rgba).map_err(|e| e.to_string())?;
+            if output.buffer_size() != rgba.len() {
+                return Err("Unexpected browser-artwork fixture output.".into());
+            }
+            let key = format!("qa-native-browser-{name}");
+            self.app_icons.seed_qa_image(
+                context,
+                key.clone(),
+                egui::ColorImage::from_rgba_unmultiplied([32, 32], &rgba),
+            );
+            self.health_ui.browser_icons.insert(browser, key);
         }
         Ok(())
     }
@@ -505,7 +701,15 @@ impl App {
             .selected_ids(step)
             .into_iter()
             .collect::<HashSet<_>>();
-        let selected = ids.len();
+        let selected = self.health_ui.coordinator.report(step).map_or(0, |report| {
+            report
+                .categories
+                .iter()
+                .flat_map(|category| &category.findings)
+                .filter(|finding| ids.contains(&finding.id))
+                .map(|finding| finding.item_count)
+                .sum::<usize>()
+        });
         let selected_bytes = self.health_ui.coordinator.report(step).and_then(|report| {
             report
                 .categories
@@ -671,8 +875,7 @@ impl App {
                     && report.stale_selection.is_empty()
                     && report.still_running.is_empty()
                 {
-                    self.notice =
-                        Some("Selected browsers received a graceful close request.".into());
+                    self.set_notice("Selected browsers received a graceful close request.".into());
                     if matches!(
                         self.health_ui.coordinator.status(HealthStep::Privacy),
                         HealthStepStatus::AwaitingBrowserReview {
@@ -686,7 +889,7 @@ impl App {
                     }
                     self.health_ui.browser_review_open = false;
                 } else {
-                    self.notice = Some(format!(
+                    self.set_notice(format!(
                         "{} selected browser process(es) remain open or changed; refresh and review them before scanning.",
                         report.still_running.len()
                             + report.stale_selection.len()
@@ -724,7 +927,6 @@ impl App {
                     Ok(()) => {
                         self.health_ui.partial_acknowledged = false;
                         self.health_ui.cookie_settings_stale = false;
-                        self.health_ui.search.clear();
                         self.health_ui.detail_id = None;
                         self.health_ui.expanded_categories.clear();
                         if select_complete {
@@ -743,6 +945,7 @@ impl App {
                 attempted,
                 uncertain,
                 cancelled_before_any,
+                history,
             } => {
                 self.worker = None;
                 self.health_ui.action_plan = None;
@@ -773,29 +976,44 @@ impl App {
                     uncertain,
                 ) {
                     self.error = Some(error);
-                } else if !issues.is_empty() {
-                    self.notice = Some(issues.join(" "));
                 } else {
-                    self.notice =
-                        Some("Reviewed Health Check actions finished with owner receipts.".into());
+                    self.health_completion_notice();
                 }
-                match store::history(&self.data_dir) {
-                    Ok(history) => {
-                        self.history = history;
-                        self.history_readable = true;
-                    }
-                    Err(error) => {
-                        self.error =
-                            Some(format!("Cleanup history could not be refreshed: {error}"));
-                        self.history_readable = false;
-                    }
-                }
+                self.apply_cleanup_history(history);
             }
         }
     }
 
     pub(super) fn health_started(&self) -> bool {
         self.health_ui.started
+    }
+
+    fn health_completion_notice(&mut self) {
+        let Some(step) = self.health_ui.coordinator.current_step() else {
+            return;
+        };
+        let HealthStepStatus::Results { quality, .. } = *self.health_ui.coordinator.status(step)
+        else {
+            return;
+        };
+        // Recovery remains in the result; avoid a duplicate temporary alert.
+        if quality == HealthEffectQuality::Uncertain {
+            return;
+        }
+        let mut message = effect_quality_label(quality).to_owned();
+        if let Some(detail) = self.health_ui.coordinator.effect_message(step) {
+            message.push_str(&format!(" · {detail}"));
+        }
+        self.set_page_notice(
+            message,
+            super::Page::Overview,
+            if quality == HealthEffectQuality::Complete {
+                theme::StatusKind::Success
+            } else {
+                theme::StatusKind::Info
+            },
+            false,
+        );
     }
 
     fn update_health_browser_state(&mut self, running: Result<Vec<RunningBrowser>, String>) {
@@ -829,7 +1047,7 @@ impl App {
         self.progress = "Checking browser status and cookie rules…".into();
         let root = self.data_dir.clone();
         let repaint = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let running = privacy::running_browsers();
@@ -878,7 +1096,7 @@ impl App {
         let cancel = self.cancel.clone();
         let root = self.data_dir.clone();
         let repaint = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let report = match step {
@@ -918,7 +1136,7 @@ impl App {
             return;
         }
         let repaint = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         self.progress = "Refreshing running-browser status…".into();
         thread::spawn(move || {
@@ -947,7 +1165,7 @@ impl App {
             return;
         }
         let repaint = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         self.progress = "Requesting a graceful close for selected browsers…".into();
         thread::spawn(move || {
@@ -1017,13 +1235,18 @@ impl App {
         let cancel = self.cancel.clone();
         let root = self.data_dir.clone();
         let repaint = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let run = run_health_effects(&root, &plan, &cancel, |message| {
                 let _ = tx.send(Event::Health(HealthEvent::EffectProgress(message)));
                 repaint.request_repaint();
             });
+            let _ = tx.send(Event::Health(HealthEvent::EffectProgress(
+                "Refreshing cleanup history…".into(),
+            )));
+            repaint.request_repaint();
+            let history = store::history(&root);
             let _ = tx.send(Event::Health(HealthEvent::EffectsFinished {
                 plan_id,
                 receipts: run.receipts,
@@ -1031,6 +1254,7 @@ impl App {
                 attempted: run.attempted,
                 uncertain: run.uncertain,
                 cancelled_before_any: run.cancelled_before_any,
+                history,
             }));
             repaint.request_repaint();
         });
@@ -1042,14 +1266,13 @@ impl App {
                 self.health_ui.browser_review_open = false;
                 self.health_ui.selected_processes.clear();
                 self.health_ui.partial_acknowledged = false;
-                self.health_ui.search.clear();
                 self.health_ui.detail_id = None;
                 self.health_ui.cookie_settings_stale = false;
                 if step == HealthStep::Privacy {
                     self.begin_health_prerequisites_if_needed();
                 }
             }
-            Ok(None) => self.notice = Some("Health Check reached its final summary.".into()),
+            Ok(None) => self.set_notice("Health Check reached its final summary.".into()),
             Err(error) => self.error = Some(error),
         }
     }
@@ -1098,55 +1321,85 @@ impl App {
         let painter = ui.painter();
         let current = self.health_ui.coordinator.current_step();
         for (index, step) in HealthStep::ORDER.into_iter().enumerate() {
-            let center = egui::pos2(left + width * (index as f32 + 0.5) / 3., rect.top() + 13.);
+            let center = egui::pos2(left + width * (index as f32 + 0.5) / 3., rect.top() + 16.);
             let status = self.health_ui.coordinator.status(step);
             let active = current == Some(step);
-            let finished = matches!(status, HealthStepStatus::Results { .. });
-            let skipped = matches!(status, HealthStepStatus::Skipped);
+            let has_results = matches!(status, HealthStepStatus::Results { .. });
+            let finished = matches!(
+                status,
+                HealthStepStatus::Results {
+                    quality: HealthEffectQuality::Complete,
+                    ..
+                }
+            );
+            let skipped = matches!(
+                status,
+                HealthStepStatus::Skipped
+                    | HealthStepStatus::Cancelled
+                    | HealthStepStatus::Results {
+                        quality: HealthEffectQuality::Cancelled,
+                        ..
+                    }
+            );
+            let warning = matches!(
+                status,
+                HealthStepStatus::Failed { .. }
+                    | HealthStepStatus::Results {
+                        quality: HealthEffectQuality::Partial | HealthEffectQuality::Uncertain,
+                        ..
+                    }
+            );
             if index < 2 {
                 let next_x = left + width * (index as f32 + 1.5) / 3.;
                 painter.line_segment(
                     [
-                        center + egui::vec2(15., 0.),
-                        egui::pos2(next_x - 15., center.y),
+                        center + egui::vec2(20., 0.),
+                        egui::pos2(next_x - 20., center.y),
                     ],
                     egui::Stroke::new(1., t.border),
                 );
             }
-            if active || finished || skipped {
-                painter.circle_stroke(
-                    center,
-                    10.,
-                    egui::Stroke::new(0.9, if active { t.primary } else { t.muted }),
-                );
+            if active {
+                painter.circle_stroke(center, 14., egui::Stroke::new(0.9, t.primary));
+            }
+            theme::paint_icon(
+                painter,
+                egui::Rect::from_center_size(center, egui::Vec2::splat(18.)),
+                health_step_icon(step),
+                if active || has_results {
+                    t.foreground
+                } else {
+                    t.muted
+                },
+            );
+            // Status supplements the step pictogram; it never replaces it.
+            // Reviewing means there are results to review, not a scan failure.
+            if finished || skipped || warning {
+                let marker = center + egui::vec2(12., 10.);
+                painter.circle_filled(marker, 6., t.canvas);
                 if finished {
                     painter.add(egui::Shape::line(
                         vec![
-                            center + egui::vec2(-4., 0.),
-                            center + egui::vec2(-1., 3.),
-                            center + egui::vec2(4., -3.),
+                            marker + egui::vec2(-4., 0.),
+                            marker + egui::vec2(-1., 3.),
+                            marker + egui::vec2(4., -3.),
                         ],
                         egui::Stroke::new(1.2, t.primary),
                     ));
                 } else if skipped {
                     painter.line_segment(
-                        [center - egui::vec2(4., 0.), center + egui::vec2(4., 0.)],
+                        [marker - egui::vec2(4., 0.), marker + egui::vec2(4., 0.)],
                         egui::Stroke::new(0.9, t.muted),
                     );
-                } else if matches!(
-                    status,
-                    HealthStepStatus::Reviewing { .. } | HealthStepStatus::Failed { .. }
-                ) {
+                } else {
                     painter.text(
-                        center,
+                        marker,
                         egui::Align2::CENTER_CENTER,
                         "!",
                         egui::FontId::new(theme::FONT_BODY, theme::semibold()),
                         t.attention,
                     );
                 }
-            } else {
-                painter.circle_filled(center, 3.5, t.border);
             }
             painter.text(
                 center + egui::vec2(0., 33.),
@@ -1160,7 +1413,7 @@ impl App {
                         egui::FontFamily::Proportional
                     },
                 ),
-                if active || finished {
+                if active || has_results {
                     t.foreground
                 } else {
                     t.muted
@@ -1184,12 +1437,16 @@ impl App {
                 .map(|total| (progress.completed as f64 / total as f64).clamp(0., 1.) as f32),
             _ => None,
         };
-        let spare = (ui.available_height() - 360.).max(0.);
+        // Reserve room for the heading, wrapped explanation and full-height
+        // stop action before centering the artwork in a short window.
+        let diameter = (ui.available_height() - 220.).clamp(96., 220.);
+        let spare = (ui.available_height() - diameter - 220.).max(0.);
         ui.add_space((spare / 2.).min(90.));
         ui.vertical_centered(|ui| {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(220., 220.), egui::Sense::hover());
+            let (rect, _) =
+                ui.allocate_exact_size(egui::vec2(diameter, diameter), egui::Sense::hover());
             let center = rect.center();
-            let radius = 106.;
+            let radius = diameter / 2. - 4.;
             ui.painter()
                 .circle_stroke(center, radius, egui::Stroke::new(1., t.border));
             let time = ui.input(|input| input.time) as f32;
@@ -1281,7 +1538,7 @@ impl App {
             self.health_progress_page(ui, t, step, &status);
             return;
         }
-        let report = self.health_ui.coordinator.report(step).cloned();
+        let report = self.health_ui.coordinator.report_snapshot(step);
         let total = report
             .as_ref()
             .map(|report| {
@@ -1292,7 +1549,22 @@ impl App {
                     .sum::<usize>()
             })
             .unwrap_or(0);
-        let heading = if let Some(report) = &report {
+        let heading = if let HealthStepStatus::Results { quality, .. } = status {
+            match quality {
+                HealthEffectQuality::Complete => "Cleanup complete",
+                HealthEffectQuality::Partial => "Cleanup partially completed",
+                HealthEffectQuality::Cancelled => "Cleanup stopped",
+                HealthEffectQuality::Uncertain => "Cleanup needs recovery review",
+            }
+            .to_owned()
+        } else if matches!(status, HealthStepStatus::Failed { .. }) {
+            match step {
+                HealthStep::Privacy => "Privacy scan unavailable",
+                HealthStep::Space => "Space scan unavailable",
+                HealthStep::ResolveIssues => "Issue scan unavailable",
+            }
+            .to_owned()
+        } else if let Some(report) = &report {
             match step {
                 HealthStep::Privacy => format!("{total} records found"),
                 HealthStep::Space => report
@@ -1324,6 +1596,10 @@ impl App {
         } else {
             step_title(step).to_owned()
         };
+        let needs_result_rescan = report.is_some()
+            && matches!(status, HealthStepStatus::Reviewing { .. })
+            && step == HealthStep::Privacy
+            && self.health_privacy_rules_blocked();
         ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new(heading)
@@ -1336,15 +1612,31 @@ impl App {
                 {
                     self.open_health_cookie_settings(ctx);
                 }
-                if report.is_some() && theme::header_action(ui, "Scan again", !self.busy()) {
+                if needs_result_rescan && theme::header_action(ui, "Scan again", !self.busy()) {
                     self.begin_health_scan(step, ctx);
                 }
             });
         });
-        theme::muted(ui, step_description(step), t);
+        let terminal = matches!(status, HealthStepStatus::Results { .. });
+        theme::muted(
+            ui,
+            if terminal {
+                "These are the reviewed action results. Scan again for a fresh inventory."
+            } else {
+                step_description(step)
+            },
+            t,
+        );
         ui.add_space(26.);
+        if terminal {
+            self.health_effect_result(ui, t, step);
+            ui.add_space(16.);
+            theme::muted(ui, "Scan snapshot before this action", t);
+            ui.add_space(8.);
+        }
         if let HealthStepStatus::Failed { message } = &status {
-            ui.colored_label(t.attention, message);
+            theme::status_banner(ui, message, theme::StatusKind::Error, false, false);
+            ui.add_space(8.);
         }
         if step == HealthStep::Privacy {
             self.health_browser_gate_panel(ui, t);
@@ -1353,9 +1645,6 @@ impl App {
             self.health_results_card(ui, t, step, &report);
         } else if matches!(status, HealthStepStatus::Ready) {
             theme::muted(ui, "Start a scan to review what can be cleaned.", t);
-        }
-        if matches!(status, HealthStepStatus::Results { .. }) {
-            self.health_effect_result(ui, t, step);
         }
     }
 
@@ -1489,20 +1778,32 @@ impl App {
             ui.add_space(16.);
         } else {
             for note in &report.notes {
+                if matches!(
+                    self.health_ui.coordinator.status(step),
+                    HealthStepStatus::Failed { message } if message == note
+                ) {
+                    continue;
+                }
                 theme::muted(ui, note, t);
             }
         }
+        let mut recovery_notes = Vec::new();
         if report.quality == HealthScanQuality::Cancelled {
-            ui.colored_label(
-                t.attention,
-                "This scan was stopped. Scan again before cleaning.",
-            );
+            recovery_notes.push("This scan was stopped. Scan again before cleaning.");
         }
         if self.health_ui.cookie_settings_stale && step == HealthStep::Privacy {
-            ui.colored_label(
-                t.attention,
-                "Cookie settings changed. Scan Privacy again before cleaning these results.",
+            recovery_notes
+                .push("Cookie settings changed. Scan Privacy again before cleaning these results.");
+        }
+        if !recovery_notes.is_empty() {
+            theme::status_banner(
+                ui,
+                &recovery_notes.join(" "),
+                theme::StatusKind::Info,
+                false,
+                false,
             );
+            ui.add_space(8.);
         }
         let width = ui.available_width();
         let issue_step = step == HealthStep::ResolveIssues;
@@ -1552,7 +1853,7 @@ impl App {
         });
         let previous_y_spacing = ui.spacing().item_spacing.y;
         ui.spacing_mut().item_spacing.y = 0.;
-        for category in &report.categories {
+        for (category_index, category) in report.categories.iter().enumerate() {
             let ids = category
                 .findings
                 .iter()
@@ -1639,7 +1940,8 @@ impl App {
                                                 .size(theme::FONT_CAPTION)
                                                 .color(t.muted),
                                             )
-                                            .truncate(),
+                                            .truncate()
+                                            .show_tooltip_when_elided(false),
                                         )
                                         .on_hover_text(
                                             coverage_reason(&category.coverage).unwrap_or_else(
@@ -1683,37 +1985,101 @@ impl App {
                             }
                         }
                     });
-                    ui.painter().hline(
-                        row.response.rect.x_range(),
-                        row.response.rect.bottom(),
-                        egui::Stroke::new(1., t.border),
-                    );
+                    if !open && category_index + 1 < report.categories.len() {
+                        ui.painter().hline(
+                            row.response.rect.x_range(),
+                            row.response.rect.bottom(),
+                            egui::Stroke::new(1., t.border),
+                        );
+                    }
                 });
             if open {
-                if category.findings.is_empty() {
+                if category.findings.is_empty() && step != HealthStep::Privacy {
                     theme::muted(
                         ui,
                         coverage_reason(&category.coverage)
                             .unwrap_or("No items found in this category."),
                         t,
                     );
-                } else {
-                    theme::control_row(ui, |ui| {
-                        let input_width = (ui.available_width() - 240.).clamp(150., 320.);
-                        theme::input(
+                } else if step == HealthStep::Privacy {
+                    let groups = health_browser_groups_for_report(report, category);
+                    if groups.is_empty() {
+                        theme::muted(
                             ui,
-                            &mut self.health_ui.search,
-                            input_width,
-                            "Filter records…",
-                            !busy,
+                            coverage_reason(&category.coverage)
+                                .unwrap_or("No items found in this category."),
+                            t,
                         );
-                    });
-                    let query = self.health_ui.search.trim().to_ascii_lowercase();
-                    for finding in category
-                        .findings
-                        .iter()
-                        .filter(|finding| finding_matches(finding, &query))
-                    {
+                    }
+                    for group in groups {
+                        let ids = group
+                            .findings
+                            .iter()
+                            .filter(|f| f.actionable)
+                            .map(|f| f.id.clone())
+                            .collect::<Vec<_>>();
+                        let selected_count = ids.iter().filter(|id| selected.contains(*id)).count();
+                        let mut checked = !ids.is_empty() && selected_count == ids.len();
+                        let label = health_browser_label(group.browser);
+                        ui.horizontal(|ui| {
+                            ui.set_min_height(44.);
+                            ui.add_space(35.);
+                            if theme::checkbox_named(
+                                ui,
+                                &mut checked,
+                                selected_count > 0 && selected_count < ids.len(),
+                                &format!("Select {label} {}", category_label(category.category)),
+                                selection_enabled && !ids.is_empty(),
+                            )
+                            .changed()
+                            {
+                                if checked {
+                                    select_ids.extend(ids.clone());
+                                } else {
+                                    clear_ids.extend(ids.clone());
+                                }
+                            }
+                            ui.allocate_ui_with_layout(
+                                egui::vec2((name_width - 35.).max(100.), 44.),
+                                Layout::left_to_right(Align::Center),
+                                |ui| {
+                                    ui.set_min_width((name_width - 35.).max(100.));
+                                    ui.set_max_width((name_width - 35.).max(100.));
+                                    let resource = group
+                                        .browser
+                                        .and_then(|browser| {
+                                            self.health_ui.browser_icons.get(&browser)
+                                        })
+                                        .map(String::as_str);
+                                    self.app_icons.show_browser(ui, resource, 20.);
+                                    theme::table_cell(ui, label, (name_width - 63.).max(60.), 44.);
+                                },
+                            );
+                            health_count_cell(
+                                ui,
+                                group
+                                    .findings
+                                    .iter()
+                                    .map(|finding| finding.item_count)
+                                    .sum::<usize>()
+                                    .to_string(),
+                                item_width,
+                                44.,
+                            );
+                            let bytes = group.findings.iter().try_fold(0u64, |sum, f| {
+                                f.size_bytes.and_then(|size| sum.checked_add(size))
+                            });
+                            health_count_cell(
+                                ui,
+                                bytes.map(format_bytes).unwrap_or_else(|| "—".into()),
+                                size_width,
+                                44.,
+                            );
+                            ui.add_space(26.);
+                        });
+                    }
+                } else {
+                    for finding in &category.findings {
                         ui.horizontal(|ui| {
                             ui.set_min_height(44.);
                             let mut row_selected = selected.contains(&finding.id);
@@ -1733,8 +2099,13 @@ impl App {
                                 }
                             }
                             let detail_width = (ui.available_width() - 90. - 76. - 24.).max(140.);
-                            theme::table_cell(ui, &finding.name, detail_width, 44.)
-                                .on_hover_text(finding.detail.as_deref().unwrap_or(&finding.name));
+                            theme::table_cell_with_tooltip(
+                                ui,
+                                &finding.name,
+                                detail_width,
+                                44.,
+                                finding.detail.as_deref().unwrap_or(&finding.name),
+                            );
                             theme::table_cell(
                                 ui,
                                 finding
@@ -1754,16 +2125,22 @@ impl App {
             }
         }
         ui.spacing_mut().item_spacing.y = previous_y_spacing;
-        for id in clear_ids {
-            if let Err(error) = self.health_ui.coordinator.select_finding(id, false) {
+        if !clear_ids.is_empty() {
+            if let Err(error) = self
+                .health_ui
+                .coordinator
+                .select_findings(&clear_ids, false)
+            {
                 self.error = Some(error);
-                break;
             }
         }
-        for id in select_ids {
-            if let Err(error) = self.health_ui.coordinator.select_finding(id, true) {
+        if !select_ids.is_empty() {
+            if let Err(error) = self
+                .health_ui
+                .coordinator
+                .select_findings(&select_ids, true)
+            {
                 self.error = Some(error);
-                break;
             }
         }
     }
@@ -1779,28 +2156,32 @@ impl App {
         let HealthStepStatus::Results { quality, .. } = status else {
             return;
         };
-        theme::card(t).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Action outcome").family(theme::semibold()));
-                theme::muted(ui, effect_quality_label(quality), t);
+        let mut summary = effect_quality_label(quality).to_owned();
+        if let Some(message) = &message {
+            summary.push_str(&format!(" · {message}"));
+        }
+        if quality == HealthEffectQuality::Uncertain {
+            summary
+                .push_str(" · Review the recovery history before retrying an uncertain operation.");
+        }
+        if quality == HealthEffectQuality::Uncertain {
+            theme::status_banner(ui, &summary, theme::StatusKind::Info, false, false);
+            ui.add_space(8.);
+        }
+        theme::scroll_vertical()
+            .id_salt("health-action-receipts")
+            .max_height(96.)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                for receipt in &receipts {
+                    theme::muted(ui, effect_receipt_summary(receipt), t);
+                }
+                if quality != HealthEffectQuality::Uncertain {
+                    if let Some(message) = &message {
+                        theme::muted(ui, format!("Result note: {message}"), t);
+                    }
+                }
             });
-            if let Some(message) = &message {
-                ui.add_space(5.);
-                ui.add(egui::Label::new(RichText::new(message).color(t.attention)).wrap());
-            }
-            for receipt in &receipts {
-                ui.add_space(4.);
-                theme::muted(ui, effect_receipt_summary(receipt), t);
-            }
-            if quality == HealthEffectQuality::Uncertain {
-                ui.add_space(7.);
-                ui.colored_label(
-                    t.attention,
-                    "At least one owner operation has an uncertain outcome. Review its recovery history before retrying.",
-                );
-            }
-        });
     }
 
     fn health_final_summary(&self, ui: &mut egui::Ui, t: Tokens) {
@@ -2197,12 +2578,328 @@ impl App {
     }
 }
 
+struct HealthBrowserGroup<'a> {
+    browser: Option<Browser>,
+    findings: Vec<&'a HealthFinding>,
+}
+
+fn health_browser_label(browser: Option<Browser>) -> &'static str {
+    match browser {
+        Some(Browser::Chrome) => "Google Chrome",
+        Some(Browser::Edge) => "Microsoft Edge",
+        Some(Browser::Firefox) => "Mozilla Firefox",
+        Some(browser) => browser.label(),
+        None => "Other browser records",
+    }
+}
+
+fn health_browser_groups(category: &HealthCategoryReport) -> Vec<HealthBrowserGroup<'_>> {
+    let mut groups: Vec<HealthBrowserGroup<'_>> = Vec::new();
+    for finding in &category.findings {
+        if let Some(group) = groups
+            .iter_mut()
+            .find(|group| group.browser == finding.browser)
+        {
+            group.findings.push(finding);
+        } else {
+            groups.push(HealthBrowserGroup {
+                browser: finding.browser,
+                findings: vec![finding],
+            });
+        }
+    }
+    sort_health_browser_groups(&mut groups);
+    groups
+}
+fn sort_health_browser_groups(groups: &mut [HealthBrowserGroup<'_>]) {
+    // The reference orders by bytes descending. Unknown-byte records keep the
+    // stable source order among zero/unknown totals and still display a dash.
+    groups.sort_by_key(|group| {
+        std::cmp::Reverse(
+            group
+                .findings
+                .iter()
+                .try_fold(0u64, |sum, f| {
+                    f.size_bytes.and_then(|bytes| sum.checked_add(bytes))
+                })
+                .unwrap_or(0),
+        )
+    });
+}
+fn health_browser_groups_for_report<'a>(
+    report: &HealthStepReport,
+    category: &'a HealthCategoryReport,
+) -> Vec<HealthBrowserGroup<'a>> {
+    let mut groups = health_browser_groups(category);
+    if !matches!(category.coverage, HealthCoverage::Complete)
+        || matches!(
+            report.quality,
+            HealthScanQuality::Cancelled | HealthScanQuality::Failed
+        )
+    {
+        return groups;
+    }
+    let HealthServiceData::Privacy {
+        profiles,
+        browser_records,
+        browser_cache_files,
+    } = report.source()
+    else {
+        return groups;
+    };
+    let mut empty_browsers = Vec::new();
+    match category.category {
+        HealthCategory::InternetTemporaryFiles if !browser_cache_files.cancelled => {
+            for source in &browser_cache_files.categories {
+                if source.available
+                    && !source.truncated
+                    && source.skipped == 0
+                    && source.files.is_empty()
+                {
+                    if let Some(browser) = Browser::from_cache_category(&source.id) {
+                        empty_browsers.push(browser);
+                    }
+                }
+            }
+        }
+        HealthCategory::Cookies | HealthCategory::BrowsingHistory
+            if !profiles.partial
+                && profiles.skipped.is_empty()
+                && !browser_records.partial
+                && !browser_records.truncated
+                && !browser_records.cancelled
+                && browser_records.skipped_count == 0
+                && browser_records.skipped.is_empty()
+                && browser_records.omitted_skip_details == 0
+                && browser_records.profiles_scanned == profiles.profiles.len() =>
+        {
+            let wanted = if category.category == HealthCategory::Cookies {
+                privacy::PrivacyCategory::Cookies
+            } else {
+                privacy::PrivacyCategory::History
+            };
+            if browser_records.categories_scanned.contains(&wanted) {
+                for profile in &profiles.profiles {
+                    if !browser_records
+                        .records
+                        .iter()
+                        .any(|row| row.browser == profile.browser && row.category == wanted)
+                    {
+                        empty_browsers.push(profile.browser);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    for browser in empty_browsers {
+        if !groups.iter().any(|group| group.browser == Some(browser)) {
+            groups.push(HealthBrowserGroup {
+                browser: Some(browser),
+                findings: Vec::new(),
+            });
+        }
+    }
+    sort_health_browser_groups(&mut groups);
+    groups
+}
+
 #[cfg(test)]
 mod ui_contract_tests {
     use super::*;
 
     fn fixture(case: &str) -> App {
         App::new_fixture_with_context(&egui::Context::default(), case).unwrap()
+    }
+
+    #[test]
+    fn terminal_visual_fixtures_retain_distinct_verified_owner_receipt_qualities() {
+        for (case, expected) in [
+            ("health-results-complete", HealthEffectQuality::Complete),
+            ("health-results-partial", HealthEffectQuality::Partial),
+            ("health-results-cancelled", HealthEffectQuality::Cancelled),
+            ("health-results-uncertain", HealthEffectQuality::Uncertain),
+        ] {
+            let app = fixture(case);
+            assert!(
+                matches!(app.health_ui.coordinator.status(HealthStep::Space), HealthStepStatus::Results {quality, ..} if *quality==expected)
+            );
+            let receipts = app.health_ui.coordinator.effect_receipts(HealthStep::Space);
+            assert_eq!(receipts.len(), 1);
+            let HealthEffectReceipt::Files(receipt) = &receipts[0] else {
+                panic!("file receipt")
+            };
+            assert_eq!(
+                receipt.files,
+                if expected == HealthEffectQuality::Complete {
+                    3
+                } else {
+                    0
+                }
+            );
+            assert_eq!(
+                receipt.interrupted,
+                expected == HealthEffectQuality::Uncertain
+            );
+            assert_eq!(
+                receipt.cancelled,
+                expected == HealthEffectQuality::Cancelled
+            );
+            if expected == HealthEffectQuality::Uncertain {
+                assert!(app.notice.is_none(), "recovery has no duplicate toast");
+            } else {
+                assert!(
+                    app.notice_deadline.is_some(),
+                    "routine completion alerts expire"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn effect_completion_consumes_worker_history_without_turning_cancel_into_success() {
+        for history_ok in [false, true] {
+            let mut app = fixture("health-cleaning");
+            app.data_dir = r"C:\__DCleaner_NEVER_READ_TERMINAL_FIXTURE__".into();
+            let HealthStepStatus::Applying { plan_id } = app
+                .health_ui
+                .coordinator
+                .status(HealthStep::Privacy)
+                .clone()
+            else {
+                panic!("fixture must be applying")
+            };
+            let history = if history_ok {
+                Ok(super::super::qa_core::history_fixture())
+            } else {
+                Err("fixture history unavailable".into())
+            };
+            app.health_event(HealthEvent::EffectsFinished {
+                plan_id,
+                receipts: Vec::new(),
+                issues: Vec::new(),
+                attempted: false,
+                uncertain: false,
+                cancelled_before_any: true,
+                history,
+            });
+            assert!(matches!(
+                app.health_ui.coordinator.status(HealthStep::Privacy),
+                HealthStepStatus::Cancelled
+            ));
+            assert_eq!(app.history_readable, history_ok);
+            if history_ok {
+                assert_eq!(app.history.len(), 2);
+            } else {
+                assert!(
+                    app.error
+                        .as_ref()
+                        .unwrap()
+                        .contains("fixture history unavailable")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn multiple_profiles_group_exact_ids_by_browser_and_descending_bytes() {
+        let app = fixture("health-privacy-multi-profile");
+        let report = app
+            .health_ui
+            .coordinator
+            .report(HealthStep::Privacy)
+            .unwrap();
+        let category = report
+            .categories
+            .iter()
+            .find(|c| c.category == HealthCategory::InternetTemporaryFiles)
+            .unwrap();
+        let groups = health_browser_groups_for_report(report, category);
+        assert_eq!(
+            groups.iter().map(|g| g.browser).collect::<Vec<_>>(),
+            vec![
+                Some(Browser::Firefox),
+                Some(Browser::Chrome),
+                Some(Browser::Edge)
+            ]
+        );
+        assert_eq!(
+            groups.iter().map(|g| g.findings.len()).collect::<Vec<_>>(),
+            vec![1, 2, 0]
+        );
+        let grouped = groups
+            .iter()
+            .flat_map(|g| g.findings.iter().map(|f| f.id.clone()))
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            grouped,
+            app.health_ui
+                .coordinator
+                .selected_ids(HealthStep::Privacy)
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>()
+        );
+    }
+
+    #[test]
+    fn empty_browser_rows_require_complete_source_and_never_add_action_ids() {
+        let report = health_browser_fixture_report("health-privacy-empty-browsers");
+        let category = report
+            .categories
+            .iter()
+            .find(|c| c.category == HealthCategory::Cookies)
+            .unwrap();
+        let groups = health_browser_groups_for_report(&report, category);
+        assert_eq!(groups.len(), 3);
+        assert!(groups.iter().all(|g| g.findings.is_empty()));
+        let mut incomplete = category.clone();
+        incomplete.coverage = HealthCoverage::Unsupported {
+            reason: "fixture unavailable".into(),
+        };
+        assert!(health_browser_groups_for_report(&report, &incomplete).is_empty());
+        let mut cancelled = report.clone();
+        cancelled.quality = HealthScanQuality::Cancelled;
+        assert!(health_browser_groups_for_report(&cancelled, category).is_empty());
+    }
+
+    #[test]
+    fn browser_groups_preserve_exact_ids_and_do_not_guess_from_labels() {
+        let mut app = fixture("health-privacy-expanded");
+        let report = app
+            .health_ui
+            .coordinator
+            .report(HealthStep::Privacy)
+            .unwrap();
+        let mut category = report
+            .categories
+            .iter()
+            .find(|c| c.category == HealthCategory::InternetTemporaryFiles)
+            .unwrap()
+            .clone();
+        let original = category.findings[0].id.clone();
+        category.findings[0].name = "Firefox misleading name".into();
+        let mut other = category.findings[0].clone();
+        other.id = HealthFindingId::FileCandidate(Uuid::new_v4());
+        other.browser = None;
+        other.name = "Google Chrome misleading name".into();
+        let other_id = other.id.clone();
+        category.findings.push(other);
+        let groups = health_browser_groups(&category);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].browser, Some(Browser::Chrome));
+        assert_eq!(groups[0].findings[0].id, original);
+        assert_eq!(groups[1].browser, None);
+        assert_eq!(groups[1].findings[0].id, other_id);
+        // Group selection continues to use the existing coordinator's exact IDs.
+        for finding in &groups[0].findings {
+            app.health_ui
+                .coordinator
+                .select_finding(finding.id.clone(), false)
+                .unwrap();
+        }
+        let selected = app.health_ui.coordinator.selected_ids(HealthStep::Privacy);
+        assert!(!selected.contains(&original));
+        assert_eq!(selected.len(), 1);
     }
 
     #[test]
@@ -2393,6 +3090,14 @@ fn effect_quality_label(quality: HealthEffectQuality) -> &'static str {
     }
 }
 
+fn health_step_icon(step: HealthStep) -> theme::Icon {
+    match step {
+        HealthStep::Privacy => theme::Icon::EyeOff,
+        HealthStep::Space => theme::Icon::Disk,
+        HealthStep::ResolveIssues => theme::Icon::Settings,
+    }
+}
+
 fn step_label(step: HealthStep) -> &'static str {
     match step {
         HealthStep::Privacy => "More privacy",
@@ -2412,7 +3117,7 @@ fn step_title(step: HealthStep) -> &'static str {
 fn step_description(step: HealthStep) -> &'static str {
     match step {
         HealthStep::Privacy => {
-            "Review supported browser records and browser cache files. Passwords and browser settings are not included."
+            "Review supported browser records and browser cache files. Passwords and unrelated browser settings are kept."
         }
         HealthStep::Space => {
             "Review current temporary-file candidates and the current user’s Recycle Bin inventory."
@@ -2459,28 +3164,6 @@ fn status_label(status: &HealthStepStatus) -> String {
         HealthStepStatus::Skipped => "Skipped".into(),
         HealthStepStatus::Cancelled => "Cancelled".into(),
         HealthStepStatus::Failed { message } => format!("Failed · {message}"),
-    }
-}
-
-fn finding_matches(finding: &HealthFinding, query: &str) -> bool {
-    query.is_empty()
-        || finding.name.to_ascii_lowercase().contains(query)
-        || finding
-            .detail
-            .as_deref()
-            .is_some_and(|detail| detail.to_ascii_lowercase().contains(query))
-        || finding_id_label(&finding.id)
-            .to_ascii_lowercase()
-            .contains(query)
-}
-
-fn finding_id_label(id: &HealthFindingId) -> String {
-    match id {
-        HealthFindingId::BrowserRecord(id)
-        | HealthFindingId::FileCandidate(id)
-        | HealthFindingId::RecycleBinItem(id) => id.to_string(),
-        HealthFindingId::StartupEntry(id) => id.0.clone(),
-        HealthFindingId::SoftwareUpdate(key) => key.as_str().to_owned(),
     }
 }
 
@@ -2632,8 +3315,13 @@ fn finding_source_details(
 
 fn action_summary(action: &HealthAction) -> String {
     match action {
-        HealthAction::BrowserPrivacy(_) => {
-            "Browser privacy: revalidate and remove selected database records".into()
+        HealthAction::BrowserPrivacy(plan) => {
+            if plan.file_count() > 0 {
+                "Browser privacy: revalidate selected records; move reviewed storage files to Trash"
+                    .into()
+            } else {
+                "Browser privacy: revalidate and remove selected database records".into()
+            }
         }
         HealthAction::MoveFilesToTrash { candidate_ids, .. } => format!(
             "Move {} selected file(s) to the operating-system Trash",
@@ -2655,7 +3343,7 @@ fn action_summary(action: &HealthAction) -> String {
 }
 
 fn send_health_progress(
-    tx: &mpsc::Sender<Event>,
+    tx: &crate::worker_events::Sender<Event>,
     repaint: &egui::Context,
     step: HealthStep,
     completed: u64,
@@ -2674,7 +3362,7 @@ fn send_health_progress(
 fn effect_receipt_summary(receipt: &HealthEffectReceipt) -> String {
     match receipt {
         HealthEffectReceipt::BrowserPrivacy(receipt) => format!(
-            "Browser records: {} of {} removed · {} skipped · {} error(s){}",
+            "Browser selections: {} of {} cleaned · {} skipped · {} error(s){}",
             receipt.deleted,
             receipt.selected,
             receipt.skipped,
@@ -2935,6 +3623,86 @@ fn seed_health_fixture_step(
         coordinator.select_all()?;
     }
     Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn health_browser_fixture_report(case: &str) -> HealthStepReport {
+    use dcleaner::{domain::Candidate, privacy::BrowserProfile};
+    let base = health_fixture_report(HealthStep::Privacy);
+    let HealthServiceData::Privacy {
+        profiles,
+        browser_records,
+        browser_cache_files,
+    } = base.source()
+    else {
+        unreachable!()
+    };
+    let mut profiles = profiles.clone();
+    profiles.profiles = [
+        (Browser::Chrome, "chrome", "Default"),
+        (Browser::Chrome, "chrome", "Profile1"),
+        (Browser::Firefox, "firefox", "Default"),
+        (Browser::Edge, "edge", "Default"),
+    ]
+    .into_iter()
+    .map(|(browser, key, name)| BrowserProfile {
+        id: format!("visual-{key}-{name}"),
+        browser,
+        name: name.into(),
+        root: format!(r"C:\__DCleaner_VISUAL_FIXTURE_ONLY__\{key}\{name}").into(),
+    })
+    .collect();
+    let mut records = browser_records.clone();
+    records.records.clear();
+    records.profiles_scanned = profiles.profiles.len();
+    let mut cache = browser_cache_files.clone();
+    let template = cache.categories[0].clone();
+    cache.categories = ["chrome", "firefox", "edge"]
+        .into_iter()
+        .map(|key| {
+            let mut category = template.clone();
+            category.id = key.into();
+            category.name = format!("{key} cache");
+            category.files.clear();
+            category
+        })
+        .collect();
+    let count = match case {
+        "health-privacy-empty-browsers" => 0,
+        "health-privacy-large" => 5_000,
+        _ => 3,
+    };
+    for index in 0..count {
+        let group = if count == 3 {
+            usize::from(index == 2)
+        } else {
+            index % 3
+        };
+        let category = &mut cache.categories[group];
+        let profile = if group == 0 && index % 2 == 1 {
+            "Profile1"
+        } else {
+            "Default"
+        };
+        let root: std::path::PathBuf = format!(
+            r"C:\__DCleaner_VISUAL_FIXTURE_ONLY__\{}\{profile}",
+            category.id
+        )
+        .into();
+        category.files.push(Candidate {
+            id: Uuid::from_u128(0x4443_4c45_414e_4552_4845_414c_5500_0000 + index as u128),
+            path: root.join(format!("synthetic-cache-{index}.bin")),
+            root,
+            size: if count == 3 {
+                4096 << index
+            } else {
+                1024 * (index as u64 % 7 + 1)
+            },
+            modified_ns: 1,
+            created_ns: Some(1),
+        });
+    }
+    HealthStepReport::privacy(profiles, records, cache)
 }
 
 #[cfg(debug_assertions)]

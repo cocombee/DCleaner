@@ -48,7 +48,7 @@ impl App {
                 ui.add_space(6.);
 
                 let root = report.root.display().to_string();
-                ui.add(egui::Label::new(root.clone()).truncate())
+                ui.add(egui::Label::new(root.clone()).truncate().show_tooltip_when_elided(false))
                     .on_hover_text(root);
                 ui.add_space(8.);
 
@@ -124,13 +124,11 @@ impl App {
                             let path = file.path.display().to_string();
                             ui.push_id(file.id, |ui| {
                                 let row = ui.horizontal(|ui| {
-                                    theme::table_cell(
+                                    theme::table_cell_with_tooltip(
                                         ui,
                                         path.clone(),
                                         path_width,
-                                        theme::TABLE_ROW_HEIGHT,
-                                    )
-                                    .on_hover_text(path);
+                                        theme::TABLE_ROW_HEIGHT, path);
                                     ui.allocate_ui_with_layout(
                                         Vec2::new(size_width, theme::TABLE_ROW_HEIGHT),
                                         Layout::right_to_left(Align::Center),

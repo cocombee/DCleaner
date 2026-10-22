@@ -1,8 +1,8 @@
-//! Browser privacy inventory and carefully journaled deletion for known SQLite schemas.
+//! Browser privacy inventory and journaled cleanup of known SQL rows and site-storage files.
 //!
 //! The inventory intentionally omits URL paths, page titles, cookie names and all cookie
 //! contents from its public records. Cleanup is limited to history, download-history and
-//! cookie rows in recognized Chrome, Edge and Firefox databases.
+//! cookie rows in recognized Chromium and Mozilla-family databases, plus explicitly matched site-storage files.
 
 use rusqlite::{
     Connection, OpenFlags, OptionalExtension, TransactionBehavior, backup::Backup, types::Value,
@@ -20,12 +20,52 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::scanner::{contained, is_link, safe_root, same_path, timestamp};
+use crate::scanner::{contained, is_link, same_path, timestamp};
+
+mod chromium_downloads;
+mod chromium_history;
+mod cookies;
+mod firefox_places;
+#[allow(dead_code)] // Some retained native catalogue metadata is test/evidence-only.
+mod generic_sqlite;
+mod json_members;
+mod keywords;
+mod leveldb;
+mod leveldb_format;
+mod leveldb_write;
+mod moz_lz4;
+mod preferences;
+mod profile_discovery;
+mod quota;
+mod record_files;
+mod session_binary;
+mod session_files;
+mod session_mozilla;
+mod shortcuts;
+mod storage_files;
+#[cfg(test)]
+mod websql_paths;
+use profile_discovery::{contains_named_path, same_named_path};
 
 const MAX_PROFILES: usize = 128;
 const MAX_RECORDS: usize = 50_000;
 const MAX_DATABASE_BYTES: u64 = 1_073_741_824;
 const MAX_SKIP_DETAILS: usize = 2_000;
+const CHROMIUM_COOKIE_DATABASES: &[&str] = &["Cookies", "Network/Cookies", "Extension Cookies"];
+const CHROMIUM_SITE_DATABASES: &[(&str, TableKind)] = &[
+    ("QuotaManager", TableKind::ChromiumQuota),
+    ("Origin Bound Certs", TableKind::ChromiumOriginCerts),
+    ("Origin Bound Certs", TableKind::ChromiumChannelIds),
+];
+const CHROMIUM_HISTORY_DATABASES: &[(&str, TableKind)] = &[
+    ("Web Data", TableKind::ChromiumKeywords),
+    ("Shortcuts", TableKind::ChromiumShortcuts),
+];
+const MOZILLA_SITE_DATABASES: &[(&str, TableKind)] = &[
+    ("permissions.sqlite", TableKind::FirefoxOfflinePermissions),
+    ("webappsstore.sqlite", TableKind::FirefoxWebApps),
+    ("webappsstore.sqlite", TableKind::FirefoxWebApps2),
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -33,23 +73,141 @@ pub enum Browser {
     Chrome,
     Edge,
     Firefox,
+    Avg,
+    Ccleaner,
+    Avast,
+    Opera,
+    Vivaldi,
+    Brave,
+    OperaGx,
+    Norton,
+    Avira,
+    Arc,
+    Neo,
+    Thunderbird,
 }
 
 impl Browser {
+    pub const ALL: &[Self] = &[
+        Self::Chrome,
+        Self::Edge,
+        Self::Firefox,
+        Self::Avg,
+        Self::Ccleaner,
+        Self::Avast,
+        Self::Opera,
+        Self::Vivaldi,
+        Self::Brave,
+        Self::OperaGx,
+        Self::Norton,
+        Self::Avira,
+        Self::Arc,
+        Self::Neo,
+        Self::Thunderbird,
+    ];
+
+    pub fn is_chromium(self) -> bool {
+        !matches!(self, Self::Firefox | Self::Thunderbird)
+    }
+
+    pub fn cache_category(self) -> &'static str {
+        match self {
+            Self::Chrome => "chrome",
+            Self::Edge => "edge",
+            Self::Firefox => "firefox",
+            Self::Avg => "avgsecurebrowser",
+            Self::Ccleaner => "ccleanerbrowser",
+            Self::Avast => "avastsecurebrowser",
+            Self::Opera => "opera",
+            Self::Vivaldi => "vivaldi",
+            Self::Brave => "brave",
+            Self::OperaGx => "operagx",
+            Self::Norton => "nortonprivatebrowser",
+            Self::Avira => "avirasecurebrowser",
+            Self::Arc => "arc",
+            Self::Neo => "neobrowser",
+            Self::Thunderbird => "thunderbird",
+        }
+    }
+    pub fn from_cache_category(id: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|browser| browser.cache_category() == id)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Chrome => "Chrome",
             Self::Edge => "Edge",
             Self::Firefox => "Firefox",
+            Self::Avg => "AVG Secure Browser",
+            Self::Ccleaner => "CCleaner Browser",
+            Self::Avast => "Avast Secure Browser",
+            Self::Opera => "Opera",
+            Self::Vivaldi => "Vivaldi",
+            Self::Brave => "Brave",
+            Self::OperaGx => "Opera GX",
+            Self::Norton => "Norton Private Browser",
+            Self::Avira => "Avira Secure Browser",
+            Self::Arc => "Arc",
+            Self::Neo => "Neo Browser",
+            Self::Thunderbird => "Thunderbird",
         }
     }
 
     fn process_names(self) -> &'static [&'static str] {
         match self {
-            Self::Chrome => &["chrome.exe", "google chrome"],
+            Self::Chrome => &[
+                "chrome.exe",
+                "google chrome",
+                "flock.exe",
+                "iron.exe",
+                "rockmelt.exe",
+                "dragon.exe",
+                "spark.exe",
+                "torch.exe",
+                "browser.exe",
+                "chromium.exe",
+            ],
             Self::Edge => &["msedge.exe", "microsoft edge"],
-            Self::Firefox => &["firefox.exe", "firefox"],
+            Self::Firefox => &[
+                "firefox.exe",
+                "firefox",
+                "mozilla.exe",
+                "seamonkey.exe",
+                "palemoon.exe",
+                "songbird.exe",
+                "k-meleon.exe",
+                "icedragon.exe",
+                "cyberfox.exe",
+            ],
+            Self::Avg => &["avgbrowser.exe"],
+            Self::Ccleaner => &["ccleanerbrowser.exe"],
+            Self::Avast => &["avastbrowser.exe"],
+            Self::Opera | Self::OperaGx => &["opera.exe", "opera"],
+            Self::Vivaldi => &["vivaldi.exe", "vivaldi"],
+            Self::Brave => &["brave.exe", "brave browser"],
+            Self::Norton => &["nortonbrowser.exe"],
+            Self::Avira => &["avirabrowser.exe"],
+            Self::Arc => &["arc.exe", "arc"],
+            Self::Neo => &["neo.exe"],
+            Self::Thunderbird => &["thunderbird.exe", "thunderbird"],
         }
+    }
+
+    /// Executable names do not distinguish shared products such as Opera/GX.
+    /// This is a conservative conflict guard, never profile attribution.
+    pub fn conflicts_with(self, process: &RunningBrowser) -> bool {
+        self == process.browser
+            || self
+                .process_names()
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(&process.executable))
+            || self
+                .process_names()
+                .iter()
+                .any(|name| process.browser.process_names().contains(name))
     }
 }
 
@@ -59,6 +217,32 @@ pub enum PrivacyCategory {
     History,
     Cookies,
     Downloads,
+    LastDownloadLocation,
+    SnapLocation,
+    Sessions,
+    SavedForms,
+    SavedPasswords,
+    SitePreferences,
+}
+impl PrivacyCategory {
+    pub const ALL: [Self; 9] = [
+        Self::History,
+        Self::Cookies,
+        Self::Downloads,
+        Self::LastDownloadLocation,
+        Self::SnapLocation,
+        Self::Sessions,
+        Self::SavedForms,
+        Self::SavedPasswords,
+        Self::SitePreferences,
+    ];
+    pub const DEFAULT: [Self; 5] = [
+        Self::History,
+        Self::Cookies,
+        Self::Downloads,
+        Self::LastDownloadLocation,
+        Self::SnapLocation,
+    ];
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -108,9 +292,105 @@ pub struct PrivacyRecord {
     pub profile_id: String,
     pub profile_name: String,
     pub category: PrivacyCategory,
-    /// A sanitized site/host label, never a full URL or a cookie value.
+    /// A sanitized site/host or fixed history-field label, never a full URL or cookie value.
     pub site: String,
-    locator: RowLocator,
+    locator: RecordLocator,
+}
+
+impl PrivacyRecord {
+    pub fn is_database_table(&self) -> bool {
+        matches!(&self.locator, RecordLocator::Database(row) if row.generic.is_some())
+    }
+    pub fn is_preference_field(&self) -> bool {
+        matches!(&self.locator, RecordLocator::Preferences(review) if !review.is_session())
+    }
+    pub fn is_session_file(&self) -> bool {
+        self.category == PrivacyCategory::Sessions
+    }
+    /// Session rewrites expose a reviewed file selection; native result units
+    /// remain unknown until caller aggregation has independent evidence.
+    pub fn native_item_count(&self) -> Option<usize> {
+        if self.is_session_file() || self.is_database_table() {
+            None
+        } else {
+            Some(self.item_count())
+        }
+    }
+    pub fn preference_cleanup_note(&self) -> Option<&'static str> {
+        match &self.locator {
+            RecordLocator::Preferences(review) => Some(review.cleanup_note()),
+            RecordLocator::Database(row) => row
+                .generic
+                .as_ref()
+                .map(generic_sqlite::Review::cleanup_note),
+            _ => None,
+        }
+    }
+    pub fn actionable(&self) -> bool {
+        self.unavailable_reason().is_none()
+    }
+
+    pub fn unavailable_reason(&self) -> Option<&'static str> {
+        match &self.locator {
+            RecordLocator::Database(row) => row
+                .quota
+                .as_ref()
+                .and_then(quota::Review::unavailable_reason)
+                .or_else(|| {
+                    row.generic
+                        .as_ref()
+                        .and_then(generic_sqlite::Review::unavailable_reason)
+                }),
+            RecordLocator::File(file) => file.unavailable_reason(),
+            RecordLocator::LevelDb(review) => review.unavailable_reason(),
+            RecordLocator::Preferences(review) => review.unavailable_reason(),
+        }
+    }
+
+    /// Candidate units are separate from reviewed groups and confirmed effects.
+    pub fn item_count(&self) -> usize {
+        if matches!(
+            self.locator,
+            RecordLocator::LevelDb(_) | RecordLocator::Preferences(_)
+        ) {
+            return 1;
+        }
+        let RecordLocator::Database(row) = &self.locator else {
+            let RecordLocator::File(file) = &self.locator else {
+                unreachable!()
+            };
+            return file.item_count();
+        };
+        row.history
+            .as_ref()
+            .map(|review| review.item_count())
+            .or_else(|| row.download.as_ref().map(|review| review.item_count()))
+            .or_else(|| row.firefox.as_ref().map(|review| review.item_count()))
+            .or_else(|| row.quota.as_ref().map(quota::Review::item_count))
+            .or_else(|| row.generic.as_ref().map(generic_sqlite::Review::item_count))
+            .unwrap_or(1)
+    }
+
+    pub fn size_bytes(&self) -> Option<u64> {
+        match &self.locator {
+            RecordLocator::File(file) => Some(file.size_bytes()),
+            RecordLocator::Database(_)
+            | RecordLocator::LevelDb(_)
+            | RecordLocator::Preferences(_) => None,
+        }
+    }
+
+    /// Relative source identity for a reviewed history/download file; never its contents.
+    pub fn source_file(&self) -> Option<String> {
+        match &self.locator {
+            RecordLocator::File(file) => file.record_source(),
+            RecordLocator::Preferences(review) => review.session_source(),
+            RecordLocator::Database(row) => {
+                row.generic.as_ref().map(generic_sqlite::Review::source)
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -141,6 +421,7 @@ pub struct PrivacyReport {
 pub struct PrivacyProgress {
     pub profiles_completed: usize,
     pub profiles_total: usize,
+    /// Source item units, which may include multiple rows in one reviewed target.
     pub records_found: usize,
     pub profile_name: String,
     pub category: PrivacyCategory,
@@ -151,6 +432,18 @@ pub struct PrivacyPlan {
     report_id: Uuid,
     operation_id: Uuid,
     records: Vec<RowLocator>,
+    files: Vec<storage_files::Review>,
+    keys: Vec<leveldb_write::Review>,
+    preferences: Vec<preferences::Review>,
+}
+
+impl PrivacyPlan {
+    pub fn file_count(&self) -> usize {
+        self.files
+            .iter()
+            .map(storage_files::Review::item_count)
+            .sum()
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -227,9 +520,24 @@ pub struct PrivacyRestorePlan {
     post_state_snapshot: PathBuf,
     post_state_stamp: FileStamp,
     schema_signature: String,
+    leveldb: Option<leveldb_write::Restore>,
+    preferences: Option<preferences::Restore>,
 }
 
 impl PrivacyRestorePlan {
+    /// Whether this review restores exact browser site-storage keys rather than a
+    /// complete SQLite database image. The native source bindings stay private.
+    pub fn restores_site_storage_keys(&self) -> bool {
+        self.leveldb.is_some()
+    }
+    pub fn restores_preferences(&self) -> bool {
+        self.preferences.as_ref().is_some_and(|p| !p.is_session())
+    }
+    pub fn restores_sessions(&self) -> bool {
+        self.preferences
+            .as_ref()
+            .is_some_and(preferences::Restore::is_session)
+    }
     /// Stable identifier of the cleanup recovery item reviewed by this plan.
     pub fn id(&self) -> Uuid {
         self.id
@@ -369,6 +677,15 @@ impl Default for FileStamp {
 }
 
 #[derive(Clone)]
+enum RecordLocator {
+    Database(RowLocator),
+    File(storage_files::Review),
+    // Observation only until exact-key mutation and durable recovery exist.
+    LevelDb(leveldb_write::Review),
+    Preferences(preferences::Review),
+}
+
+#[derive(Clone)]
 struct RowLocator {
     id: Uuid,
     browser: Browser,
@@ -380,6 +697,14 @@ struct RowLocator {
     kind: TableKind,
     row_id: i64,
     identity: Vec<Value>,
+    history: Option<chromium_history::Review>,
+    download: Option<chromium_downloads::Review>,
+    firefox: Option<firefox_places::Review>,
+    cookie: Option<cookies::Review>,
+    quota: Option<quota::Review>,
+    keyword: Option<keywords::Review>,
+    shortcut: Option<shortcuts::Review>,
+    generic: Option<generic_sqlite::Review>,
 }
 
 /// Return a fixed, in-memory browser profile and row for debug visual QA.
@@ -403,7 +728,7 @@ pub fn visual_preview_fixture() -> (ProfileInventory, PrivacyReport) {
         profile_name: profile.name.clone(),
         category: PrivacyCategory::History,
         site: "example.test".into(),
-        locator: RowLocator {
+        locator: RecordLocator::Database(RowLocator {
             id,
             browser: Browser::Chrome,
             profile_id: profile.id.clone(),
@@ -414,7 +739,15 @@ pub fn visual_preview_fixture() -> (ProfileInventory, PrivacyReport) {
             kind: TableKind::ChromiumHistory,
             row_id: 1,
             identity: vec![Value::Integer(1)],
-        },
+            history: None,
+            download: None,
+            firefox: None,
+            cookie: None,
+            quota: None,
+            keyword: None,
+            shortcut: None,
+            generic: None,
+        }),
     };
     let inventory = ProfileInventory {
         profiles: vec![profile],
@@ -438,39 +771,258 @@ pub fn visual_preview_fixture() -> (ProfileInventory, PrivacyReport) {
     (inventory, report)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// Owned in-memory quota state for CPU-only UI checks; never opens a browser.
+#[cfg(debug_assertions)]
+pub fn visual_quota_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (inventory, mut report) = visual_preview_fixture();
+    let original = report.records[0].clone();
+    let conn = Connection::open_in_memory().expect("owned quota fixture");
+    conn.execute_batch("CREATE TABLE buckets(storage_key TEXT,payload TEXT); INSERT INTO buckets VALUES('https://example.test/','owned'); CREATE TABLE quota(host TEXT); INSERT INTO quota VALUES('quota-only.test')").expect("owned quota fixture schema");
+    let observed = quota::Snapshot::read(&conn, &HashSet::new(), &AtomicBool::new(false))
+        .expect("owned quota fixture snapshot");
+    report.records = observed
+        .reviews()
+        .enumerate()
+        .map(|(index, (site, quota))| {
+            let mut record = original.clone();
+            record.id = Uuid::from_u128(0x4443_4c45_414e_4552_5155_4f54_0000_0001 + index as u128);
+            record.site = site;
+            record.category = PrivacyCategory::Cookies;
+            let RecordLocator::Database(locator) = &mut record.locator else {
+                unreachable!()
+            };
+            locator.id = record.id;
+            locator.kind = TableKind::ChromiumQuota;
+            locator.quota = Some(quota);
+            record
+        })
+        .collect();
+    report.categories_scanned = vec![PrivacyCategory::Cookies];
+    (inventory, report)
+}
+
+/// Render-only file groups, including a counted file without content authority.
+#[cfg(debug_assertions)]
+pub fn visual_storage_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (inventory, mut report) = visual_preview_fixture();
+    report.records = vec![
+        storage_files::preview(&inventory.profiles[0], true),
+        storage_files::preview(&inventory.profiles[0], false),
+    ];
+    report.categories_scanned = vec![PrivacyCategory::Cookies];
+    report.partial = true;
+    report.skipped_count = 1;
+    report.skipped = vec![PrivacySkip {
+        profile_name: inventory.profiles[0].name.clone(), category: Some(PrivacyCategory::Cookies),
+        reason: "Synthetic fixture: a matching storage file was enumerated but its contents could not be inspected.".into(),
+    }];
+    (inventory, report)
+}
+
+/// Synthetic history/download file rows; never reads source profile files.
+#[cfg(debug_assertions)]
+pub fn visual_record_files_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (inventory, mut report) = visual_storage_preview_fixture();
+    report.records = [
+        (PrivacyCategory::History, "Visited Links", true),
+        (PrivacyCategory::Downloads, "DownloadMetadata", true),
+        (PrivacyCategory::History, "Top Sites", false),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(n, (category, name, available))| {
+        storage_files::preview_record(
+            &inventory.profiles[0],
+            category,
+            name,
+            Uuid::from_u128(0x4443_4c45_414e_4552_4649_4c45_0000_0001 + n as u128),
+            available,
+        )
+    })
+    .collect();
+    report.categories_scanned = vec![PrivacyCategory::History, PrivacyCategory::Downloads];
+    report.skipped[0].category = Some(PrivacyCategory::History);
+    report.skipped[0].reason =
+        "Synthetic fixture: one declared history file has unavailable content authority.".into();
+    (inventory, report)
+}
+
+/// Synthetic key-count inventory; no source paths or LevelDB opens are used.
+#[cfg(debug_assertions)]
+pub fn visual_leveldb_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (inventory, mut report) = visual_storage_preview_fixture();
+    let template = report.records[0].clone();
+    report.records = ["example.test", "example.test", "other.test"]
+        .into_iter()
+        .enumerate()
+        .map(|(n, site)| {
+            let mut record = template.clone();
+            record.id = Uuid::from_u128(0x4443_4c45_414e_4552_4c44_424b_0000_0001 + n as u128);
+            record.locator = RecordLocator::LevelDb(leveldb_write::preview(
+                &inventory.profiles[0],
+                record.id,
+                site,
+                n < 2,
+            ));
+            record.site = site.into();
+            record
+        })
+        .collect();
+    report.skipped[0].reason =
+        "Synthetic fixture: one Local Storage key has unavailable review identities.".into();
+    (inventory, report)
+}
+
+#[cfg(debug_assertions)]
+pub fn visual_leveldb_restore_fixture(profile: &BrowserProfile) -> PrivacyRestorePlan {
+    leveldb_write::preview_restore(profile)
+}
+
+#[cfg(debug_assertions)]
+pub fn visual_preferences_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (inventory, mut report) = visual_preview_fixture();
+    report.records = preferences::preview(&inventory.profiles[0]);
+    (inventory, report)
+}
+
+#[cfg(debug_assertions)]
+pub fn visual_locations_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (mut inventory, mut report) = visual_preview_fixture();
+    inventory.profiles[0].browser = Browser::Opera;
+    report.records = preferences::preview_locations(&inventory.profiles[0]);
+    report.categories_scanned = vec![
+        PrivacyCategory::LastDownloadLocation,
+        PrivacyCategory::SnapLocation,
+    ];
+    (inventory, report)
+}
+#[cfg(debug_assertions)]
+pub fn visual_sessions_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    let (inventory, mut report) = visual_preview_fixture();
+    report.records = vec![
+        preferences::preview_session(&inventory.profiles[0]),
+        storage_files::preview_session(&inventory.profiles[0]),
+        storage_files::preview_session_group(&inventory.profiles[0]),
+    ];
+    report.categories_scanned = vec![PrivacyCategory::Sessions];
+    (inventory, report)
+}
+#[cfg(debug_assertions)]
+pub fn visual_sessions_restore_fixture(profile: &BrowserProfile) -> PrivacyRestorePlan {
+    preferences::preview_session_restore(profile)
+}
+#[cfg(debug_assertions)]
+pub fn visual_mozilla_sessions_preview_fixture(mixed: bool) -> (ProfileInventory, PrivacyReport) {
+    let (mut inventory, mut report) = visual_sessions_preview_fixture();
+    let template = inventory.profiles[0].clone();
+    if !mixed {
+        inventory.profiles.clear();
+        report.records.clear();
+    }
+    for (browser, compressed) in [(Browser::Firefox, false), (Browser::Thunderbird, true)] {
+        let mut profile = template.clone();
+        profile.browser = browser;
+        profile.id = format!("fixture-mozilla-{}", browser.cache_category());
+        profile.name = format!("Fixture {} profile", browser.label());
+        report
+            .records
+            .push(preferences::preview_mozilla_session(&profile, compressed));
+        inventory.profiles.push(profile);
+    }
+    report.profiles_scanned = inventory.profiles.len();
+    (inventory, report)
+}
+#[cfg(debug_assertions)]
+pub fn visual_mozilla_session_restore_fixture(profile: &BrowserProfile) -> PrivacyRestorePlan {
+    preferences::preview_mozilla_restore(profile)
+}
+
+#[cfg(debug_assertions)]
+pub fn visual_preferences_restore_fixture(profile: &BrowserProfile) -> PrivacyRestorePlan {
+    preferences::preview_restore(profile)
+}
+#[cfg(debug_assertions)]
+pub fn visual_generic_sqlite_preview_fixture() -> (ProfileInventory, PrivacyReport) {
+    generic_sqlite::preview()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum TableKind {
+    GenericSqlite(generic_sqlite::Key),
     ChromiumHistory,
+    ChromiumKeywords,
+    ChromiumShortcuts,
     ChromiumCookies,
     ChromiumDownloads,
     FirefoxHistory,
     FirefoxCookies,
     FirefoxDownloads,
+    ChromiumOriginCerts,
+    ChromiumChannelIds,
+    FirefoxOfflinePermissions,
+    FirefoxWebApps,
+    FirefoxWebApps2,
+    ChromiumWebSql,
+    ChromiumQuota,
 }
 
 impl TableKind {
     fn category(self) -> PrivacyCategory {
         match self {
-            Self::ChromiumHistory | Self::FirefoxHistory => PrivacyCategory::History,
-            Self::ChromiumCookies | Self::FirefoxCookies => PrivacyCategory::Cookies,
+            Self::GenericSqlite(key) => key.category(),
+            Self::ChromiumHistory
+            | Self::ChromiumKeywords
+            | Self::ChromiumShortcuts
+            | Self::FirefoxHistory => PrivacyCategory::History,
+            Self::ChromiumCookies
+            | Self::FirefoxCookies
+            | Self::ChromiumOriginCerts
+            | Self::ChromiumChannelIds
+            | Self::FirefoxOfflinePermissions
+            | Self::FirefoxWebApps
+            | Self::FirefoxWebApps2
+            | Self::ChromiumWebSql
+            | Self::ChromiumQuota => PrivacyCategory::Cookies,
             Self::ChromiumDownloads | Self::FirefoxDownloads => PrivacyCategory::Downloads,
         }
     }
 
     fn table(self) -> &'static str {
         match self {
+            Self::GenericSqlite(key) => key.table().expect("Declared table key"),
             Self::ChromiumHistory => "urls",
+            Self::ChromiumKeywords => "keywords",
+            Self::ChromiumShortcuts => "omni_box_shortcuts",
             Self::ChromiumCookies => "cookies",
             Self::ChromiumDownloads => "downloads",
             Self::FirefoxHistory => "moz_places",
             Self::FirefoxCookies => "moz_cookies",
             Self::FirefoxDownloads => "moz_downloads",
+            Self::ChromiumOriginCerts => "origin_bound_certs",
+            Self::ChromiumChannelIds => "channel_id",
+            Self::FirefoxOfflinePermissions => "moz_hosts",
+            Self::FirefoxWebApps => "webappsstore",
+            Self::FirefoxWebApps2 => "webappsstore2",
+            Self::ChromiumWebSql => "Databases",
+            Self::ChromiumQuota => "buckets",
+        }
+    }
+
+    fn alternate_cookie_table(self) -> Option<(Self, bool)> {
+        match self {
+            Self::ChromiumOriginCerts => Some((Self::ChromiumChannelIds, true)),
+            Self::ChromiumChannelIds => Some((Self::ChromiumOriginCerts, false)),
+            Self::FirefoxWebApps => Some((Self::FirefoxWebApps2, true)),
+            Self::FirefoxWebApps2 => Some((Self::FirefoxWebApps, false)),
+            _ => None,
         }
     }
 
     fn query(self) -> &'static str {
         match self {
+            Self::GenericSqlite(_) => {
+                unreachable!("Generic table groups have their own snapshot owner")
+            }
             Self::ChromiumHistory => {
                 "SELECT rowid,id,url,title,visit_count,last_visit_time FROM urls ORDER BY id LIMIT ?1"
             }
@@ -489,11 +1041,25 @@ impl TableKind {
             Self::FirefoxDownloads => {
                 "SELECT rowid,id,source,target,startTime,endTime,state FROM moz_downloads ORDER BY id LIMIT ?1"
             }
+            Self::ChromiumOriginCerts
+            | Self::ChromiumChannelIds
+            | Self::FirefoxOfflinePermissions
+            | Self::FirefoxWebApps
+            | Self::FirefoxWebApps2
+            | Self::ChromiumWebSql
+            | Self::ChromiumQuota
+            | Self::ChromiumKeywords
+            | Self::ChromiumShortcuts => {
+                unreachable!("Site-storage tables use the cookie snapshot owner")
+            }
         }
     }
 
     fn required_columns(self) -> &'static [&'static str] {
         match self {
+            Self::GenericSqlite(_) => {
+                unreachable!("Generic table groups have their own snapshot owner")
+            }
             Self::ChromiumHistory => &["id", "url", "title", "visit_count", "last_visit_time"],
             Self::ChromiumCookies => &[
                 "host_key",
@@ -522,11 +1088,23 @@ impl TableKind {
                 "lastAccessed",
             ],
             Self::FirefoxDownloads => &["id", "source", "target", "startTime", "endTime", "state"],
+            Self::ChromiumOriginCerts => &["origin", "creation_time"],
+            Self::ChromiumChannelIds => &["host", "creation_time"],
+            Self::FirefoxOfflinePermissions => &["id", "host", "type", "permission"],
+            Self::FirefoxWebApps => &["domain"],
+            Self::FirefoxWebApps2 => &["scope"],
+            Self::ChromiumWebSql => &["origin", "id"],
+            Self::ChromiumQuota => unreachable!("Quota storage has a dedicated schema owner"),
+            Self::ChromiumKeywords => &["safe_for_autoreplace"],
+            Self::ChromiumShortcuts => &["url", "id"],
         }
     }
 
     fn identity_sql(self) -> &'static str {
         match self {
+            Self::GenericSqlite(_) => {
+                unreachable!("Generic table groups have their own snapshot owner")
+            }
             Self::ChromiumHistory => {
                 "SELECT rowid,id,url,title,visit_count,last_visit_time FROM urls WHERE rowid=?1"
             }
@@ -545,12 +1123,29 @@ impl TableKind {
             Self::FirefoxDownloads => {
                 "SELECT rowid,id,source,target,startTime,endTime,state FROM moz_downloads WHERE rowid=?1"
             }
+            Self::ChromiumOriginCerts
+            | Self::ChromiumChannelIds
+            | Self::FirefoxOfflinePermissions
+            | Self::FirefoxWebApps
+            | Self::FirefoxWebApps2
+            | Self::ChromiumWebSql
+            | Self::ChromiumQuota
+            | Self::ChromiumKeywords
+            | Self::ChromiumShortcuts => {
+                unreachable!("Site-storage tables use the cookie snapshot owner")
+            }
         }
     }
 
     fn row_identity(self, row: &rusqlite::Row<'_>) -> rusqlite::Result<Vec<Value>> {
         (1..row.as_ref().column_count())
-            .map(|column| row.get_ref(column).map(Value::from))
+            .map(|column| {
+                let value = row.get_ref(column)?;
+                if let rusqlite::types::ValueRef::Text(bytes) = value {
+                    std::str::from_utf8(bytes).map_err(rusqlite::Error::Utf8Error)?;
+                }
+                Ok(Value::from(value))
+            })
             .collect()
     }
 
@@ -567,15 +1162,32 @@ impl TableKind {
 
     fn site(self, row: &rusqlite::Row<'_>) -> rusqlite::Result<String> {
         let text: String = match self {
+            Self::GenericSqlite(_) => {
+                unreachable!("Generic table groups have their own snapshot owner")
+            }
             Self::ChromiumHistory | Self::ChromiumDownloads => row.get(2)?,
             Self::ChromiumCookies => row.get(1)?,
             Self::FirefoxHistory | Self::FirefoxDownloads => row.get(2)?,
             Self::FirefoxCookies => row.get(2)?,
+            Self::ChromiumOriginCerts
+            | Self::ChromiumChannelIds
+            | Self::FirefoxOfflinePermissions
+            | Self::FirefoxWebApps
+            | Self::FirefoxWebApps2
+            | Self::ChromiumWebSql
+            | Self::ChromiumQuota
+            | Self::ChromiumKeywords
+            | Self::ChromiumShortcuts => {
+                unreachable!("Site-storage tables use the cookie snapshot owner")
+            }
         };
         Ok(safe_site_label(&text))
     }
 
     fn verify_delete_schema(self, conn: &Connection) -> Result<(), String> {
+        if matches!(self, Self::GenericSqlite(_)) {
+            return Err("Generic table groups require their reviewed snapshot owner.".into());
+        }
         if self == Self::FirefoxDownloads {
             return Err(
                 "Firefox download-history records do not have a supported standalone schema."
@@ -586,7 +1198,7 @@ impl TableKind {
         if !self
             .required_columns()
             .iter()
-            .all(|name| columns.contains(*name))
+            .all(|name| columns.contains(&name.to_ascii_lowercase()))
         {
             return Err("The browser database schema is not supported.".into());
         }
@@ -651,6 +1263,9 @@ impl TableKind {
 
     fn delete(self, tx: &rusqlite::Transaction<'_>, row_id: i64) -> rusqlite::Result<usize> {
         match self {
+            Self::GenericSqlite(_) => {
+                unreachable!("Generic table groups have their own snapshot owner")
+            }
             Self::ChromiumHistory => {
                 let mut visits = Vec::new();
                 {
@@ -727,6 +1342,17 @@ impl TableKind {
             }
             Self::FirefoxCookies => tx.execute("DELETE FROM moz_cookies WHERE rowid=?1", [row_id]),
             Self::FirefoxDownloads => Err(rusqlite::Error::InvalidQuery),
+            Self::ChromiumOriginCerts
+            | Self::ChromiumChannelIds
+            | Self::FirefoxOfflinePermissions
+            | Self::FirefoxWebApps
+            | Self::FirefoxWebApps2
+            | Self::ChromiumWebSql
+            | Self::ChromiumQuota
+            | Self::ChromiumKeywords
+            | Self::ChromiumShortcuts => {
+                unreachable!("Site-storage tables use the cookie snapshot owner")
+            }
         }
     }
 }
@@ -821,26 +1447,70 @@ struct DatabaseTarget {
     kind: TableKind,
 }
 
+// Only a missing component below a verified, nonlinked profile makes an optional
+// store absent. In particular, a dangling link must never look like absence.
+fn optional_database_absent(root: &Path, path: &Path) -> Result<bool, ()> {
+    safe_profile_root(root).map_err(|_| ())?;
+    let relative = path.strip_prefix(root).map_err(|_| ())?;
+    let components = relative.components().collect::<Vec<_>>();
+    if components.is_empty() {
+        return Err(());
+    }
+    let mut current = root.to_owned();
+    for (index, component) in components.iter().enumerate() {
+        let std::path::Component::Normal(name) = component else {
+            return Err(());
+        };
+        current.push(name);
+        match fs::symlink_metadata(&current) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+            Err(_) => return Err(()),
+            Ok(metadata) => {
+                if is_link(&metadata)
+                    || (index + 1 < components.len() && !metadata.is_dir())
+                    || (index + 1 == components.len() && !metadata.is_file())
+                {
+                    return Err(());
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
 fn database_targets(profile: &BrowserProfile) -> Vec<DatabaseTarget> {
-    match profile.browser {
-        Browser::Chrome | Browser::Edge => vec![
-            DatabaseTarget {
-                path: profile.root.join("History"),
-                kind: TableKind::ChromiumHistory,
-            },
-            DatabaseTarget {
-                path: match profile.root.join("Network").join("Cookies").try_exists() {
-                    Ok(false) => profile.root.join("Cookies"),
-                    Ok(true) | Err(_) => profile.root.join("Network").join("Cookies"),
-                },
-                kind: TableKind::ChromiumCookies,
-            },
-            DatabaseTarget {
-                path: profile.root.join("History"),
-                kind: TableKind::ChromiumDownloads,
-            },
-        ],
-        Browser::Firefox => vec![
+    if profile.browser.is_chromium() {
+        let mut targets = vec![DatabaseTarget {
+            path: profile.root.join("History"),
+            kind: TableKind::ChromiumHistory,
+        }];
+        targets.extend(CHROMIUM_COOKIE_DATABASES.iter().map(|name| DatabaseTarget {
+            path: profile.root.join(name),
+            kind: TableKind::ChromiumCookies,
+        }));
+        targets.extend(
+            CHROMIUM_SITE_DATABASES
+                .iter()
+                .map(|(name, kind)| DatabaseTarget {
+                    path: profile.root.join(name),
+                    kind: *kind,
+                }),
+        );
+        targets.extend(
+            CHROMIUM_HISTORY_DATABASES
+                .iter()
+                .map(|(name, kind)| DatabaseTarget {
+                    path: profile.root.join(name),
+                    kind: *kind,
+                }),
+        );
+        targets.push(DatabaseTarget {
+            path: profile.root.join("History"),
+            kind: TableKind::ChromiumDownloads,
+        });
+        targets
+    } else {
+        let mut targets = vec![
             DatabaseTarget {
                 path: profile.root.join("places.sqlite"),
                 kind: TableKind::FirefoxHistory,
@@ -853,19 +1523,30 @@ fn database_targets(profile: &BrowserProfile) -> Vec<DatabaseTarget> {
                 path: profile.root.join("places.sqlite"),
                 kind: TableKind::FirefoxDownloads,
             },
-        ],
+        ];
+        targets.extend(
+            MOZILLA_SITE_DATABASES
+                .iter()
+                .map(|(name, kind)| DatabaseTarget {
+                    path: profile.root.join(name),
+                    kind: *kind,
+                }),
+        );
+        targets
     }
 }
 
-/// Discover standard Chrome, Edge and Firefox profiles for the current Windows or macOS user.
+/// Discover declared Windows browser profile patterns and existing macOS roots.
 pub fn discover_profiles() -> ProfileInventory {
     let mut inventory = ProfileInventory::default();
     let mut roots = Vec::new();
     if cfg!(windows) {
-        if let Some(local) = dirs::data_local_dir() {
-            roots.push((Browser::Chrome, local.join("Google/Chrome/User Data")));
-            roots.push((Browser::Edge, local.join("Microsoft/Edge/User Data")));
-        }
+        inventory = profile_discovery::reference_profiles(|environment| match environment {
+            "localappdata" => dirs::data_local_dir(),
+            "appdata" => dirs::data_dir(),
+            "programfiles" => std::env::var_os("ProgramFiles").map(PathBuf::from),
+            _ => None,
+        });
         if let Some(roaming) = dirs::data_dir() {
             roots.push((Browser::Firefox, roaming.join("Mozilla/Firefox")));
         }
@@ -928,7 +1609,7 @@ pub fn discover_profiles() -> ProfileInventory {
                 continue;
             }
         }
-        let safe = match safe_root(&root) {
+        let safe = match safe_profile_root(&root) {
             Ok(path) => path,
             Err(_) => {
                 inventory.partial = true;
@@ -939,13 +1620,19 @@ pub fn discover_profiles() -> ProfileInventory {
                 continue;
             }
         };
-        match browser {
-            Browser::Chrome | Browser::Edge => {
-                discover_chromium_profiles(browser, &safe, &mut inventory)
-            }
-            Browser::Firefox => discover_firefox_profiles(&safe, &mut inventory),
+        if browser.is_chromium() {
+            profile_discovery::user_data_profiles(browser, &safe, &mut inventory);
+        } else {
+            discover_firefox_profiles(&safe, &mut inventory);
         }
     }
+    // Prefer explicit profiles.ini names over an earlier folder-pattern match.
+    let mut seen_profiles = HashSet::new();
+    inventory.profiles.reverse();
+    inventory
+        .profiles
+        .retain(|profile| seen_profiles.insert((profile.browser, path_identity(&profile.root))));
+    inventory.profiles.reverse();
     inventory.profiles.sort_by(|left, right| {
         left.browser
             .label()
@@ -1001,7 +1688,7 @@ fn windows_user_data_policy_roots(browser: Browser) -> Result<Vec<PathBuf>, Stri
     let policy = match browser {
         Browser::Chrome => "Software\\Policies\\Google\\Chrome",
         Browser::Edge => "Software\\Policies\\Microsoft\\Edge",
-        Browser::Firefox => return Ok(Vec::new()),
+        _ => return Ok(Vec::new()),
     };
     let key_name = policy
         .encode_utf16()
@@ -1119,61 +1806,6 @@ fn expand_percent_environment_variables(value: &str) -> String {
     output
 }
 
-fn discover_chromium_profiles(browser: Browser, root: &Path, inventory: &mut ProfileInventory) {
-    let friendly_names = fs::read(root.join("Local State"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-        .and_then(|value| value.pointer("/profile/info_cache").cloned())
-        .and_then(|value| value.as_object().cloned())
-        .unwrap_or_default();
-    let entries = match fs::read_dir(root) {
-        Ok(entries) => entries,
-        Err(_) => {
-            inventory.partial = true;
-            inventory.skipped.push(InventorySkip {
-                path: Some(root.to_path_buf()),
-                reason: "Browser profile directory could not be read.".into(),
-            });
-            return;
-        }
-    };
-    for entry in entries {
-        if inventory.profiles.len() >= MAX_PROFILES {
-            inventory.partial = true;
-            break;
-        }
-        let Ok(entry) = entry else {
-            inventory.partial = true;
-            continue;
-        };
-        let profile_path = entry.path();
-        let Some(directory) = profile_path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if directory != "Default" && !directory.starts_with("Profile ") {
-            continue;
-        }
-        if !safe_profile_directory(root, &profile_path, false) {
-            continue;
-        }
-        let name = friendly_names
-            .get(directory)
-            .and_then(|profile| profile.get("name"))
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned)
-            .unwrap_or_else(|| {
-                if directory == "Default" {
-                    "Default".into()
-                } else {
-                    directory.into()
-                }
-            });
-        inventory
-            .profiles
-            .push(make_profile(browser, name, profile_path));
-    }
-}
-
 fn discover_firefox_profiles(root: &Path, inventory: &mut ProfileInventory) {
     let ini = fs::read_to_string(root.join("profiles.ini")).unwrap_or_default();
     let mut section = String::new();
@@ -1251,15 +1883,20 @@ fn safe_profile_directory(root: &Path, directory: &Path, allow_external: bool) -
     if is_link(&metadata) || !metadata.is_dir() {
         return false;
     }
-    if !allow_external && !contained(root, directory) {
+    if !allow_external && !contains_named_path(root, directory) {
         return false;
     }
     dunce::canonicalize(directory).is_ok_and(|canonical| {
-        same_path(&canonical, directory) && (allow_external || contained(root, &canonical))
+        same_named_path(&canonical, directory)
+            && (allow_external || contains_named_path(root, &canonical))
     })
 }
 
 fn make_profile(browser: Browser, name: String, root: PathBuf) -> BrowserProfile {
+    let root = dunce::canonicalize(&root)
+        .ok()
+        .filter(|canonical| same_named_path(canonical, &root))
+        .unwrap_or(root);
     let id = format!(
         "{}:{}",
         browser.label().to_ascii_lowercase(),
@@ -1536,8 +2173,9 @@ fn request_macos_close(selected: &[RunningBrowser], report: &mut CloseRequestRep
 
 fn browser_for_executable(executable: &str) -> Option<Browser> {
     let lower = executable.to_ascii_lowercase();
-    [Browser::Chrome, Browser::Edge, Browser::Firefox]
-        .into_iter()
+    Browser::ALL
+        .iter()
+        .copied()
         .find(|browser| browser.process_names().iter().any(|name| lower == *name))
 }
 
@@ -1550,11 +2188,7 @@ pub fn scan_profiles(
     let settings = CookieExceptionSettings::default();
     scan_profiles_with_settings(
         profiles,
-        &[
-            PrivacyCategory::History,
-            PrivacyCategory::Cookies,
-            PrivacyCategory::Downloads,
-        ],
+        &PrivacyCategory::DEFAULT,
         &settings,
         cancel,
         progress,
@@ -1577,11 +2211,13 @@ pub fn scan_profiles_with_settings(
         .copied()
         .filter(|category| included.insert(*category))
         .collect::<Vec<_>>();
-    let keep_domains = settings
-        .keep_domains
-        .iter()
-        .filter_map(|domain| normalize_cookie_domain(domain).ok())
-        .collect::<HashSet<_>>();
+    let keep_domains = std::sync::Arc::new(
+        settings
+            .keep_domains
+            .iter()
+            .filter_map(|domain| normalize_cookie_domain(domain).ok())
+            .collect::<HashSet<_>>(),
+    );
     let mut report = PrivacyReport {
         id: Uuid::new_v4(),
         profiles_scanned: 0,
@@ -1600,23 +2236,79 @@ pub fn scan_profiles_with_settings(
     let selected_profiles = profiles
         .iter()
         .take(MAX_PROFILES)
-        .filter(|profile| seen.insert((profile.browser, path_identity(&profile.root))))
         .cloned()
+        .map(|mut profile| {
+            // Only normalize a root after the no-link check succeeds. Invalid
+            // roots retain the existing partial-scan refusal path.
+            if let Ok(root) = safe_profile_root(&profile.root) {
+                profile.root = root;
+            }
+            profile
+        })
+        .filter(|profile| seen.insert((profile.browser, path_identity(&profile.root))))
         .collect::<Vec<_>>();
     if profiles.len() > MAX_PROFILES {
         report.truncated = true;
         add_skip(&mut report, "", None, "Profile limit reached.");
     }
+    let mut storage_byte_budget = storage_files::MAX_SCAN_BYTES;
+    let mut storage_file_budget = MAX_RECORDS;
+    let mut seen_storage_paths = HashSet::new();
+    let mut leveldb_budget = leveldb::scan_budget();
     for (profile_index, profile) in selected_profiles.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
             report.cancelled = true;
             break;
         }
         report.profiles_scanned += 1;
-        let targets = database_targets(profile)
+        let mut targets = database_targets(profile)
             .into_iter()
             .filter(|target| selected_categories.contains(&target.kind.category()))
             .collect::<Vec<_>>();
+        let mut storage_paths = Vec::new();
+        let mut leveldb_paths = Vec::new();
+        if selected_categories.contains(&PrivacyCategory::Cookies) {
+            let inventory = storage_files::discover_paths(
+                profile.browser,
+                &profile.root,
+                cancel,
+                storage_files::MAX_ENTRIES,
+                storage_files::MAX_PATH_BYTES,
+            );
+            report.cancelled |= inventory.cancelled;
+            report.truncated |= inventory.truncated;
+            for issue in inventory.issues {
+                add_skip(
+                    &mut report,
+                    &profile.name,
+                    Some(PrivacyCategory::Cookies),
+                    issue,
+                );
+            }
+            targets.extend(inventory.databases);
+            storage_paths = inventory.files;
+            leveldb_paths = inventory.leveldb_dirs;
+        }
+        if selected_categories.iter().any(|c| {
+            matches!(
+                c,
+                PrivacyCategory::History
+                    | PrivacyCategory::LastDownloadLocation
+                    | PrivacyCategory::SnapLocation
+            )
+        }) && !report.cancelled
+        {
+            preferences::scan(profile, &selected_categories, cancel, &mut report);
+        }
+        let mut seen_targets = HashSet::new();
+        targets.retain(|target| {
+            !file_owned_category(
+                profile.browser,
+                target.kind.category(),
+                &profile.root,
+                &target.path,
+            ) && seen_targets.insert((path_identity(&target.path), target.kind))
+        });
         for target in targets {
             if cancel.load(Ordering::Relaxed) {
                 report.cancelled = true;
@@ -1636,10 +2328,95 @@ pub fn scan_profiles_with_settings(
             progress(PrivacyProgress {
                 profiles_completed: profile_index + 1,
                 profiles_total: selected_profiles.len(),
-                records_found: report.records.len(),
+                records_found: report.records.iter().map(PrivacyRecord::item_count).sum(),
                 profile_name: profile.name.clone(),
                 category: target.kind.category(),
             });
+        }
+        if !report.cancelled && !report.truncated {
+            generic_sqlite::scan(profile, &selected_categories, cancel, &mut report);
+        }
+        if !report.cancelled && report.records.len() < MAX_RECORDS {
+            for observed_file in storage_paths {
+                if !seen_storage_paths.insert(storage_files::path_key(&observed_file.path)) {
+                    continue;
+                }
+                if storage_file_budget == 0 {
+                    report.truncated = true;
+                    add_skip(
+                        &mut report,
+                        &profile.name,
+                        Some(PrivacyCategory::Cookies),
+                        "Site-storage file inspection limit reached.",
+                    );
+                    break;
+                }
+                storage_file_budget -= 1;
+                if cancel.load(Ordering::Relaxed) {
+                    report.cancelled = true;
+                    break;
+                }
+                storage_files::scan_file(
+                    profile,
+                    &observed_file,
+                    &keep_domains,
+                    cancel,
+                    &mut storage_byte_budget,
+                    &mut report,
+                );
+                if report.records.len() >= MAX_RECORDS {
+                    report.truncated = true;
+                    break;
+                }
+            }
+            record_files::scan(
+                profile,
+                &selected_categories,
+                &keep_domains,
+                cancel,
+                &mut storage_byte_budget,
+                &mut storage_file_budget,
+                &mut seen_storage_paths,
+                &mut report,
+            );
+            if selected_categories.contains(&PrivacyCategory::Sessions)
+                && !report.cancelled
+                && !report.truncated
+            {
+                session_files::scan(
+                    profile,
+                    cancel,
+                    &mut storage_byte_budget,
+                    &mut storage_file_budget,
+                    &mut seen_storage_paths,
+                    &mut report,
+                );
+                progress(PrivacyProgress {
+                    profiles_completed: profile_index + 1,
+                    profiles_total: selected_profiles.len(),
+                    records_found: report.records.iter().map(PrivacyRecord::item_count).sum(),
+                    profile_name: profile.name.clone(),
+                    category: PrivacyCategory::Sessions,
+                });
+            }
+            storage_files::group_records(profile, &mut report, cancel);
+            if selected_categories.contains(&PrivacyCategory::Cookies) {
+                leveldb::scan(
+                    profile,
+                    &leveldb_paths,
+                    &keep_domains,
+                    cancel,
+                    &mut leveldb_budget,
+                    &mut report,
+                );
+                progress(PrivacyProgress {
+                    profiles_completed: profile_index + 1,
+                    profiles_total: selected_profiles.len(),
+                    records_found: report.records.iter().map(PrivacyRecord::item_count).sum(),
+                    profile_name: profile.name.clone(),
+                    category: PrivacyCategory::Cookies,
+                });
+            }
         }
         if report.cancelled || report.truncated {
             break;
@@ -1658,6 +2435,19 @@ fn scan_database_target(
     report: &mut PrivacyReport,
 ) {
     let start_index = report.records.len();
+    match optional_database_absent(&profile.root, &target.path) {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(()) => {
+            add_skip(
+                report,
+                &profile.name,
+                Some(target.kind.category()),
+                "Browser database path is linked, invalid, or unavailable.",
+            );
+            return;
+        }
+    }
     let Ok((canonical, before, _root)) = validate_database_path(&profile.root, &target.path) else {
         let reason = match target.path.try_exists() {
             Ok(false) => "Known browser database is missing.",
@@ -1705,8 +2495,448 @@ fn scan_database_target(
         );
         return;
     }
+    if let Some((alternate, report_empty)) = target.kind.alternate_cookie_table() {
+        match has_table(&conn, target.kind.table()) {
+            Ok(false) => {
+                let object_exists = conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name=?1 COLLATE NOCASE)",
+                    [target.kind.table()],
+                    |row| row.get::<_, bool>(0),
+                );
+                if object_exists != Ok(false) {
+                    add_skip(
+                        report,
+                        &profile.name,
+                        Some(PrivacyCategory::Cookies),
+                        "Site storage contains an unsupported table object.",
+                    );
+                    return;
+                }
+                if report_empty && !has_table(&conn, alternate.table()).unwrap_or(false) {
+                    add_skip(
+                        report,
+                        &profile.name,
+                        Some(PrivacyCategory::Cookies),
+                        "Site storage has no recognized tables.",
+                    );
+                }
+                return;
+            }
+            Ok(true) => {}
+            Err(_) => {
+                add_skip(
+                    report,
+                    &profile.name,
+                    Some(PrivacyCategory::Cookies),
+                    "Site storage schema could not be inspected.",
+                );
+                return;
+            }
+        }
+    }
+    if target.kind == TableKind::ChromiumShortcuts {
+        shortcuts::scan(&conn, profile, &canonical, &before, cancel, report);
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(PrivacyCategory::History),
+                "Database changed during inventory; its shortcut rows were discarded.",
+            );
+        }
+        return;
+    }
+    if target.kind == TableKind::ChromiumKeywords {
+        keywords::scan(&conn, profile, &canonical, &before, cancel, report);
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(PrivacyCategory::History),
+                "Database changed during inventory; its keyword rows were discarded.",
+            );
+        }
+        return;
+    }
+    if target.kind == TableKind::ChromiumQuota {
+        let observed = conn
+            .execute_batch("BEGIN")
+            .map_err(|_| "Quota snapshot could not be opened.".to_owned())
+            .and_then(|_| quota::Snapshot::read(&conn, keep_domains, cancel));
+        match observed {
+            Ok(snapshot) => {
+                report.cookie_exempted = report.cookie_exempted.saturating_add(snapshot.exempted);
+                for reason in &snapshot.issues {
+                    add_skip(
+                        report,
+                        &profile.name,
+                        Some(PrivacyCategory::Cookies),
+                        reason,
+                    );
+                }
+                for (site, quota) in snapshot.reviews() {
+                    if cancel.load(Ordering::Relaxed) {
+                        report.cancelled = true;
+                        break;
+                    }
+                    if report.records.len() >= MAX_RECORDS {
+                        report.truncated = true;
+                        break;
+                    }
+                    let id = Uuid::new_v4();
+                    report.records.push(PrivacyRecord {
+                        id,
+                        browser: profile.browser,
+                        profile_id: profile.id.clone(),
+                        profile_name: profile.name.clone(),
+                        category: PrivacyCategory::Cookies,
+                        site,
+                        locator: RecordLocator::Database(RowLocator {
+                            id,
+                            browser: profile.browser,
+                            profile_id: profile.id.clone(),
+                            profile_name: profile.name.clone(),
+                            profile_root: profile.root.clone(),
+                            database: canonical.clone(),
+                            database_stamp: before.clone(),
+                            kind: target.kind,
+                            row_id: 0,
+                            identity: Vec::new(),
+                            history: None,
+                            download: None,
+                            firefox: None,
+                            cookie: None,
+                            quota: Some(quota),
+                            keyword: None,
+                            shortcut: None,
+                            generic: None,
+                        }),
+                    });
+                }
+            }
+            Err(reason) => {
+                report.cancelled |= cancel.load(Ordering::Relaxed);
+                add_skip(
+                    report,
+                    &profile.name,
+                    Some(PrivacyCategory::Cookies),
+                    &reason,
+                );
+            }
+        }
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(PrivacyCategory::Cookies),
+                "Database changed during inventory; its rows were discarded.",
+            );
+        }
+        return;
+    }
+    if target.kind.category() == PrivacyCategory::Cookies {
+        let observed = conn
+            .execute_batch("BEGIN")
+            .map_err(|_| "Cookie snapshot could not be opened.".to_owned())
+            .and_then(|_| cookies::Snapshot::read(&conn, target.kind, cancel));
+        match observed {
+            Ok(snapshot) => {
+                for (site, row_id, cookie) in snapshot.reviews() {
+                    if cancel.load(Ordering::Relaxed) {
+                        report.cancelled = true;
+                        break;
+                    }
+                    if is_cookie_exception(&site, keep_domains) {
+                        report.cookie_exempted = report.cookie_exempted.saturating_add(1);
+                        continue;
+                    }
+                    if report.records.len() >= MAX_RECORDS {
+                        report.truncated = true;
+                        break;
+                    }
+                    let id = Uuid::new_v4();
+                    report.records.push(PrivacyRecord {
+                        id,
+                        browser: profile.browser,
+                        profile_id: profile.id.clone(),
+                        profile_name: profile.name.clone(),
+                        category: PrivacyCategory::Cookies,
+                        site,
+                        locator: RecordLocator::Database(RowLocator {
+                            id,
+                            browser: profile.browser,
+                            profile_id: profile.id.clone(),
+                            profile_name: profile.name.clone(),
+                            profile_root: profile.root.clone(),
+                            database: canonical.clone(),
+                            database_stamp: before.clone(),
+                            kind: target.kind,
+                            row_id,
+                            identity: Vec::new(),
+                            history: None,
+                            download: None,
+                            firefox: None,
+                            cookie: Some(cookie),
+                            quota: None,
+                            keyword: None,
+                            shortcut: None,
+                            generic: None,
+                        }),
+                    });
+                }
+            }
+            Err(reason) => {
+                report.cancelled |= cancel.load(Ordering::Relaxed);
+                add_skip(
+                    report,
+                    &profile.name,
+                    Some(PrivacyCategory::Cookies),
+                    &reason,
+                );
+            }
+        }
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(PrivacyCategory::Cookies),
+                "Database changed during inventory; its rows were discarded.",
+            );
+        }
+        return;
+    }
+    if matches!(
+        target.kind,
+        TableKind::FirefoxHistory | TableKind::FirefoxDownloads
+    ) {
+        let observed = conn
+            .execute_batch("BEGIN")
+            .map_err(|_| "Firefox Places snapshot could not be opened.".to_owned())
+            .and_then(|_| firefox_places::Snapshot::read(&conn, cancel));
+        match observed {
+            Ok(snapshot) => {
+                for (site, row_id, review) in snapshot.reviews(target.kind.category()) {
+                    if cancel.load(Ordering::Relaxed) {
+                        report.cancelled = true;
+                        break;
+                    }
+                    if report.records.len() >= MAX_RECORDS {
+                        report.truncated = true;
+                        break;
+                    }
+                    let id = Uuid::new_v4();
+                    report.records.push(PrivacyRecord {
+                        id,
+                        browser: profile.browser,
+                        profile_id: profile.id.clone(),
+                        profile_name: profile.name.clone(),
+                        category: target.kind.category(),
+                        site,
+                        locator: RecordLocator::Database(RowLocator {
+                            id,
+                            browser: profile.browser,
+                            profile_id: profile.id.clone(),
+                            profile_name: profile.name.clone(),
+                            profile_root: profile.root.clone(),
+                            database: canonical.clone(),
+                            database_stamp: before.clone(),
+                            kind: target.kind,
+                            row_id,
+                            identity: Vec::new(),
+                            history: None,
+                            download: None,
+                            firefox: Some(review),
+                            cookie: None,
+                            quota: None,
+                            keyword: None,
+                            shortcut: None,
+                            generic: None,
+                        }),
+                    });
+                }
+            }
+            Err(reason) => {
+                report.cancelled |= cancel.load(Ordering::Relaxed);
+                add_skip(report, &profile.name, Some(target.kind.category()), &reason);
+            }
+        }
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(target.kind.category()),
+                "Database changed during inventory; its rows were discarded.",
+            );
+        }
+        return;
+    }
+    if target.kind == TableKind::ChromiumDownloads {
+        let observed = conn
+            .execute_batch("BEGIN")
+            .map_err(|_| "Download snapshot could not be opened.".to_owned())
+            .and_then(|_| chromium_downloads::Snapshot::read(&conn, cancel));
+        match observed {
+            Ok(snapshot) => {
+                if let Some(reason) = snapshot.omission {
+                    add_skip(
+                        report,
+                        &profile.name,
+                        Some(PrivacyCategory::Downloads),
+                        reason,
+                    );
+                }
+                if snapshot.compaction_pending {
+                    add_skip(
+                        report,
+                        &profile.name,
+                        Some(PrivacyCategory::Downloads),
+                        "Unused database pages were found. Database compaction is not included in this record cleanup.",
+                    );
+                }
+                for (site, row_id, download) in snapshot.reviews() {
+                    if cancel.load(Ordering::Relaxed) {
+                        report.cancelled = true;
+                        break;
+                    }
+                    if report.records.len() >= MAX_RECORDS {
+                        report.truncated = true;
+                        break;
+                    }
+                    let id = Uuid::new_v4();
+                    report.records.push(PrivacyRecord {
+                        id,
+                        browser: profile.browser,
+                        profile_id: profile.id.clone(),
+                        profile_name: profile.name.clone(),
+                        category: PrivacyCategory::Downloads,
+                        site,
+                        locator: RecordLocator::Database(RowLocator {
+                            id,
+                            browser: profile.browser,
+                            profile_id: profile.id.clone(),
+                            profile_name: profile.name.clone(),
+                            profile_root: profile.root.clone(),
+                            database: canonical.clone(),
+                            database_stamp: before.clone(),
+                            kind: target.kind,
+                            row_id,
+                            identity: Vec::new(),
+                            history: None,
+                            download: Some(download),
+                            firefox: None,
+                            cookie: None,
+                            quota: None,
+                            keyword: None,
+                            shortcut: None,
+                            generic: None,
+                        }),
+                    });
+                }
+            }
+            Err(reason) => {
+                report.cancelled |= cancel.load(Ordering::Relaxed);
+                add_skip(
+                    report,
+                    &profile.name,
+                    Some(PrivacyCategory::Downloads),
+                    &reason,
+                );
+            }
+        }
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(PrivacyCategory::Downloads),
+                "Database changed during inventory; its rows were discarded.",
+            );
+        }
+        return;
+    }
     if let Err(reason) = target.kind.verify_delete_schema(&conn) {
         add_skip(report, &profile.name, Some(target.kind.category()), &reason);
+        return;
+    }
+    if target.kind == TableKind::ChromiumHistory {
+        let observed = (|| {
+            conn.execute_batch("BEGIN")
+                .map_err(|_| "History snapshot could not be opened.".to_owned())?;
+            chromium_history::Snapshot::read(&conn, &profile.root, cancel)
+        })();
+        match observed {
+            Ok(snapshot) => {
+                for (site, row_id, history) in snapshot.reviews() {
+                    if cancel.load(Ordering::Relaxed) {
+                        report.cancelled = true;
+                        break;
+                    }
+                    if report.records.len() >= MAX_RECORDS {
+                        report.truncated = true;
+                        break;
+                    }
+                    let id = Uuid::new_v4();
+                    report.records.push(PrivacyRecord {
+                        id,
+                        browser: profile.browser,
+                        profile_id: profile.id.clone(),
+                        profile_name: profile.name.clone(),
+                        category: PrivacyCategory::History,
+                        site,
+                        locator: RecordLocator::Database(RowLocator {
+                            id,
+                            browser: profile.browser,
+                            profile_id: profile.id.clone(),
+                            profile_name: profile.name.clone(),
+                            profile_root: profile.root.clone(),
+                            database: canonical.clone(),
+                            database_stamp: before.clone(),
+                            kind: target.kind,
+                            row_id,
+                            identity: Vec::new(),
+                            history: Some(history),
+                            download: None,
+                            firefox: None,
+                            cookie: None,
+                            quota: None,
+                            keyword: None,
+                            shortcut: None,
+                            generic: None,
+                        }),
+                    });
+                }
+            }
+            Err(reason) => {
+                report.cancelled |= cancel.load(Ordering::Relaxed);
+                add_skip(
+                    report,
+                    &profile.name,
+                    Some(PrivacyCategory::History),
+                    &reason,
+                );
+            }
+        }
+        drop(conn);
+        if !file_stamp(&canonical).is_ok_and(|after| after == before) {
+            report.records.truncate(start_index);
+            add_skip(
+                report,
+                &profile.name,
+                Some(PrivacyCategory::History),
+                "Database changed during inventory; its rows were discarded.",
+            );
+        }
         return;
     }
     let remaining = MAX_RECORDS
@@ -1790,7 +3020,7 @@ fn scan_database_target(
             profile_name: profile.name.clone(),
             category: target.kind.category(),
             site,
-            locator: RowLocator {
+            locator: RecordLocator::Database(RowLocator {
                 id,
                 browser: profile.browser,
                 profile_id: profile.id.clone(),
@@ -1801,7 +3031,15 @@ fn scan_database_target(
                 kind: target.kind,
                 row_id,
                 identity,
-            },
+                history: None,
+                download: None,
+                firefox: None,
+                cookie: None,
+                quota: None,
+                keyword: None,
+                shortcut: None,
+                generic: None,
+            }),
         });
     }
     drop(rows);
@@ -2050,8 +3288,8 @@ fn validate_database_path(
     profile_root: &Path,
     database: &Path,
 ) -> Result<(PathBuf, FileStamp, PathBuf), String> {
-    let root = safe_root(profile_root)?;
-    if !same_path(&root, profile_root) || !contained(&root, database) {
+    let root = safe_profile_root(profile_root)?;
+    if !same_named_path(&root, profile_root) || !contains_named_path(&root, database) {
         return Err("Database is outside the profile.".into());
     }
     let metadata = fs::symlink_metadata(database).map_err(|e| e.to_string())?;
@@ -2059,11 +3297,23 @@ fn validate_database_path(
         return Err("Database is linked or not a regular file.".into());
     }
     let canonical = dunce::canonicalize(database).map_err(|e| e.to_string())?;
-    if !same_path(&canonical, database) || !contained(&root, &canonical) {
+    if !same_named_path(&canonical, database) || !contains_named_path(&root, &canonical) {
         return Err("Database resolves outside its profile.".into());
     }
     let stamp = file_stamp(&canonical)?;
     Ok((canonical, stamp, root))
+}
+
+fn safe_profile_root(path: &Path) -> Result<PathBuf, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if is_link(&metadata) || !metadata.is_dir() {
+        return Err("The profile root is linked or not a directory.".into());
+    }
+    let canonical = dunce::canonicalize(path).map_err(|e| e.to_string())?;
+    if !same_named_path(&canonical, path) {
+        return Err("A profile parent redirects through a link.".into());
+    }
+    Ok(canonical)
 }
 
 /// Build a deletion plan only from exact record IDs in the current inventory.
@@ -2084,18 +3334,56 @@ pub fn build_cleanup_plan(
         .collect();
     let mut seen = HashSet::new();
     let mut records = Vec::new();
+    let mut files = Vec::new();
+    let mut keys = Vec::new();
+    let mut preferences = Vec::new();
     for id in selected_ids {
         let Some(record) = by_id.get(id) else {
             return Err("Unknown record ID. Scan again before cleanup.".into());
         };
-        if seen.insert(*id) {
-            records.push(record.locator.clone());
+        if let Some(reason) = record.unavailable_reason() {
+            return Err(reason.into());
         }
+        if seen.insert(*id) {
+            match &record.locator {
+                RecordLocator::Database(row) => records.push(row.clone()),
+                RecordLocator::File(file) => files.push(file.clone()),
+                RecordLocator::LevelDb(key) => {
+                    if key.id != record.id {
+                        return Err("Local Storage review identity changed.".into());
+                    }
+                    keys.push(key.clone());
+                }
+                RecordLocator::Preferences(field) => {
+                    if field.id != record.id {
+                        return Err("Browser preference review identity changed.".into());
+                    }
+                    preferences.push(field.clone());
+                }
+            }
+        }
+    }
+    let mut paths = HashSet::new();
+    ensure_sql_owners(&records)?;
+    for group in &files {
+        if !group.unique_paths(&mut paths) {
+            return Err("Selected storage groups overlap. Scan again before cleanup.".into());
+        }
+    }
+    let structured_paths = preferences
+        .iter()
+        .map(preferences::Review::source_key)
+        .collect::<HashSet<_>>();
+    if structured_paths.into_iter().any(|key| !paths.insert(key)) {
+        return Err("Selected browser data owners overlap. Scan again before cleanup.".into());
     }
     Ok(PrivacyPlan {
         report_id: report.id,
         operation_id: Uuid::new_v4(),
         records,
+        files,
+        keys,
+        preferences,
     })
 }
 
@@ -2131,10 +3419,45 @@ pub fn clean_privacy_with_runtime(
     runtime: &impl BrowserRuntime,
     progress: &mut impl FnMut(usize, usize),
 ) -> Result<PrivacyReceipt, String> {
-    if plan.records.is_empty() {
+    clean_privacy_with_runtime_and_trash(
+        data_dir,
+        plan,
+        cancel,
+        runtime,
+        &mut crate::cleanup::SystemTrash,
+        progress,
+    )
+}
+
+/// Supplies the recoverable file-effect port as well as the browser runtime.
+/// Production uses SystemTrash; fixture ports operate only on owned test files.
+pub fn clean_privacy_with_runtime_and_trash(
+    data_dir: &Path,
+    plan: &PrivacyPlan,
+    cancel: &AtomicBool,
+    runtime: &impl BrowserRuntime,
+    trash: &mut impl crate::cleanup::TrashPort,
+    progress: &mut impl FnMut(usize, usize),
+) -> Result<PrivacyReceipt, String> {
+    if plan.records.is_empty()
+        && plan.files.is_empty()
+        && plan.keys.is_empty()
+        && plan.preferences.is_empty()
+    {
         return Err("Select browser records from the current scan.".into());
     }
-    ensure_browsers_stopped(runtime, &plan.records)?;
+    ensure_database_access_allowed(runtime, &plan.records)?;
+    storage_files::preflight(runtime, &plan.files)?;
+    leveldb_write::preflight(runtime, &plan.keys)?;
+    preferences::preflight(runtime, &plan.preferences)?;
+    for database in plan
+        .records
+        .iter()
+        .map(|r| &r.database)
+        .collect::<HashSet<_>>()
+    {
+        generic_sqlite::pending(data_dir, database)?;
+    }
 
     let mut journal = PrivacyJournal::create(data_dir, plan.operation_id)?;
     journal.append(&PrivacyJournalEvent::Start {
@@ -2144,7 +3467,7 @@ pub fn clean_privacy_with_runtime(
     })?;
     let mut receipt = PrivacyReceipt {
         id: plan.operation_id,
-        selected: plan.records.len(),
+        selected: plan.records.len() + plan.files.len() + plan.keys.len() + plan.preferences.len(),
         ..PrivacyReceipt::default()
     };
     let mut grouped: std::collections::BTreeMap<PathBuf, Vec<RowLocator>> =
@@ -2155,10 +3478,21 @@ pub fn clean_privacy_with_runtime(
             .or_default()
             .push(record.clone());
     }
-    let total = grouped.values().map(Vec::len).sum::<usize>();
+    let total = grouped.values().map(Vec::len).sum::<usize>()
+        + plan.files.len()
+        + plan.keys.len()
+        + plan.preferences.len();
     let mut done = 0;
 
-    for (database, records) in grouped {
+    for (database, mut records) in grouped {
+        // Independent legacy rows precede parent download groups when both
+        // were reviewed, so declared legacy references need no inferred cascade.
+        records.sort_by_key(|record| {
+            record
+                .download
+                .as_ref()
+                .map_or(0, |review| review.priority())
+        });
         if cancel.load(Ordering::Relaxed) {
             receipt.cancelled = true;
             break;
@@ -2177,7 +3511,7 @@ pub fn clean_privacy_with_runtime(
             progress(done, total);
             continue;
         }
-        if let Err(error) = ensure_browsers_stopped(runtime, &records) {
+        if let Err(error) = ensure_database_access_allowed(runtime, &records) {
             receipt.errors.push(error);
             receipt.skipped = receipt.skipped.saturating_add(records.len());
             done += records.len();
@@ -2217,6 +3551,20 @@ pub fn clean_privacy_with_runtime(
             continue;
         }
 
+        let source_lease = if records.iter().any(|record| record.generic.is_some()) {
+            match generic_sqlite::SourceLease::acquire(&records[0].profile_root, &canonical) {
+                Ok(lease) => Some(lease),
+                Err(error) => {
+                    receipt.errors.push(error);
+                    receipt.skipped = receipt.skipped.saturating_add(records.len());
+                    done += records.len();
+                    progress(done, total);
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
         let backup =
             match make_database_backup(data_dir, plan.operation_id, &records[0], &canonical) {
                 Ok(path) => path,
@@ -2242,7 +3590,7 @@ pub fn clean_privacy_with_runtime(
             progress(done, total);
             continue;
         }
-        if let Err(error) = ensure_browsers_stopped(runtime, &records) {
+        if let Err(error) = ensure_database_access_allowed(runtime, &records) {
             receipt.errors.push(error);
             let _ = fs::remove_file(&backup);
             receipt.backups.pop();
@@ -2277,14 +3625,318 @@ pub fn clean_privacy_with_runtime(
             let tx = conn
                 .transaction_with_behavior(TransactionBehavior::Immediate)
                 .map_err(|e| format!("Browser database is busy: {e}"))?;
-            ensure_browsers_stopped(runtime, &records)?;
+            ensure_database_access_allowed(runtime, &records)?;
             verify_foreign_keys(&tx)?;
+            if let Some(lease) = &source_lease {
+                lease.check(&records[0].profile_root, &canonical)?;
+                generic_sqlite::validate_selected(&tx, &records, lease, cancel)?;
+            }
+            let mut cookie_snapshots = HashMap::new();
+            let quota = if let Some(review) = records.iter().find_map(|r| r.quota.as_ref()) {
+                if records
+                    .iter()
+                    .filter_map(|r| r.quota.as_ref())
+                    .any(|r| r.keep_domains() != review.keep_domains())
+                {
+                    return Err("Quota keep policy differs between reviewed groups.".into());
+                }
+                let observed = quota::Snapshot::read(&tx, review.keep_domains(), cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|r| r.id));
+                    tx.rollback()
+                        .map_err(|_| "Cancelled quota cleanup could not roll back.".to_owned())?;
+                    return Ok(());
+                }
+                Some(observed?)
+            } else {
+                None
+            };
+            let shortcut_snapshot = if records.iter().any(|record| record.shortcut.is_some()) {
+                let observed = shortcuts::Snapshot::read(&tx, &records[0].profile_root, cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback().map_err(|_| {
+                        "Cancelled shortcut cleanup could not roll back.".to_owned()
+                    })?;
+                    return Ok(());
+                }
+                Some(observed?)
+            } else {
+                None
+            };
+            let mut shared_shortcut_checks = HashMap::new();
+            let keyword_snapshot = if records.iter().any(|record| record.keyword.is_some()) {
+                let observed = keywords::Snapshot::read(&tx, cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback()
+                        .map_err(|_| "Cancelled keyword cleanup could not roll back.".to_owned())?;
+                    return Ok(());
+                }
+                Some(observed?)
+            } else {
+                None
+            };
+            for kind in records
+                .iter()
+                .filter(|record| record.cookie.is_some())
+                .map(|record| record.kind)
+                .collect::<HashSet<_>>()
+            {
+                let observed = cookies::Snapshot::read(&tx, kind, cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback()
+                        .map_err(|_| "Cancelled cookie cleanup could not roll back.".to_owned())?;
+                    return Ok(());
+                }
+                cookie_snapshots.insert(kind, observed?);
+            }
+            let history = if records.iter().any(|record| record.history.is_some()) {
+                TableKind::ChromiumHistory.verify_delete_schema(&tx)?;
+                let observed =
+                    chromium_history::Snapshot::read(&tx, &records[0].profile_root, cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback()
+                        .map_err(|_| "Cancelled history cleanup could not roll back.".to_owned())?;
+                    return Ok(());
+                }
+                Some(observed?)
+            } else {
+                None
+            };
+            // All dependency observations are checked against the same initial
+            // transaction snapshot, before our own referring-visit repairs.
+            let downloads = if records.iter().any(|record| record.download.is_some()) {
+                let observed = chromium_downloads::Snapshot::read(&tx, cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback().map_err(|_| {
+                        "Cancelled download cleanup could not roll back.".to_owned()
+                    })?;
+                    return Ok(());
+                }
+                Some(observed?)
+            } else {
+                None
+            };
+            let firefox = if records.iter().any(|record| record.firefox.is_some()) {
+                let observed = firefox_places::Snapshot::read(&tx, cancel);
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback()
+                        .map_err(|_| "Cancelled Firefox cleanup could not roll back.".to_owned())?;
+                    return Ok(());
+                }
+                Some(observed?)
+            } else {
+                None
+            };
+            let mut shared_firefox_checks = HashMap::new();
+            let valid_firefox = records
+                .iter()
+                .filter_map(|record| {
+                    record
+                        .firefox
+                        .as_ref()
+                        .filter(|review| {
+                            firefox.as_ref().is_some_and(|current| {
+                                review.matches(current, &mut shared_firefox_checks)
+                            })
+                        })
+                        .map(|_| record.id)
+                })
+                .collect::<HashSet<_>>();
+            if let Some(current) = &firefox {
+                let repaired = current.repair_visits(
+                    &tx,
+                    records
+                        .iter()
+                        .filter(|record| valid_firefox.contains(&record.id))
+                        .filter_map(|record| record.firefox.as_ref()),
+                    cancel,
+                );
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback().map_err(|_| {
+                        "Cancelled Firefox reference repair could not roll back.".to_owned()
+                    })?;
+                    return Ok(());
+                }
+                repaired?;
+            }
+            let mut shared_download_checks = HashMap::new();
+            let valid_downloads = records
+                .iter()
+                .filter_map(|record| {
+                    record
+                        .download
+                        .as_ref()
+                        .filter(|review| {
+                            downloads.as_ref().is_some_and(|current| {
+                                review.matches(current, &mut shared_download_checks)
+                            })
+                        })
+                        .map(|_| record.id)
+                })
+                .collect::<HashSet<_>>();
+            let mut shared_history_checks = HashMap::new();
+            let valid_history = records
+                .iter()
+                .filter_map(|record| {
+                    record
+                        .history
+                        .as_ref()
+                        .filter(|review| {
+                            history.as_ref().is_some_and(|current| {
+                                review.matches(current, &mut shared_history_checks)
+                            })
+                        })
+                        .map(|_| record.id)
+                })
+                .collect::<HashSet<_>>();
+            if let Some(history) = &history {
+                let repaired = history.repair_visits(
+                    &tx,
+                    records
+                        .iter()
+                        .filter(|record| valid_history.contains(&record.id))
+                        .filter_map(|record| record.history.as_ref()),
+                    cancel,
+                );
+                if cancel.load(Ordering::Relaxed) {
+                    database_cancelled = true;
+                    database_skipped.extend(records.iter().map(|record| record.id));
+                    tx.rollback()
+                        .map_err(|_| "Cancelled history cleanup could not roll back.".to_owned())?;
+                    return Ok(());
+                }
+                repaired?;
+            }
             for record in &records {
+                if record.generic.is_some() {
+                    continue;
+                }
                 if cancel.load(Ordering::Relaxed) {
                     database_cancelled = true;
                     break;
                 }
+                if let Some(review) = &record.shortcut {
+                    if !shortcut_snapshot
+                        .as_ref()
+                        .is_some_and(|current| review.matches(current, &mut shared_shortcut_checks))
+                    {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    if review.delete(&tx)? != 1 {
+                        return Err("A reviewed shortcut changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
+                if let Some(review) = &record.keyword {
+                    if !keyword_snapshot
+                        .as_ref()
+                        .is_some_and(|current| review.matches(current))
+                    {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    if review.delete(&tx)? != 1 {
+                        return Err("A reviewed keyword changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
+                if let Some(review) = &record.quota {
+                    if !quota
+                        .as_ref()
+                        .is_some_and(|current| review.matches(current))
+                    {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    let removed = review.delete(&tx, cancel);
+                    if cancel.load(Ordering::Relaxed) {
+                        database_cancelled = true;
+                        break;
+                    }
+                    if removed? != 1 {
+                        return Err("A reviewed quota group changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
+                if let Some(review) = &record.cookie {
+                    if !cookie_snapshots
+                        .get(&record.kind)
+                        .is_some_and(|observed| review.matches(observed))
+                    {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    if review.delete(&tx)? != 1 {
+                        return Err("A reviewed cookie changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
+                if let Some(review) = &record.firefox {
+                    if !valid_firefox.contains(&record.id) {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    let removed = review.delete(&tx, cancel);
+                    if cancel.load(Ordering::Relaxed) {
+                        database_cancelled = true;
+                        break;
+                    }
+                    if removed? != 1 {
+                        return Err("A reviewed Firefox target changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
+                if let Some(review) = &record.download {
+                    if !valid_downloads.contains(&record.id) {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    if review.delete(&tx).map_err(|_| {
+                        "A selected download target could not be removed transactionally."
+                            .to_owned()
+                    })? != 1
+                    {
+                        return Err("A selected download target changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
                 record.kind.verify_delete_schema(&tx)?;
+                if let Some(review) = &record.history {
+                    if !valid_history.contains(&record.id) {
+                        database_skipped.push(record.id);
+                        continue;
+                    }
+                    if review.delete(&tx).map_err(|_| {
+                        "A selected history target could not be removed transactionally.".to_owned()
+                    })? != 1
+                    {
+                        return Err("A selected history target changed during cleanup.".into());
+                    }
+                    database_deleted.push(record.id);
+                    continue;
+                }
                 let current = tx
                     .query_row(record.kind.identity_sql(), [record.row_id], |row| {
                         record.kind.row_identity(row)
@@ -2306,9 +3958,41 @@ pub fn clean_privacy_with_runtime(
                 database_deleted.push(record.id);
             }
             verify_foreign_keys(&tx)?;
+            if let Some(current) = &shortcut_snapshot {
+                current.bookmarks_unchanged(&records[0].profile_root)?;
+            }
+            if let Some(history) = &history {
+                history.bookmarks_unchanged(&records[0].profile_root)?;
+            }
+            if records.iter().any(|record| record.generic.is_some()) && !database_cancelled {
+                match generic_sqlite::delete_selected(&tx, &records, cancel) {
+                    Ok(ids) => database_deleted.extend(ids),
+                    Err(error) => {
+                        let was_cancelled = cancel.load(Ordering::Relaxed);
+                        tx.rollback().map_err(|_| {
+                            "Browser table rollback failed; its final state may be uncertain."
+                                .to_owned()
+                        })?;
+                        database_deleted.clear();
+                        database_skipped = records.iter().map(|r| r.id).collect();
+                        if was_cancelled {
+                            database_cancelled = true;
+                            return Ok(());
+                        }
+                        return Err(error);
+                    }
+                }
+                if let Err(error) = verify_foreign_keys(&tx) {
+                    tx.rollback().map_err(|_| {
+                        "Browser table rollback failed; its final state may be uncertain."
+                            .to_owned()
+                    })?;
+                    return Err(error);
+                }
+            }
             if database_cancelled {
                 tx.rollback()
-                    .map_err(|e| format!("Cancelled cleanup could not be rolled back: {e}"))?;
+                    .map_err(|e| format!("Cancelled cleanup could not be rolled back; its final state may be uncertain: {e}"))?;
                 database_deleted.clear();
                 database_skipped.extend(records.iter().map(|record| record.id));
                 return Ok(());
@@ -2342,11 +4026,17 @@ pub fn clean_privacy_with_runtime(
             PrivacyCategory::History => 0,
             PrivacyCategory::Cookies => 1,
             PrivacyCategory::Downloads => 2,
+            PrivacyCategory::LastDownloadLocation => 3,
+            PrivacyCategory::SnapLocation => 4,
+            PrivacyCategory::Sessions => 5,
+            PrivacyCategory::SavedForms => 6,
+            PrivacyCategory::SavedPasswords => 7,
+            PrivacyCategory::SitePreferences => 8,
         });
         if tx_outcome.is_ok() && !database_cancelled && !database_deleted.is_empty() {
             let id = Uuid::new_v4();
             restore_id = Some(id);
-            let snapshot_result = ensure_browsers_stopped(runtime, &records)
+            let snapshot_result = ensure_database_access_allowed(runtime, &records)
                 .and_then(|_| make_post_state_snapshot(&canonical, &backup, id));
             match snapshot_result {
                 Ok((path, stamp, signature)) => {
@@ -2401,6 +4091,108 @@ pub fn clean_privacy_with_runtime(
             break;
         }
     }
+    if !receipt.cancelled && !plan.files.is_empty() {
+        let group_ends = plan
+            .files
+            .iter()
+            .scan(0usize, |total, group| {
+                *total += group.item_count();
+                Some(*total)
+            })
+            .collect::<Vec<_>>();
+        match storage_files::clean(
+            data_dir,
+            plan.report_id,
+            &plan.files,
+            runtime,
+            trash,
+            cancel,
+            |completed, _| {
+                progress(
+                    done + group_ends.partition_point(|end| *end <= completed),
+                    total,
+                )
+            },
+        ) {
+            Ok(files) => {
+                let confirmed: HashSet<_> = files.cleaned_ids.iter().copied().collect();
+                let completed = plan
+                    .files
+                    .iter()
+                    .filter(|group| group.all_cleaned(&confirmed))
+                    .count();
+                receipt.deleted = receipt.deleted.saturating_add(completed);
+                receipt.skipped = receipt
+                    .skipped
+                    .saturating_add(plan.files.len().saturating_sub(completed));
+                if plan
+                    .files
+                    .iter()
+                    .any(|group| group.partly_cleaned(&confirmed))
+                {
+                    receipt.errors.push("Only part of a reviewed storage group moved to Trash; review cleanup history before further action.".into());
+                }
+                receipt.cancelled |= files.cancelled;
+                receipt.uncertain |= files.interrupted || !files.uncertain.is_empty();
+                let mut seen_errors: HashSet<_> = receipt.errors.iter().cloned().collect();
+                let remaining = MAX_SKIP_DETAILS.saturating_sub(receipt.errors.len());
+                receipt.errors.extend(
+                    files
+                        .failed
+                        .into_iter()
+                        .filter_map(|file| file.reason)
+                        .filter(|error| seen_errors.insert(error.clone()))
+                        .take(remaining),
+                );
+            }
+            Err(error) => {
+                receipt.uncertain = true;
+                receipt.errors.push(format!(
+                    "Storage-file cleanup stopped: {error}. Review cleanup history before retrying."
+                ));
+            }
+        }
+    }
+    if !plan.keys.is_empty() {
+        match leveldb_write::clean(data_dir, plan.operation_id, &plan.keys, cancel, runtime) {
+            Ok(keys) => {
+                receipt.deleted += keys.deleted;
+                receipt.skipped += keys.skipped;
+                receipt.cancelled |= keys.cancelled;
+                receipt.uncertain |= keys.uncertain;
+                receipt.backups.extend(keys.backups);
+                receipt.errors.extend(keys.errors);
+            }
+            Err(error) => {
+                receipt.skipped += plan.keys.len();
+                receipt.errors.push(error);
+            }
+        }
+        progress(total, total);
+    }
+    if !plan.preferences.is_empty() && !receipt.cancelled {
+        match preferences::clean(
+            data_dir,
+            plan.operation_id,
+            &plan.preferences,
+            cancel,
+            runtime,
+        ) {
+            Ok(fields) => {
+                receipt.deleted += fields.deleted;
+                receipt.skipped += fields.skipped;
+                receipt.cancelled |= fields.cancelled;
+                receipt.uncertain |= fields.uncertain;
+                receipt.backups.extend(fields.backups);
+                receipt.errors.extend(fields.errors);
+            }
+            Err(error) => {
+                receipt.skipped += plan.preferences.len();
+                receipt.errors.push(error);
+            }
+        }
+        progress(total, total);
+    }
     if journal
         .append(&PrivacyJournalEvent::Finish {
             cancelled: receipt.cancelled,
@@ -2427,10 +4219,53 @@ fn verify_foreign_keys(conn: &Connection) -> Result<(), String> {
     }
 }
 
-fn ensure_browsers_stopped(
+fn file_owned_category(
+    browser: Browser,
+    category: PrivacyCategory,
+    root: &Path,
+    path: &Path,
+) -> bool {
+    (category == PrivacyCategory::Cookies && storage_files::owns_file(browser, root, path))
+        || (category == PrivacyCategory::Sessions
+            && (session_files::claims(browser, root, path)
+                || session_files::generic_binding(browser, root, path).is_some()))
+        || record_files::claims(browser, category, root, path)
+        || (matches!(
+            category,
+            PrivacyCategory::History
+                | PrivacyCategory::LastDownloadLocation
+                | PrivacyCategory::SnapLocation
+        ) && preferences::owns(browser, root, path))
+}
+
+fn ensure_sql_owners(records: &[RowLocator]) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    if records.iter().any(|record| {
+        seen.insert((
+            record.browser,
+            record.kind.category(),
+            &record.profile_root,
+            &record.database,
+        )) && file_owned_category(
+            record.browser,
+            record.kind.category(),
+            &record.profile_root,
+            &record.database,
+        )
+    }) {
+        return Err(
+            "These browser records now belong to a file-cleanup rule. Scan again before cleanup."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+fn ensure_database_access_allowed(
     runtime: &impl BrowserRuntime,
     records: &[RowLocator],
 ) -> Result<(), String> {
+    ensure_sql_owners(records)?;
     let running = runtime.running_browsers()?;
     let required = records
         .iter()
@@ -2438,7 +4273,11 @@ fn ensure_browsers_stopped(
         .collect::<HashSet<_>>();
     let conflicts = running
         .iter()
-        .filter(|process| required.contains(&process.browser))
+        .filter(|process| {
+            required
+                .iter()
+                .any(|browser| browser.conflicts_with(process))
+        })
         .map(|process| process.browser.label())
         .collect::<HashSet<_>>();
     if conflicts.is_empty() {
@@ -2545,6 +4384,13 @@ impl PrivacyJournal {
 
 /// Read unresolved/uncertain database intents after restart. No automatic restore or retry occurs.
 pub fn recover_privacy_operations(data_dir: &Path) -> Result<Vec<PrivacyRecoveryItem>, String> {
+    let mut result = recover_sqlite_operations(data_dir)?;
+    result.extend(leveldb_write::recovery(data_dir)?);
+    result.extend(preferences::recovery(data_dir)?);
+    Ok(result)
+}
+
+fn recover_sqlite_operations(data_dir: &Path) -> Result<Vec<PrivacyRecoveryItem>, String> {
     let directory = data_dir.join("privacy-operations");
     match directory.try_exists() {
         Ok(false) => return Ok(Vec::new()),
@@ -2633,10 +4479,13 @@ struct RestoreSource {
 /// List durable cleanup backups and show whether each one is available for review.
 /// A `Ready` item still needs a fresh preflight before any restore can run.
 pub fn list_privacy_restore_options(data_dir: &Path) -> Result<Vec<PrivacyRestoreOption>, String> {
-    Ok(load_restore_sources(data_dir)?
+    let mut options = load_restore_sources(data_dir)?
         .into_iter()
         .map(|source| source.option)
-        .collect())
+        .collect::<Vec<_>>();
+    options.extend(leveldb_write::options(data_dir)?);
+    options.extend(preferences::options(data_dir)?);
+    Ok(options)
 }
 
 fn load_restore_sources(data_dir: &Path) -> Result<Vec<RestoreSource>, String> {
@@ -2780,6 +4629,18 @@ fn load_restore_sources(data_dir: &Path) -> Result<Vec<RestoreSource>, String> {
         }
     }
     let mut result = sources.into_values().collect::<Vec<_>>();
+    for source in &mut result {
+        if source.option.state == PrivacyRecoveryState::Ready
+            && source.profile_root.as_ref().is_some_and(|root| {
+                PrivacyCategory::ALL.iter().any(|category| {
+                    file_owned_category(source.option.browser, *category, root, &source.database)
+                })
+            })
+        {
+            source.option.state = PrivacyRecoveryState::Unavailable;
+            source.option.reason = Some("This database now belongs to a browser file-cleanup rule; database restore is unavailable.".into());
+        }
+    }
     result.sort_by(|left, right| {
         left.option
             .browser
@@ -2805,6 +4666,12 @@ pub fn prepare_privacy_restore_with_runtime(
     restore_id: Uuid,
     runtime: &impl BrowserRuntime,
 ) -> Result<PrivacyRestorePlan, String> {
+    if let Some(plan) = preferences::prepare_restore(data_dir, restore_id, runtime)? {
+        return Ok(plan);
+    }
+    if let Some(plan) = leveldb_write::prepare_restore(data_dir, restore_id, runtime)? {
+        return Ok(plan);
+    }
     let source = load_restore_sources(data_dir)?
         .into_iter()
         .find(|source| source.option.id == restore_id)
@@ -2815,10 +4682,11 @@ pub fn prepare_privacy_restore_with_runtime(
             .reason
             .unwrap_or_else(|| "This recovery item is not available for restore.".into()));
     }
+    generic_sqlite::pending(data_dir, &source.database)?;
     if runtime
         .running_browsers()?
         .iter()
-        .any(|process| process.browser == source.option.browser)
+        .any(|process| source.option.browser.conflicts_with(process))
     {
         return Err(format!(
             "Close {} before restoring its browser database.",
@@ -2880,6 +4748,8 @@ pub fn prepare_privacy_restore_with_runtime(
         post_state_snapshot,
         post_state_stamp,
         schema_signature: expected_schema,
+        leveldb: None,
+        preferences: None,
     })
 }
 
@@ -2898,6 +4768,12 @@ pub fn restore_privacy_database_with_runtime(
     plan: &PrivacyRestorePlan,
     runtime: &impl BrowserRuntime,
 ) -> Result<PrivacyRestoreReceipt, String> {
+    if let Some(fields) = &plan.preferences {
+        return preferences::restore(data_dir, fields, runtime);
+    }
+    if let Some(keys) = &plan.leveldb {
+        return leveldb_write::restore(data_dir, keys, runtime);
+    }
     let current = prepare_privacy_restore_with_runtime(data_dir, plan.id, runtime)?;
     if current.operation_id != plan.operation_id
         || current.profile_name != plan.profile_name
@@ -2950,7 +4826,7 @@ pub fn restore_privacy_database_with_runtime(
         if runtime
             .running_browsers()?
             .iter()
-            .any(|process| process.browser == current.browser)
+            .any(|process| current.browser.conflicts_with(process))
         {
             return Err(format!(
                 "{} started while restore was being prepared.",
@@ -2999,7 +4875,7 @@ pub fn restore_privacy_database_with_runtime(
         if runtime
             .running_browsers()?
             .iter()
-            .any(|process| process.browser == current.browser)
+            .any(|process| current.browser.conflicts_with(process))
         {
             return Err(format!(
                 "{} started while restore was being opened.",

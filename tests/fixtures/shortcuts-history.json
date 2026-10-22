@@ -1,0 +1,241 @@
+{
+  "scope": "Owned SQLite text conversion and exact bookmark-prefix model derived from retained native calls. No original execution or native interpolated-ID deletion is performed.",
+  "cases": [
+    {
+      "name": "UTF-8-missing",
+      "setup_sql": "PRAGMA encoding='UTF-8'; CREATE TABLE omni_box_shortcuts(id TEXT COLLATE NOCASE,url,payload BLOB); CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES('preserved');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(-1,'negative','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(1,'kept','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(2,'ordinary','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(3,'','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(4,NULL,'https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(5,'empty-url','',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(6,'null-url',NULL,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(7,''||char(0)||'tail','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(8,'embedded'||char(0)||'tail','https://keep.test/page'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(9,'embedded'||char(0)||'tail','https://drop.test/path'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(10,0,'',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(11,CAST('blob-id' AS BLOB),CAST('https://keep.test/page' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(12,CAST('blob-id' AS BLOB),CAST('https://drop.test/path' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(13,'case','https://KEEP.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(14,'other-path','https://keep.test/other',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(15,'uuiddup','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(16,'UUIDDUP','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(17,'numeric-url',42,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(18,'real-url',3.14,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(20,'unicode-keep','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(21,'unicode-drop','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u5225',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(22,'quote''id','https://drop.test/path',X'0001FF');\n",
+      "bookmarks": null,
+      "expected_row_ids": [
+        -1,
+        1,
+        2,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22
+      ],
+      "skipped_empty_ids": [
+        3,
+        4,
+        7
+      ],
+      "retained_bookmarked_ids": []
+    },
+    {
+      "name": "UTF-8-empty",
+      "setup_sql": "PRAGMA encoding='UTF-8'; CREATE TABLE omni_box_shortcuts(id TEXT COLLATE NOCASE,url,payload BLOB); CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES('preserved');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(-1,'negative','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(1,'kept','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(2,'ordinary','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(3,'','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(4,NULL,'https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(5,'empty-url','',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(6,'null-url',NULL,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(7,''||char(0)||'tail','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(8,'embedded'||char(0)||'tail','https://keep.test/page'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(9,'embedded'||char(0)||'tail','https://drop.test/path'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(10,0,'',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(11,CAST('blob-id' AS BLOB),CAST('https://keep.test/page' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(12,CAST('blob-id' AS BLOB),CAST('https://drop.test/path' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(13,'case','https://KEEP.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(14,'other-path','https://keep.test/other',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(15,'uuiddup','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(16,'UUIDDUP','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(17,'numeric-url',42,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(18,'real-url',3.14,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(20,'unicode-keep','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(21,'unicode-drop','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u5225',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(22,'quote''id','https://drop.test/path',X'0001FF');\n",
+      "bookmarks": {
+        "roots": {}
+      },
+      "expected_row_ids": [
+        -1,
+        1,
+        2,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22
+      ],
+      "skipped_empty_ids": [
+        3,
+        4,
+        7
+      ],
+      "retained_bookmarked_ids": []
+    },
+    {
+      "name": "UTF-8-nested",
+      "setup_sql": "PRAGMA encoding='UTF-8'; CREATE TABLE omni_box_shortcuts(id TEXT COLLATE NOCASE,url,payload BLOB); CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES('preserved');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(-1,'negative','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(1,'kept','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(2,'ordinary','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(3,'','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(4,NULL,'https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(5,'empty-url','',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(6,'null-url',NULL,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(7,''||char(0)||'tail','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(8,'embedded'||char(0)||'tail','https://keep.test/page'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(9,'embedded'||char(0)||'tail','https://drop.test/path'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(10,0,'',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(11,CAST('blob-id' AS BLOB),CAST('https://keep.test/page' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(12,CAST('blob-id' AS BLOB),CAST('https://drop.test/path' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(13,'case','https://KEEP.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(14,'other-path','https://keep.test/other',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(15,'uuiddup','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(16,'UUIDDUP','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(17,'numeric-url',42,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(18,'real-url',3.14,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(20,'unicode-keep','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(21,'unicode-drop','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u5225',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(22,'quote''id','https://drop.test/path',X'0001FF');\n",
+      "bookmarks": {
+        "roots": {
+          "bar": {
+            "children": [
+              {
+                "url": "https://keep.test/page"
+              },
+              {
+                "url": "42"
+              },
+              {
+                "url": ""
+              },
+              {
+                "url": "https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053"
+              }
+            ]
+          }
+        }
+      },
+      "expected_row_ids": [
+        -1,
+        2,
+        5,
+        6,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        18,
+        21,
+        22
+      ],
+      "skipped_empty_ids": [
+        3,
+        4,
+        7
+      ],
+      "retained_bookmarked_ids": [
+        1,
+        8,
+        11,
+        15,
+        17,
+        20
+      ]
+    },
+    {
+      "name": "UTF-16le-missing",
+      "setup_sql": "PRAGMA encoding='UTF-16le'; CREATE TABLE omni_box_shortcuts(id TEXT COLLATE NOCASE,url,payload BLOB); CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES('preserved');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(-1,'negative','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(1,'kept','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(2,'ordinary','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(3,'','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(4,NULL,'https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(5,'empty-url','',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(6,'null-url',NULL,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(7,''||char(0)||'tail','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(8,'embedded'||char(0)||'tail','https://keep.test/page'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(9,'embedded'||char(0)||'tail','https://drop.test/path'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(10,0,'',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(11,CAST('blob-id' AS BLOB),CAST('https://keep.test/page' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(12,CAST('blob-id' AS BLOB),CAST('https://drop.test/path' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(13,'case','https://KEEP.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(14,'other-path','https://keep.test/other',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(15,'uuiddup','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(16,'UUIDDUP','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(17,'numeric-url',42,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(18,'real-url',3.14,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(20,'unicode-keep','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(21,'unicode-drop','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u5225',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(22,'quote''id','https://drop.test/path',X'0001FF');\n",
+      "bookmarks": null,
+      "expected_row_ids": [
+        -1,
+        1,
+        2,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22
+      ],
+      "skipped_empty_ids": [
+        3,
+        4,
+        7
+      ],
+      "retained_bookmarked_ids": []
+    },
+    {
+      "name": "UTF-16le-empty",
+      "setup_sql": "PRAGMA encoding='UTF-16le'; CREATE TABLE omni_box_shortcuts(id TEXT COLLATE NOCASE,url,payload BLOB); CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES('preserved');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(-1,'negative','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(1,'kept','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(2,'ordinary','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(3,'','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(4,NULL,'https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(5,'empty-url','',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(6,'null-url',NULL,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(7,''||char(0)||'tail','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(8,'embedded'||char(0)||'tail','https://keep.test/page'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(9,'embedded'||char(0)||'tail','https://drop.test/path'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(10,0,'',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(11,CAST('blob-id' AS BLOB),CAST('https://keep.test/page' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(12,CAST('blob-id' AS BLOB),CAST('https://drop.test/path' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(13,'case','https://KEEP.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(14,'other-path','https://keep.test/other',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(15,'uuiddup','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(16,'UUIDDUP','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(17,'numeric-url',42,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(18,'real-url',3.14,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(20,'unicode-keep','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(21,'unicode-drop','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u5225',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(22,'quote''id','https://drop.test/path',X'0001FF');\n",
+      "bookmarks": {
+        "roots": {}
+      },
+      "expected_row_ids": [
+        -1,
+        1,
+        2,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22
+      ],
+      "skipped_empty_ids": [
+        3,
+        4,
+        7
+      ],
+      "retained_bookmarked_ids": []
+    },
+    {
+      "name": "UTF-16le-nested",
+      "setup_sql": "PRAGMA encoding='UTF-16le'; CREATE TABLE omni_box_shortcuts(id TEXT COLLATE NOCASE,url,payload BLOB); CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES('preserved');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(-1,'negative','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(1,'kept','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(2,'ordinary','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(3,'','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(4,NULL,'https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(5,'empty-url','',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(6,'null-url',NULL,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(7,''||char(0)||'tail','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(8,'embedded'||char(0)||'tail','https://keep.test/page'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(9,'embedded'||char(0)||'tail','https://drop.test/path'||char(0)||'tail',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(10,0,'',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(11,CAST('blob-id' AS BLOB),CAST('https://keep.test/page' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(12,CAST('blob-id' AS BLOB),CAST('https://drop.test/path' AS BLOB),X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(13,'case','https://KEEP.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(14,'other-path','https://keep.test/other',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(15,'uuiddup','https://keep.test/page',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(16,'UUIDDUP','https://drop.test/path',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(17,'numeric-url',42,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(18,'real-url',3.14,X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(20,'unicode-keep','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(21,'unicode-drop','https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u5225',X'0001FF');\nINSERT INTO omni_box_shortcuts(rowid,id,url,payload) VALUES(22,'quote''id','https://drop.test/path',X'0001FF');\n",
+      "bookmarks": {
+        "roots": {
+          "bar": {
+            "children": [
+              {
+                "url": "https://keep.test/page"
+              },
+              {
+                "url": "42"
+              },
+              {
+                "url": ""
+              },
+              {
+                "url": "https://\u4f8b\u3048.\u30c6\u30b9\u30c8/\u9053"
+              }
+            ]
+          }
+        }
+      },
+      "expected_row_ids": [
+        -1,
+        2,
+        5,
+        6,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        18,
+        21,
+        22
+      ],
+      "skipped_empty_ids": [
+        3,
+        4,
+        7
+      ],
+      "retained_bookmarked_ids": [
+        1,
+        8,
+        11,
+        15,
+        17,
+        20
+      ]
+    }
+  ]
+}

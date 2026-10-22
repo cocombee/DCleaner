@@ -152,6 +152,7 @@ fn fixture() -> (tempfile::TempDir, Category) {
     )
     .unwrap();
     let cat = Category {
+        cache_root_scopes: Default::default(),
         id: "temp".into(),
         name: "Temporary files".into(),
         group: "Test".into(),

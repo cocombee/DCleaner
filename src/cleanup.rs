@@ -13,11 +13,38 @@ use std::{
 use uuid::Uuid;
 pub trait TrashPort {
     fn move_to_trash(&mut self, path: &Path) -> Result<(), String>;
+    fn batch_size(&self) -> usize {
+        1
+    }
+    /// Success applies to the whole batch. Any error can represent a partial
+    /// native effect: its durable intents must stay unresolved, without retry.
+    fn move_batch_to_trash(&mut self, paths: &[&Path]) -> Result<(), String> {
+        if let [path] = paths {
+            self.move_to_trash(path)
+        } else {
+            Err("This Trash backend does not support a batch.".into())
+        }
+    }
 }
 pub struct SystemTrash;
 impl TrashPort for SystemTrash {
     fn move_to_trash(&mut self, path: &Path) -> Result<(), String> {
         trash::delete(path).map_err(|e| e.to_string())
+    }
+    fn batch_size(&self) -> usize {
+        if cfg!(windows) { 32 } else { 1 }
+    }
+    fn move_batch_to_trash(&mut self, paths: &[&Path]) -> Result<(), String> {
+        // Same native Trash policy as the single-file path, with one Windows
+        // IFileOperation/PerformOperations for a bounded set of exact files.
+        trash::delete_all(paths).map_err(|e| e.to_string())?;
+        for path in paths {
+            match fs::symlink_metadata(path) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                _ => return Err("The native Trash operation did not confirm removal of every selected source path.".into()),
+            }
+        }
+        Ok(())
     }
 }
 pub fn revalidate(file: &Candidate, age: u32) -> Result<(), String> {
@@ -58,8 +85,29 @@ pub fn clean(
             "Configured files require their current Custom Clean rules. Analyze again.".into(),
         );
     }
+    let browser_ids: HashMap<_, _> = analysis
+        .categories
+        .iter()
+        .filter(|c| crate::browser_cache::is_category(&c.id))
+        .flat_map(|c| c.files.iter().map(|f| (f.id, c.id.as_str())))
+        .collect();
     clean_with_validator(analysis, ids, cancel, trash, journal, progress, |file| {
-        validate_age(file, analysis.minimum_age_days)
+        if let Some(category) = browser_ids.get(&file.id) {
+            if !crate::browser_cache::includes(category, &file.root, &file.path) {
+                return Err(
+                    "The selected file is outside the current browser cache rules. Analyze again."
+                        .into(),
+                );
+            }
+        }
+        validate_age(
+            file,
+            if browser_ids.contains_key(&file.id) {
+                0
+            } else {
+                analysis.minimum_age_days
+            },
+        )
     })
 }
 
@@ -116,37 +164,86 @@ pub(crate) fn clean_with_validator(
         id: result.id,
         date: result.date.clone(),
     })?;
-    for (index, file) in files.iter().enumerate() {
+    let batch_size = trash.batch_size().clamp(1, 32);
+    let mut completed = 0;
+    for batch in files.chunks(batch_size) {
         if cancel.load(Ordering::Relaxed) {
             result.cancelled = true;
             break;
         }
-        journal.append(&JournalEvent::Intent {
-            file_id: file.id,
-            path: file.path.clone(),
-            size: file.size,
-        })?;
-        let effect = revalidate(file, 0)
-            .and_then(|_| validate(file))
-            .and_then(|_| trash.move_to_trash(&file.path));
-        let outcome = FileOutcome {
-            file_id: file.id,
-            path: file.path.clone(),
-            size: file.size,
-            success: effect.is_ok(),
-            reason: effect.err(),
-        };
-        journal.append(&JournalEvent::Outcome {
-            outcome: outcome.clone(),
-        })?;
-        if outcome.success {
-            result.files += 1;
-            result.bytes += file.size;
-            result.cleaned_ids.push(file.id);
-        } else {
-            result.failed.push(outcome);
+        let intents: Vec<_> = batch
+            .iter()
+            .map(|file| JournalEvent::Intent {
+                file_id: file.id,
+                path: file.path.clone(),
+                size: file.size,
+            })
+            .collect();
+        // No file action can begin before the entire bounded batch is durable.
+        journal.append_batch(&intents)?;
+        let mut checks: Vec<_> = batch
+            .iter()
+            .map(|file| revalidate(file, 0).and_then(|_| validate(file)))
+            .collect();
+        if cancel.load(Ordering::Relaxed) {
+            result.cancelled = true;
+            for check in &mut checks {
+                if check.is_ok() {
+                    *check = Err("Not moved because cleaning stopped.".into());
+                }
+            }
         }
-        progress(index + 1, files.len());
+        let paths: Vec<&Path> = batch
+            .iter()
+            .zip(&checks)
+            .filter(|(_, check)| check.is_ok())
+            .map(|(file, _)| file.path.as_path())
+            .collect();
+        if !paths.is_empty() {
+            // An aggregate error cannot identify which individual effects ran.
+            // Preserve every intent in this batch as uncertain and stop; never
+            // fall back to single-file retries after a partial native operation.
+            if let Err(error) = trash.move_batch_to_trash(&paths) {
+                if batch_size == 1 {
+                    checks[0] = Err(error);
+                } else {
+                    return Err(format!(
+                        "Trash cleanup stopped; this batch has unresolved outcomes. Review its cleanup history before taking further action: {error}"
+                    ));
+                }
+            }
+        }
+        let outcomes: Vec<_> = batch
+            .iter()
+            .zip(checks)
+            .map(|(file, check)| JournalEvent::Outcome {
+                outcome: FileOutcome {
+                    file_id: file.id,
+                    path: file.path.clone(),
+                    size: file.size,
+                    success: check.is_ok(),
+                    reason: check.err(),
+                },
+            })
+            .collect();
+        journal.append_batch(&outcomes)?;
+        for event in outcomes {
+            let JournalEvent::Outcome { outcome } = event else {
+                unreachable!()
+            };
+            if outcome.success {
+                result.files += 1;
+                result.bytes += outcome.size;
+                result.cleaned_ids.push(outcome.file_id);
+            } else {
+                result.failed.push(outcome);
+            }
+        }
+        completed += batch.len();
+        progress(completed, files.len());
+        if result.cancelled {
+            break;
+        }
     }
     journal.append(&JournalEvent::Finish {
         cancelled: result.cancelled,
@@ -188,6 +285,7 @@ mod tests {
         .unwrap();
         let analysis = crate::scanner::analyze(
             &[Category {
+                cache_root_scopes: Default::default(),
                 id: "fixture".into(),
                 name: "Fixture".into(),
                 group: "Test".into(),

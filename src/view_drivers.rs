@@ -20,7 +20,7 @@ const MAX_RECENT_DRIVER_OPERATIONS: usize = 12;
 const DRIVER_RESTORE_PROMPT_FEATURE: &str = "drivers-restore-prompt";
 
 pub(super) struct DriverUi {
-    snapshot: Option<DriverSnapshot>,
+    snapshot: Option<Arc<DriverSnapshot>>,
     attempted: bool,
     intro_fixture: bool,
     loading: bool,
@@ -274,17 +274,17 @@ impl App {
         self.notice = None;
         self.progress.clear();
         match case {
-            "drivers-empty" => ui.snapshot = Some(driver_qa_snapshot(false)),
+            "drivers-empty" => ui.snapshot = Some(Arc::new(driver_qa_snapshot(false))),
             "drivers-restore-prompt" => {
                 ui.dialog = Some(DriverDialog::RestoreFormerPrompt {
                     suppress_message: false,
                 });
-                ui.snapshot = Some(driver_qa_snapshot(true));
+                ui.snapshot = Some(Arc::new(driver_qa_snapshot(true)));
                 ui.tab = DriverTab::NoOfferUnknown;
             }
             "drivers-problem-categories-empty" => {
                 ui.dialog = Some(DriverDialog::ProblemCategories(BTreeSet::new()));
-                ui.snapshot = Some(driver_qa_snapshot(true));
+                ui.snapshot = Some(Arc::new(driver_qa_snapshot(true)));
                 ui.tab = DriverTab::NoOfferUnknown;
             }
             "drivers-populated" | "drivers-details" | "drivers-problem-categories" => {
@@ -304,10 +304,10 @@ impl App {
                         DriverProblemCategory::NetworkWifi,
                     ])));
                 }
-                ui.snapshot = Some(snapshot);
+                ui.snapshot = Some(Arc::new(snapshot));
             }
             "drivers-offered" => {
-                ui.snapshot = Some(driver_qa_offered_snapshot());
+                ui.snapshot = Some(Arc::new(driver_qa_offered_snapshot()));
                 ui.tab = DriverTab::Outdated;
             }
             "drivers-no-recent-updates" => {
@@ -319,7 +319,7 @@ impl App {
                     categories: ui.problem_category_filter.clone().unwrap_or_default(),
                     records_reviewed: 0,
                 });
-                ui.snapshot = Some(snapshot);
+                ui.snapshot = Some(Arc::new(snapshot));
             }
             "drivers-recent-updates" => {
                 let snapshot = driver_qa_recent_snapshot();
@@ -359,7 +359,7 @@ impl App {
                         devices_matched,
                     }
                 });
-                ui.snapshot = Some(snapshot);
+                ui.snapshot = Some(Arc::new(snapshot));
             }
             "drivers-error" => {
                 self.error = Some(
@@ -612,7 +612,7 @@ impl App {
                 self.drivers_ui.attempted = true;
                 self.drivers_ui.problem_category_filter = None;
                 self.drivers_ui.problem_history_result = None;
-                self.drivers_ui.snapshot = Some(snapshot);
+                self.drivers_ui.snapshot = Some(Arc::new(snapshot));
                 self.drivers_ui.last_scan_completed_at = Some(completed_at);
                 match settings {
                     Ok(settings) => {
@@ -659,7 +659,7 @@ impl App {
                 match result {
                     Ok(receipt) if receipt.intent_id == intent_id => {
                         self.error = None;
-                        self.notice = Some(match receipt.phase {
+                        self.set_notice(match receipt.phase {
                             drivers::DriverEffectPhase::Verified => format!(
                                 "Windows verified the reviewed driver update for {display_name}. A signed package backup is recorded.{}",
                                 reboot_note(receipt.reboot)
@@ -728,7 +728,7 @@ impl App {
                 }
                 if let Some(display_name) = awaiting_restart {
                     self.error = None;
-                    self.notice = Some(format!(
+                    self.set_notice(format!(
                         "Windows accepted {completed} of {requested} reviewed driver updates and requires a restart for {display_name}. The remaining offers were not started. DCleaner will not restart Windows; rescan and review remaining devices after restart."
                     ));
                 } else if let Some(failure) = failure {
@@ -737,7 +737,7 @@ impl App {
                     ));
                 } else if completed == requested {
                     self.error = None;
-                    self.notice = Some(drivers::representative_batch_completion_notice(completed));
+                    self.set_notice(drivers::representative_batch_completion_notice(completed));
                 } else {
                     self.error = Some(format!(
                         "Only {completed} of {requested} reviewed driver updates returned results. The outcome is uncertain; review Driver Updater history before retrying."
@@ -755,7 +755,7 @@ impl App {
                 match result {
                     Ok(receipt) if receipt.restore_id == restore_id => {
                         self.error = None;
-                        self.notice = Some(match receipt.phase {
+                        self.set_notice(match receipt.phase {
                             drivers::DriverEffectPhase::Verified => format!(
                                 "Windows verified restoration of the saved driver for {display_name}.{}",
                                 reboot_note(receipt.reboot)
@@ -871,15 +871,18 @@ impl App {
             );
         }
         if let Some(error) = self.drivers_ui.settings_error.as_deref() {
-            ui.add_space(7.);
-            status_card(
-                ui,
-                t,
-                "Saved driver choices could not be read",
-                &format!(
-                    "{error} Skip and ignore controls are disabled. Driver actions are also blocked until saved choices can be read safely."
-                ),
-            );
+            if !self.page_choice_failure_visible(error) {
+                ui.add_space(7.);
+                theme::status_banner(
+                    ui,
+                    &format!(
+                        "Saved driver choices could not be read. {error} Refresh before updating or changing skip and ignore choices."
+                    ),
+                    theme::StatusKind::Error,
+                    false,
+                    false,
+                );
+            }
         }
         if let Some(error) = self.drivers_ui.history_error.as_deref() {
             ui.add_space(7.);
@@ -1023,7 +1026,27 @@ impl App {
                             });
                         ui.add_space(5.);
                         ui.separator();
-                        ui.horizontal(|footer| {
+                        let preference_label = device.id.as_ref().map(|id| {
+                            if self
+                                .drivers_ui
+                                .settings
+                                .as_ref()
+                                .is_some_and(|settings| settings.is_ignored(id))
+                            {
+                                "Stop ignoring updates"
+                            } else {
+                                "Ignore updates"
+                            }
+                        });
+                        let mut labels = Vec::new();
+                        if let Some(label) = preference_label {
+                            labels.push(label);
+                        }
+                        labels.push("Close");
+                        if restore_option.is_some() {
+                            labels.push("Review restore");
+                        }
+                        theme::centered_dialog_actions(ui, &labels, |footer| {
                             if let Some(device_id) = device.id.as_ref() {
                                 let ignored = self
                                     .drivers_ui
@@ -1045,15 +1068,13 @@ impl App {
                                         Some(DetailAction::Ignore(device_id.clone(), !ignored));
                                 }
                             }
-                            footer.with_layout(Layout::right_to_left(Align::Center), |actions| {
-                                if restore_option.is_some() {
-                                    review_restore =
-                                        theme::primary(actions, "Review restore", t, !self.busy());
-                                    close |= theme::secondary(actions, "Close", true);
-                                } else {
-                                    close |= theme::primary(actions, "Close", t, true);
-                                }
-                            });
+                            if restore_option.is_some() {
+                                close |= theme::secondary(footer, "Close", true);
+                                review_restore =
+                                    theme::primary(footer, "Review restore", t, !self.busy());
+                            } else {
+                                close |= theme::primary(footer, "Close", t, true);
+                            }
                         });
                     });
                 let dismissed = close || response.should_close();
@@ -1405,7 +1426,7 @@ impl App {
         self.progress =
             "Reading present devices and the configured Windows Update Agent source".into();
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1449,7 +1470,7 @@ impl App {
         self.progress = "Windows is preparing the reviewed driver change. This phase cannot be cancelled; no automatic restart will occur.".into();
         self.error = None;
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1498,7 +1519,7 @@ impl App {
         );
         self.error = None;
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1542,7 +1563,7 @@ impl App {
         self.progress = "Windows is staging the reviewed saved driver. This phase cannot be cancelled; no automatic restart will occur.".into();
         self.error = None;
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let repaint = ctx.clone();
         thread::spawn(move || {
@@ -1595,6 +1616,7 @@ impl App {
                     count,
                     t,
                 );
+                theme::focus_ring(ui, &response, 18);
                 if response.clicked() {
                     self.drivers_ui.tab = tab;
                     self.drivers_ui.problem_category_filter = None;
@@ -1768,7 +1790,7 @@ impl App {
         let settings = self.drivers_ui.settings.clone().unwrap_or_default();
         let settings_readable =
             self.drivers_ui.settings_error.is_none() && self.drivers_ui.settings.is_some();
-        let mut devices: Vec<(DriverDevice, DriverStatus)> = snapshot
+        let mut devices: Vec<(&DriverDevice, DriverStatus)> = snapshot
             .inventory
             .devices
             .iter()
@@ -1791,7 +1813,7 @@ impl App {
                 } else {
                     tab_matches(self.drivers_ui.tab, status)
                 } && driver_matches_query(snapshot, device, &self.drivers_ui.query))
-                .then(|| (device.clone(), status))
+                .then_some((device, status))
             })
             .collect();
         let sort = self.drivers_ui.sort;
@@ -1966,15 +1988,15 @@ impl App {
             return;
         }
 
-        enum Row {
+        enum Row<'a> {
             Group(
                 DriverDeviceCategory,
                 usize,
                 Vec<(DriverUpdateIntent, DeviceId)>,
             ),
-            Device(DriverDevice, DriverStatus),
+            Device(&'a DriverDevice, DriverStatus),
         }
-        let mut grouped: BTreeMap<DriverDeviceCategory, Vec<(DriverDevice, DriverStatus)>> =
+        let mut grouped: BTreeMap<DriverDeviceCategory, Vec<(&DriverDevice, DriverStatus)>> =
             BTreeMap::new();
         for (device, status) in devices {
             grouped
@@ -2058,6 +2080,7 @@ impl App {
                                     let chevron_id = group.id().with(("driver-category-chevron", category.label()));
                                     let button_width = (table_width - select_width - 8.).max(1.);
                                     group.spacing_mut().button_padding = egui::vec2(8., 0.);
+                                    let background = group.painter().add(egui::Shape::Noop);
                                     let painted = egui::Button::new((
                                         RichText::new(label).family(theme::semibold()).color(t.foreground),
                                         egui::Atom::grow(),
@@ -2068,6 +2091,8 @@ impl App {
                                     .corner_radius(20)
                                     .min_size(egui::vec2(button_width, 40.))
                                     .atom_ui(group);
+                                    theme::paint_frameless_hover_behind(group, &painted.response, 20, background);
+                                    if painted.response.has_focus() { theme::focus_ring(group, &painted.response, 22); }
                                     if let Some(rect) = painted.rect(chevron_id) {
                                         let c = rect.center();
                                         let points = if collapsed {
@@ -2091,6 +2116,7 @@ impl App {
                             );
                         }
                         Row::Device(device, status) => {
+                            let device = *device;
                             let id = device.id.as_ref().map(|id| id.0.as_str()).unwrap_or("unknown");
                             body.push_id(id, |row| {
                                 row.allocate_ui_with_layout(
@@ -2157,7 +2183,7 @@ impl App {
                                                     cell.spacing_mut().item_spacing.x = 8.;
                                                     let name = known(&device.friendly_name)
                                                         .unwrap_or("Device name unavailable");
-                                                    let response = cell.add_sized(
+                                                    let response = theme::frameless_button(cell,
                                                         [(name_width - 8.).max(64.), 40.],
                                                         egui::Button::selectable(
                                                             false,
@@ -2174,18 +2200,17 @@ impl App {
                                                 },
                                             )
                                             .inner;
+                                        theme::focus_ring(row, &name_response, 18);
                                         if name_response.clicked() {
                                             self.drivers_ui.selected = device.id.clone();
                                         }
                                         if show_installed {
                                             let installed = field_display(&device.installed_version);
-                                            theme::table_cell(
+                                            theme::table_cell_with_tooltip(
                                                 row,
                                                 RichText::new(installed).color(t.muted),
                                                 installed_width,
-                                                40.,
-                                            )
-                                            .on_hover_text(field_tooltip(&device.installed_version));
+                                                40., field_tooltip(&device.installed_version));
                                         }
                                         if show_offer {
                                             let offer = self
@@ -2194,37 +2219,32 @@ impl App {
                                                 .as_ref()
                                                 .map(|current| offer_display(current, device))
                                                 .unwrap_or_else(|| "Unknown".into());
-                                            theme::table_cell(
+                                            theme::table_cell_with_tooltip(
                                                 row,
                                                 RichText::new(offer.clone())
                                                     .color(status_color(*status, t)),
                                                 offer_width,
-                                                40.,
-                                            )
-                                            .on_hover_text(offer);
+                                                40., offer);
                                         }
                                         if show_candidate_version {
-                                            theme::table_cell(
+                                            theme::table_cell_with_tooltip(
                                                 row,
                                                 RichText::new(candidate_version_cell_display(
                                                     snapshot, device,
                                                 ))
                                                 .color(t.muted),
                                                 candidate_version_width,
-                                                40.,
-                                            )
-                                            .on_hover_text(candidate_version_tooltip(
+                                                40., candidate_version_tooltip(
                                                 snapshot, device,
                                             ));
                                         }
                                         if show_release {
                                             let release = release_display(snapshot, device);
-                                            theme::table_cell(
+                                            theme::table_cell_with_tooltip(
                                                 row,
                                                 RichText::new(release).color(t.muted),
                                                 release_width,
-                                                40.,
-                                            ).on_hover_text(match candidates.as_slice() {
+                                                40., match candidates.as_slice() {
                                                 [candidate] => field_tooltip(&candidate.release_date),
                                                 _ => release_display(snapshot, device),
                                             });
@@ -2267,7 +2287,7 @@ impl App {
     }
 
     fn driver_sources_panel(&self, ui: &mut egui::Ui, t: Tokens, snapshot: &DriverSnapshot) {
-        egui::CollapsingHeader::new("Inventory and source details")
+        theme::Disclosure::new("Inventory and source details")
             .default_open(
                 snapshot.inventory.source.quality != InventoryQuality::Complete
                     || !matches!(&snapshot.catalogue.state, CatalogueState::Read { .. }),
@@ -2330,7 +2350,7 @@ impl App {
             .filter(|record| record.feature == "drivers")
             .take(12)
             .collect();
-        egui::CollapsingHeader::new(format!(
+        theme::Disclosure::new(format!(
             "Driver operation history · {} loaded · latest 12 max",
             records.len()
         ))
@@ -2416,7 +2436,7 @@ impl App {
         let candidates = candidates_for(Some(snapshot), device);
         let mut action = None;
 
-        egui::CollapsingHeader::new("Driver versions")
+        theme::Disclosure::new("Driver versions")
             .default_open(false)
             .id_salt("driver-device-version-history")
             .show(ui, |versions_ui| {
@@ -2517,13 +2537,13 @@ impl App {
                 }
             });
 
-        egui::CollapsingHeader::new("Advanced")
+        theme::Disclosure::new("Advanced")
             .default_open(false)
             .id_salt("driver-device-advanced")
             .show(ui, |advanced| {
                 let settings = self.drivers_ui.settings.as_ref();
                 let skip_candidates = candidates_for(Some(snapshot), device);
-                egui::CollapsingHeader::new("Skipped offers")
+                theme::Disclosure::new("Skipped offers")
                     .default_open(false)
                     .id_salt("driver-device-saved-choices")
                     .show(advanced, |choices_ui| {
@@ -2574,7 +2594,7 @@ impl App {
                 }
                 match &device.hardware_ids {
                     FieldValue::Known { value: ids } => {
-                        egui::CollapsingHeader::new(format!("Hardware IDs · {}", ids.len()))
+                        theme::Disclosure::new(format!("Hardware IDs · {}", ids.len()))
                             .default_open(false)
                             .show(advanced, |ids_ui| {
                                 for id in ids.iter().take(20) {
@@ -3365,10 +3385,18 @@ impl App {
         format!("Last scan: {elapsed}")
     }
 
-    fn set_driver_ignored(&mut self, device_id: DeviceId, ignored: bool) {
+    pub(super) fn set_driver_ignored(&mut self, device_id: DeviceId, ignored: bool) {
         if self.qa_fixture_mode() {
             self.error =
                 Some("QA fixture mode is read-only; no driver preference was saved.".into());
+            return;
+        }
+        if self.busy() || self.preferences_busy() {
+            return;
+        }
+        if self.drivers_ui.settings_error.is_some() {
+            self.error =
+                Some("Refresh to read saved driver choices before changing this device.".into());
             return;
         }
         let Some(current) = self.drivers_ui.settings.clone() else {
@@ -3381,20 +3409,16 @@ impl App {
             self.error = Some(error.to_string());
             return;
         }
-        match drivers::save_settings(&self.data_dir, &updated) {
-            Ok(()) => {
-                self.drivers_ui.settings = Some(updated);
-                self.revalidate_selected_driver_offers();
-                self.error = None;
-                self.notice = Some(if ignored {
-                    "This device is hidden under Skipped & Ignored. Windows was not changed.".into()
-                } else {
-                    "The device ignore choice was removed. Windows was not changed.".into()
-                });
-            }
-            Err(error) => {
-                self.error = Some(format!("The saved device choice was not written: {error}"))
-            }
+        let notice = if ignored {
+            "This device is hidden under Skipped & Ignored. Windows was not changed.".into()
+        } else {
+            "The device ignore choice was removed. Windows was not changed.".into()
+        };
+        if let Err(error) = self.queue_page_choices(super::page_choice_save::Change::Driver {
+            proposed: updated,
+            notice,
+        }) {
+            self.error = Some(error);
         }
     }
 
@@ -3409,6 +3433,14 @@ impl App {
                 Some("QA fixture mode is read-only; no driver preference was saved.".into());
             return;
         }
+        if self.busy() || self.preferences_busy() {
+            return;
+        }
+        if self.drivers_ui.settings_error.is_some() {
+            self.error =
+                Some("Refresh to read saved driver choices before changing this offer.".into());
+            return;
+        }
         let Some(current) = self.drivers_ui.settings.clone() else {
             self.error =
                 Some("Saved driver choices are not readable; the offer was not changed.".into());
@@ -3419,21 +3451,32 @@ impl App {
             self.error = Some(error.to_string());
             return;
         }
-        match drivers::save_settings(&self.data_dir, &updated) {
-            Ok(()) => {
-                self.drivers_ui.settings = Some(updated);
-                self.revalidate_selected_driver_offers();
-                self.error = None;
-                self.notice = Some(if skipped {
-                    "This exact Windows Update offer is skipped. Windows was not changed.".into()
-                } else {
-                    "The saved skip choice was removed. Windows was not changed.".into()
-                });
-            }
-            Err(error) => {
-                self.error = Some(format!("The saved offer choice was not written: {error}"))
-            }
+        let notice = if skipped {
+            "This exact Windows Update offer is skipped. Windows was not changed.".into()
+        } else {
+            "The saved skip choice was removed. Windows was not changed.".into()
+        };
+        if let Err(error) = self.queue_page_choices(super::page_choice_save::Change::Driver {
+            proposed: updated,
+            notice,
+        }) {
+            self.error = Some(error);
         }
+    }
+
+    pub(super) fn apply_saved_driver_choices(&mut self, settings: DriverSettings) {
+        self.drivers_ui.settings = Some(settings);
+        self.drivers_ui.settings_error = None;
+        self.revalidate_selected_driver_offers();
+    }
+
+    pub(super) fn driver_choices_unverified(&mut self, error: &str) {
+        self.drivers_ui.settings_error = Some(error.into());
+    }
+
+    #[cfg(test)]
+    pub(super) fn driver_choices_for_test(&self) -> Option<&DriverSettings> {
+        self.drivers_ui.settings.as_ref()
     }
 }
 
@@ -4074,7 +4117,8 @@ fn driver_device_heading(ui: &mut egui::Ui, device: &DriverDevice, close_enabled
                                 .size(theme::FONT_DISPLAY)
                                 .family(theme::semibold()),
                         )
-                        .truncate(),
+                        .truncate()
+                        .show_tooltip_when_elided(false),
                     )
                 },
             )
@@ -4113,8 +4157,12 @@ fn driver_primary_value(ui: &mut egui::Ui, label: &str, value: &str, tooltip: &s
             |cell| {
                 cell.set_min_size([width, 24.].into());
                 cell.set_max_width(width);
-                cell.add(egui::Label::new(RichText::new(value).size(theme::FONT_BODY)).truncate())
-                    .on_hover_text(tooltip);
+                cell.add(
+                    egui::Label::new(RichText::new(value).size(theme::FONT_BODY))
+                        .truncate()
+                        .show_tooltip_when_elided(false),
+                )
+                .on_hover_text(tooltip);
             },
         );
     });
@@ -4234,6 +4282,7 @@ fn driver_sort_heading(
     descending: bool,
     t: Tokens,
 ) -> egui::Response {
+    let background = ui.painter().add(egui::Shape::Noop);
     let selected = sort == current;
     let indicator = if selected {
         if descending { " ↓" } else { " ↑" }
@@ -4264,6 +4313,15 @@ fn driver_sort_heading(
         } else {
             format!("Sort by {label}")
         });
+    theme::paint_frameless_hover_behind(
+        ui,
+        &response,
+        (response.rect.height() / 2.) as u8,
+        background,
+    );
+    if response.has_focus() {
+        theme::focus_ring(ui, &response, (response.rect.height() / 2.) as u8 + 2);
+    }
     #[cfg(debug_assertions)]
     theme::record_fixture_control(ui, &format!("Sort {label}"), &response);
     response
@@ -4407,6 +4465,119 @@ fn status_card(ui: &mut egui::Ui, t: Tokens, heading: &str, body: &str) {
 #[cfg(all(test, debug_assertions))]
 mod table_sort_tests {
     use super::*;
+
+    #[test]
+    fn replacement_inventory_keeps_an_existing_driver_reader_valid() {
+        let context = egui::Context::default();
+        let mut app = App::new_fixture_with_context(&context, "drivers-populated").unwrap();
+        let prior = app.drivers_ui.snapshot.clone().unwrap();
+        let prior_name = prior.inventory.devices[0].friendly_name.clone();
+        let mut replacement = driver_qa_snapshot(true);
+        replacement.inventory.devices[0].friendly_name = FieldValue::Known {
+            value: "Replacement fixture device".into(),
+        };
+        app.drivers_event(DriverEvent::Loaded {
+            snapshot: replacement,
+            settings: Ok(DriverSettings::default()),
+            history: Ok(Vec::new()),
+            completed_at: chrono::Utc::now(),
+        });
+        let current = app.drivers_ui.snapshot.clone().unwrap();
+        assert!(!Arc::ptr_eq(&prior, &current));
+        assert_eq!(prior.inventory.devices[0].friendly_name, prior_name);
+        assert_eq!(
+            current.inventory.devices[0]
+                .friendly_name
+                .as_known()
+                .unwrap(),
+            "Replacement fixture device"
+        );
+        let mut output = context.run_ui(Default::default(), |ui| app.paint(ui));
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
+        assert!(Arc::ptr_eq(
+            &current,
+            app.drivers_ui.snapshot.as_ref().unwrap()
+        ));
+        assert_eq!(prior.inventory.devices[0].friendly_name, prior_name);
+    }
+
+    #[test]
+    fn collapsed_driver_inventory_frame_cost() {
+        let stage = std::env::var("DCLEANER_BENCH_STAGE").unwrap_or_else(|_| "ordinary".into());
+        for count in [128, 1024] {
+            let context = egui::Context::default();
+            let mut app = App::new_fixture_with_context(&context, "drivers-populated").unwrap();
+            let mut snapshot = driver_qa_snapshot(true);
+            let seed = snapshot.inventory.devices[0].clone();
+            snapshot.inventory.devices = (0..count)
+                .map(|index| {
+                    let mut device = seed.clone();
+                    device.id = DeviceId::from_instance_id(&format!("QA\\FRAME\\{index}"));
+                    device.hardware_ids = FieldValue::Known {
+                        value: (0..32)
+                            .map(|id| format!("SYNTHETIC_{index}_{id}_{}", "metadata ".repeat(16)))
+                            .collect(),
+                    };
+                    device
+                })
+                .collect();
+            snapshot.inventory.source.item_count = count;
+            app.drivers_ui.collapsed_groups.insert(seed.category());
+            app.drivers_ui.snapshot = Some(Arc::new(snapshot));
+            let pointer = app
+                .drivers_ui
+                .snapshot
+                .as_ref()
+                .unwrap()
+                .inventory
+                .devices
+                .as_ptr();
+            let mut samples = Vec::new();
+            for tick in 0..8 {
+                let started = std::time::Instant::now();
+                let mut output = context.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(920., 612.),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| app.paint(ui),
+                );
+                if tick >= 3 {
+                    samples.push(started.elapsed().as_secs_f64() * 1000.);
+                }
+                assert!(!output.shapes.is_empty());
+                output.textures_delta.clear();
+            }
+            assert_eq!(
+                app.drivers_ui
+                    .snapshot
+                    .as_ref()
+                    .unwrap()
+                    .inventory
+                    .devices
+                    .as_ptr(),
+                pointer
+            );
+            assert_eq!(
+                app.drivers_ui
+                    .snapshot
+                    .as_ref()
+                    .unwrap()
+                    .inventory
+                    .devices
+                    .len(),
+                count
+            );
+            eprintln!(
+                "INVENTORY_FRAME_BENCH {}",
+                serde_json::json!({"stage":stage,"page":"drivers","rows":count,"warm_layout_ms":samples,"synthetic":true,"collapsed_group":true,"physical_input":false,"native_window":false})
+            );
+        }
+    }
 
     #[test]
     fn header_selection_resets_direction_then_reverses_on_repeat() {

@@ -3,19 +3,25 @@
 //! This codec performs no IPC, authentication, launch or native change. A frame
 //! and its identifiers are untrusted data until a transport authenticates its
 //! peer and the service resolves them against its own durable ownership records.
-//! The helper retains the original launch arguments locally; this protocol never
-//! accepts a client-supplied command, registry path, executable or native state.
+//! Original invocation context is untrusted data, accepted only on the protected
+//! helper path. No executable, registry path, native state or launch permit is
+//! supplied by that context; the service must resolve its own selected image.
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::io::{self, Read, Write};
 use uuid::Uuid;
 
-pub const PROTOCOL_VERSION: u16 = 1;
-pub const MAX_PAYLOAD_BYTES: usize = 8 * 1024;
+pub const PROTOCOL_VERSION: u16 = 2;
+// Worst-case JSON encoding of the existing one-MiB Unicode environment cap,
+// command/directory and framing metadata. Responses retain the small bound.
+pub const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
+const MAX_RESPONSE_BYTES: usize = 8 * 1024;
 const MAGIC: [u8; 4] = *b"DCLN";
 const HEADER_BYTES: usize = 12;
 const REQUEST_KIND: u8 = 1;
 const RESPONSE_KIND: u8 = 2;
+mod original;
+pub use original::OriginalContext;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +38,7 @@ pub enum HelperRequest {
         lease_id: Uuid,
         /// Retained across retries; a request ID identifies one exchange only.
         invocation_id: Uuid,
+        original: Box<OriginalContext>,
     },
     QueryInvocation {
         invocation_id: Uuid,
@@ -103,6 +110,7 @@ pub enum ProtocolError {
     ReservedBits,
     InvalidLength(u32),
     InvalidIdentifier,
+    InvalidOriginalContext,
     CorrelationMismatch,
     ResponseMismatch,
     Payload(serde_json::Error),
@@ -183,16 +191,18 @@ fn non_nil(id: Uuid) -> Result<(), ProtocolError> {
 
 fn validate_request(message: &RequestEnvelope) -> Result<(), ProtocolError> {
     non_nil(message.request_id)?;
-    match message.request {
+    match &message.request {
         HelperRequest::QueryReadiness {} => Ok(()),
         HelperRequest::Reactivate {
             lease_id,
             invocation_id,
+            original,
         } => {
-            non_nil(lease_id)?;
-            non_nil(invocation_id)
+            non_nil(*lease_id)?;
+            non_nil(*invocation_id)?;
+            original.validate()
         }
-        HelperRequest::QueryInvocation { invocation_id } => non_nil(invocation_id),
+        HelperRequest::QueryInvocation { invocation_id } => non_nil(*invocation_id),
     }
 }
 
@@ -238,10 +248,10 @@ fn read_frame<T: DeserializeOwned>(
         return Err(ProtocolError::ReservedBits);
     }
     let length = u32::from_le_bytes(header[8..12].try_into().expect("fixed header slice"));
-    if length == 0 || length as usize > MAX_PAYLOAD_BYTES {
+    if length == 0 || length as usize > payload_bound(expected_kind) {
         return Err(ProtocolError::InvalidLength(length));
     }
-    let mut payload = vec![0; length as usize];
+    let mut payload = zeroize::Zeroizing::new(vec![0; length as usize]);
     read_rest(reader, &mut payload, false)?;
     serde_json::from_slice(&payload)
         .map(Some)
@@ -262,13 +272,22 @@ fn read_rest(reader: &mut impl Read, bytes: &mut [u8], header: bool) -> Result<(
     })
 }
 
+fn payload_bound(kind: u8) -> usize {
+    if kind == REQUEST_KIND {
+        MAX_PAYLOAD_BYTES
+    } else {
+        MAX_RESPONSE_BYTES
+    }
+}
+
 fn write_frame(
     writer: &mut impl Write,
     kind: u8,
     message: &impl Serialize,
 ) -> Result<(), ProtocolError> {
-    let payload = serde_json::to_vec(message).map_err(ProtocolError::Payload)?;
-    if payload.is_empty() || payload.len() > MAX_PAYLOAD_BYTES {
+    let payload =
+        zeroize::Zeroizing::new(serde_json::to_vec(message).map_err(ProtocolError::Payload)?);
+    if payload.is_empty() || payload.len() > payload_bound(kind) {
         return Err(ProtocolError::InvalidLength(
             u32::try_from(payload.len()).unwrap_or(u32::MAX),
         ));
@@ -293,6 +312,7 @@ mod tests {
             request: HelperRequest::Reactivate {
                 lease_id: Uuid::from_u128(2),
                 invocation_id: Uuid::from_u128(3),
+                original: Box::new(OriginalContext::fixture()),
             },
         }
     }
@@ -352,7 +372,7 @@ mod tests {
             let mut frame = original.clone();
             match case {
                 0 => frame[0] ^= 1,
-                1 => frame[4..6].copy_from_slice(&2_u16.to_le_bytes()),
+                1 => frame[4..6].copy_from_slice(&(PROTOCOL_VERSION + 1).to_le_bytes()),
                 2 => frame[6] = RESPONSE_KIND,
                 3 => frame[7] = 1,
                 4 => frame[8..12].copy_from_slice(&0_u32.to_le_bytes()),

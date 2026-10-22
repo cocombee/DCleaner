@@ -663,12 +663,19 @@ pub fn save_settings(root: &Path, settings: &SoftwareSettings) -> Result<(), Sof
     validate_settings(settings)?;
     fs::create_dir_all(root).map_err(|error| SoftwareError::Settings(error.to_string()))?;
     let destination = root.join("software-settings.json");
-    if let Ok(metadata) = fs::symlink_metadata(&destination) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(SoftwareError::Settings(
-                "the existing settings path is not a regular file; it was preserved.".into(),
-            ));
+    match fs::symlink_metadata(&destination) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(SoftwareError::Settings(
+                    "the existing settings path is not a regular file; it was preserved.".into(),
+                ));
+            }
+            // A failed read or a newer/corrupt document must not become an
+            // implicit reset merely because the current UI has an older copy.
+            load_settings(root)?;
         }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(SoftwareError::Settings(error.to_string())),
     }
     let temporary = root.join(format!("software-settings.{}.tmp", Uuid::new_v4()));
     let bytes = serde_json::to_vec_pretty(settings)
@@ -683,6 +690,7 @@ pub fn save_settings(root: &Path, settings: &SoftwareSettings) -> Result<(), Sof
             .and_then(|_| file.sync_all())
             .map_err(|error| error.to_string())?;
         drop(file);
+        load_settings(root).map_err(|error| error.to_string())?;
         fs::rename(&temporary, &destination).map_err(|error| error.to_string())
     })();
     if result.is_err() {

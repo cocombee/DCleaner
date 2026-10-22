@@ -13,7 +13,7 @@ use eframe::egui::{self, Align, Layout, RichText};
 use std::{collections::VecDeque, ffi::OsString, path::PathBuf};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, mpsc},
+    sync::Arc,
     thread,
 };
 use uuid::Uuid;
@@ -313,27 +313,25 @@ impl App {
                     match inventory.completion {
                         InventoryCompletion::Complete => self.notice = None,
                         InventoryCompletion::Partial => {
-                            self.notice = Some(format!(
+                            self.set_notice(format!(
                                 "Recycle Bin inventory is partial: {} item details need review.",
                                 inventory.issue_count()
                             ));
                         }
                         InventoryCompletion::Cancelled => {
-                            self.notice = Some(
+                            self.set_notice(
                                 "Recycle Bin inventory was stopped. Review actions require a complete fresh inventory.".into(),
                             );
                         }
                         InventoryCompletion::Failed | InventoryCompletion::Unsupported => {
-                            self.notice = inventory
+                            let message = inventory
                                 .issues
                                 .first()
                                 .map(|issue| issue.message.clone())
-                                .or_else(|| {
-                                    Some(
-                                        "Recycle Bin inventory is unavailable on this system."
-                                            .into(),
-                                    )
+                                .unwrap_or_else(|| {
+                                    "Recycle Bin inventory is unavailable on this system.".into()
                                 });
+                            self.set_notice(message);
                         }
                     }
                 }
@@ -386,11 +384,11 @@ impl App {
                     RecycleBinOperation::Purge => "permanently purged",
                 };
                 if succeeded > 0 {
-                    self.notice = Some(format!(
+                    self.set_notice(format!(
                         "{succeeded} of {total} selected items {verb}. Review the item outcomes below."
                     ));
                 } else {
-                    self.notice = Some(format!(
+                    self.set_notice(format!(
                         "No selected items were confirmed {verb}. Review the item outcomes below."
                     ));
                 }
@@ -485,7 +483,7 @@ impl App {
             }
         }
         if !inventory.issues.is_empty() {
-            egui::CollapsingHeader::new(format!("Inventory notes · {}", inventory.issues.len()))
+            theme::Disclosure::new(format!("Inventory notes · {}", inventory.issues.len()))
                 .id_salt("recycle-bin-inventory-notes")
                 .show(ui, |ui| {
                     for issue in inventory.issues.iter().take(20) {
@@ -704,16 +702,21 @@ impl App {
                                         }
                                     }
                                     let name = item.name();
-                                    theme::table_cell(
+                                    theme::table_cell_with_tooltip(
                                         ui,
                                         RichText::new(name.clone()).family(theme::semibold()),
                                         name_width,
                                         40.,
-                                    )
-                                    .on_hover_text(name);
+                                        name,
+                                    );
                                     let parent = item.original_parent().display().to_string();
-                                    theme::table_cell(ui, parent.clone(), path_width, 40.)
-                                        .on_hover_text(parent);
+                                    theme::table_cell_with_tooltip(
+                                        ui,
+                                        parent.clone(),
+                                        path_width,
+                                        40.,
+                                        parent,
+                                    );
                                     theme::table_cell(
                                         ui,
                                         deleted_date(item.deleted_at_unix_seconds()),
@@ -1056,7 +1059,7 @@ impl App {
         let cancel = self.cancel.clone();
         let data_dir = self.data_dir.clone();
         let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let mut port = SystemRecycleBin::new();
@@ -1147,7 +1150,7 @@ impl App {
         self.cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let cancel = self.cancel.clone();
         let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let mut port = SystemRecycleBin::new();

@@ -244,6 +244,7 @@ fn only_the_builtin_temp_rule_applies_the_24_hour_cutoff_and_intersects_ages() {
     let now = SystemTime::now();
     let mut scan_options = options(now);
     scan_options.categories = vec![Category {
+        cache_root_scopes: Default::default(),
         id: "temp".into(),
         name: "Temporary files".into(),
         group: "System".into(),
@@ -318,6 +319,7 @@ fn built_in_categories_use_caller_selection_and_their_own_age_snapshot() {
     fs::write(&old, b"old cache").unwrap();
     set_modified(&old, Duration::from_secs(5 * 86400));
     let category = Category {
+        cache_root_scopes: Default::default(),
         id: "temp.cache".into(),
         name: "Temporary cache".into(),
         group: "System".into(),

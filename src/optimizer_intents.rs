@@ -5,8 +5,9 @@
 #![allow(dead_code)]
 
 use crate::{
-    optimizer_identity::ImageSnapshot, optimizer_registration::RegistryView,
-    optimizer_requests::Caller,
+    optimizer_identity::ImageSnapshot,
+    optimizer_registration::RegistryView,
+    optimizer_requests::{Caller, boot_key},
 };
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 const APP_ID: i64 = 0x4443_5249;
-const VERSION: i64 = 2;
+const VERSION: i64 = 4;
 const MAX_JSON: usize = 4 * 1024 * 1024;
 const MAX_DB: i64 = 64 * 1024 * 1024;
 const MAX_RECORDS: i64 = 512;
@@ -32,7 +33,7 @@ const LEGACY_TABLE: &str = r#"CREATE TABLE intents (
        (phase IN(1,2) AND instance IS NOT NULL AND nonce IS NOT NULL)),
  PRIMARY KEY(account,session,operation)
 ) STRICT, WITHOUT ROWID"#;
-const TABLE: &str = r#"CREATE TABLE intents (
+const V2_TABLE: &str = r#"CREATE TABLE intents (
  account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
  session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
  operation BLOB NOT NULL CHECK(length(operation)=16 AND operation!=zeroblob(16)),
@@ -47,6 +48,41 @@ const TABLE: &str = r#"CREATE TABLE intents (
        (phase IN(1,2,4,5) AND instance IS NOT NULL AND nonce IS NOT NULL)),
  CHECK((phase IN(0,1,3) AND observation IS NULL) OR phase=2 OR (phase IN(4,5) AND observation IS NOT NULL)),
  PRIMARY KEY(account,session,operation)
+) STRICT, WITHOUT ROWID"#;
+const V3_TABLE: &str = r#"CREATE TABLE intents (
+ account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
+ session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
+ logon TEXT NOT NULL DEFAULT '' CHECK(length(logon)<=64 AND instr(logon,char(0))=0),
+ operation BLOB NOT NULL CHECK(length(operation)=16 AND operation!=zeroblob(16)),
+ lease BLOB NOT NULL CHECK(length(lease)=16 AND lease!=zeroblob(16)),
+ revision BLOB NOT NULL CHECK(length(revision)=16 AND revision!=zeroblob(16)),
+ document TEXT NOT NULL CHECK(length(CAST(document AS BLOB)) BETWEEN 1 AND 4194304),
+ phase INTEGER NOT NULL CHECK(phase BETWEEN 0 AND 5),
+ instance BLOB CHECK(instance IS NULL OR (length(instance)=16 AND instance!=zeroblob(16))),
+ nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
+ observation TEXT CHECK(observation IS NULL OR length(CAST(observation AS BLOB)) BETWEEN 1 AND 5242880),
+ CHECK((phase IN(0,3) AND instance IS NULL AND nonce IS NULL) OR
+       (phase IN(1,2,4,5) AND instance IS NOT NULL AND nonce IS NOT NULL)),
+ CHECK((phase IN(0,1,3) AND observation IS NULL) OR phase=2 OR (phase IN(4,5) AND observation IS NOT NULL)),
+ PRIMARY KEY(account,session,logon,operation)
+) STRICT, WITHOUT ROWID"#;
+const TABLE: &str = r#"CREATE TABLE intents (
+ account TEXT NOT NULL CHECK(length(account) BETWEEN 1 AND 184 AND instr(account,char(0))=0),
+ session INTEGER NOT NULL CHECK(session BETWEEN 0 AND 4294967295),
+ logon TEXT NOT NULL DEFAULT '' CHECK(length(logon)<=64 AND instr(logon,char(0))=0),
+ boot BLOB NOT NULL DEFAULT X'00000000000000000000000000000000' CHECK(length(boot)=16),
+ operation BLOB NOT NULL CHECK(length(operation)=16 AND operation!=zeroblob(16)),
+ lease BLOB NOT NULL CHECK(length(lease)=16 AND lease!=zeroblob(16)),
+ revision BLOB NOT NULL CHECK(length(revision)=16 AND revision!=zeroblob(16)),
+ document TEXT NOT NULL CHECK(length(CAST(document AS BLOB)) BETWEEN 1 AND 4194304),
+ phase INTEGER NOT NULL CHECK(phase BETWEEN 0 AND 5),
+ instance BLOB CHECK(instance IS NULL OR (length(instance)=16 AND instance!=zeroblob(16))),
+ nonce BLOB CHECK(nonce IS NULL OR (length(nonce)=16 AND nonce!=zeroblob(16))),
+ observation TEXT CHECK(observation IS NULL OR length(CAST(observation AS BLOB)) BETWEEN 1 AND 5242880),
+ CHECK((phase IN(0,3) AND instance IS NULL AND nonce IS NULL) OR
+       (phase IN(1,2,4,5) AND instance IS NOT NULL AND nonce IS NOT NULL)),
+ CHECK((phase IN(0,1,3) AND observation IS NULL) OR phase=2 OR (phase IN(4,5) AND observation IS NOT NULL)),
+ PRIMARY KEY(account,session,logon,boot,operation)
 ) STRICT, WITHOUT ROWID"#;
 const INDEX: &str = "CREATE UNIQUE INDEX active_lease ON intents(lease) WHERE phase IN(0,1,2)";
 
@@ -74,7 +110,24 @@ pub(crate) struct Change {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum KeyKind {
     Existing,
+    Guarded,
     NewLeaf,
+    NewRoot,
+    RemoveKey,
+}
+impl KeyKind {
+    pub(crate) fn is_guard(self, value: &Change) -> bool {
+        self == Self::Guarded && value.expected == value.desired
+    }
+    pub(crate) fn creates(self) -> bool {
+        matches!(self, Self::NewLeaf | Self::NewRoot)
+    }
+    pub(crate) fn before_present(self) -> bool {
+        !self.creates()
+    }
+    pub(crate) fn after_present(self) -> bool {
+        self != Self::RemoveKey
+    }
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -88,7 +141,7 @@ pub(crate) struct KeyChange {
 /// Registry root is fixed to the IFEO subtree by this schema version. Root
 /// provisioning, native case/alias checks and foreign-filter policy remain the
 /// resource owner's obligations; syntactic validation does not establish them.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Intent {
     version: u32,
@@ -97,6 +150,10 @@ pub(crate) struct Intent {
     revision: Uuid,
     account: String,
     session: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    logon_sid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    boot_id: Option<Uuid>,
     image: ImageSnapshot,
     view: RegistryView,
     keys: Vec<KeyChange>,
@@ -118,12 +175,20 @@ impl Intent {
         keys: Vec<KeyChange>,
     ) -> Result<Self, Error> {
         let intent = Self {
-            version: 1,
+            version: if caller.boot_id().is_some() {
+                5
+            } else if caller.logon_sid().is_some() {
+                4
+            } else {
+                Self::document_version(&keys)
+            },
             operation,
             lease,
             revision,
             account: caller.account().into(),
             session: caller.session(),
+            logon_sid: caller.logon_sid().map(str::to_owned),
+            boot_id: caller.boot_id(),
             image,
             view,
             keys,
@@ -131,8 +196,34 @@ impl Intent {
         intent.validate()?;
         Ok(intent)
     }
+    fn document_version(keys: &[KeyChange]) -> u32 {
+        if keys.iter().any(|k| k.kind == KeyKind::Guarded) {
+            3
+        } else if keys
+            .iter()
+            .any(|k| matches!(k.kind, KeyKind::NewRoot | KeyKind::RemoveKey))
+        {
+            2
+        } else {
+            1
+        }
+    }
     fn validate(&self) -> Result<(), Error> {
-        if self.version != 1
+        let version = if self.boot_id.is_some() {
+            5
+        } else if self.logon_sid.is_some() {
+            4
+        } else {
+            Self::document_version(&self.keys)
+        };
+        if self.version != version
+            || self
+                .boot_id
+                .is_some_and(|id| id.is_nil() || self.logon_sid.is_none())
+            || self
+                .logon_sid
+                .as_deref()
+                .is_some_and(|s| !crate::optimizer_requests::canonical_logon_sid(s))
             || [self.operation, self.lease, self.revision]
                 .iter()
                 .any(Uuid::is_nil)
@@ -143,6 +234,11 @@ impl Intent {
             || self.account.contains('\0')
             || self.keys.is_empty()
             || self.keys.len() > 16
+            || !self.keys.iter().any(|k| {
+                k.kind.creates()
+                    || k.kind == KeyKind::RemoveKey
+                    || k.values.iter().any(|v| v.expected != v.desired)
+            })
             || self.image.sha256.len() != 64
             || !self.image.sha256.bytes().all(|c| c.is_ascii_hexdigit())
             || self.image.size > crate::optimizer_identity::MAX_IMAGE_BYTES
@@ -160,6 +256,7 @@ impl Intent {
                 || key.path.split('\\').count() > 2
                 || !key.path.split('\\').all(component)
                 || (key.kind == KeyKind::NewLeaf && key.path.split('\\').count() != 2)
+                || (key.kind == KeyKind::NewRoot && key.path.split('\\').count() != 1)
                 || same_registry_path(&key.path, &key.path).is_none()
                 || self.keys[..i]
                     .iter()
@@ -170,9 +267,11 @@ impl Intent {
                 return Err(Error::InvalidIntent);
             }
             for (j, value) in key.values.iter().enumerate() {
-                if value.expected == value.desired
+                if (value.expected == value.desired
+                    && !matches!(key.kind, KeyKind::RemoveKey | KeyKind::Guarded))
                     || key.values[..j].iter().any(|v| v.name == value.name)
-                    || (key.kind == KeyKind::NewLeaf && value.expected.is_some())
+                    || (key.kind.creates() && (value.expected.is_some() || value.desired.is_none()))
+                    || (key.kind == KeyKind::RemoveKey && value.desired.is_some())
                 {
                     return Err(Error::InvalidIntent);
                 }
@@ -297,6 +396,8 @@ pub(crate) struct Record {
 pub(crate) struct ReviewCursor {
     account: String,
     session: u32,
+    logon_sid: Option<String>,
+    boot_id: Option<Uuid>,
     operation: Uuid,
 }
 pub(crate) struct ReviewPage {
@@ -421,8 +522,8 @@ impl Observation {
             }
             match &observed.key {
                 KeyState::Missing => {
-                    before &= plan.kind == KeyKind::NewLeaf;
-                    after = false;
+                    before &= plan.kind.creates();
+                    after &= plan.kind == KeyKind::RemoveKey;
                 }
                 KeyState::Present {
                     value_count,
@@ -436,7 +537,8 @@ impl Observation {
                     {
                         return Err(Error::Corrupt);
                     }
-                    before &= plan.kind == KeyKind::Existing;
+                    before &= plan.kind.before_present();
+                    after &= plan.kind.after_present();
                     for (actual, want) in values.iter().zip(&plan.values) {
                         if actual.name != want.name {
                             return Err(Error::Corrupt);
@@ -450,8 +552,22 @@ impl Observation {
                         before &= actual.value == want.expected;
                         after &= actual.value == want.desired;
                     }
-                    if plan.kind == KeyKind::NewLeaf {
-                        after &= *subkey_count == 0
+                    if plan.kind.creates() {
+                        let children = if plan.kind == KeyKind::NewRoot {
+                            intent
+                                .keys
+                                .iter()
+                                .filter(|k| {
+                                    k.kind == KeyKind::NewLeaf
+                                        && k.path.split_once('\\').is_some_and(|(parent, _)| {
+                                            same_registry_path(parent, &plan.path) == Some(true)
+                                        })
+                                })
+                                .count() as u32
+                        } else {
+                            0
+                        };
+                        after &= *subkey_count == children
                             && *value_count
                                 == plan.values.iter().filter(|v| v.desired.is_some()).count()
                                     as u32;
@@ -494,6 +610,25 @@ impl Observation {
 pub(crate) struct ObservedAttempt {
     receipt: AttemptReceipt,
     observation: Observation,
+}
+/// Returned only after the exact native report is durably recorded. Not a
+/// permit, not deserializable, and never reconstructed from a saved query row.
+pub(crate) struct RecordedAttempt {
+    intent: Intent,
+    instance: Uuid,
+    phase: Phase,
+    observation: Observation,
+}
+impl RecordedAttempt {
+    pub(crate) fn phase(&self) -> Phase {
+        self.phase
+    }
+    pub(crate) fn matches(&self, intent: &Intent, instance: Uuid) -> bool {
+        self.intent == *intent && self.instance == instance
+    }
+    pub(crate) fn observation(&self) -> &Observation {
+        &self.observation
+    }
 }
 impl ObservedAttempt {
     /// # Safety
@@ -565,14 +700,25 @@ impl Journal {
             tx.execute_batch(INDEX)?;
             tx.pragma_update(None, "application_id", APP_ID)?;
             tx.pragma_update(None, "user_version", VERSION)?;
-        } else if layout == Layout::Legacy {
+        } else if matches!(layout, Layout::Legacy | Layout::V2 | Layout::V3) {
             // A single transactional migration; no row is recovered or replayed.
             validate_rows(&tx, layout)?;
-            tx.execute_batch("DROP INDEX active_lease;ALTER TABLE intents RENAME TO intents_v1;")?;
+            tx.execute_batch("DROP INDEX active_lease;ALTER TABLE intents RENAME TO intents_old;")?;
             tx.execute_batch(TABLE)?;
-            tx.execute_batch("INSERT INTO intents(account,session,operation,lease,revision,document,phase,instance,nonce)
-                SELECT account,session,operation,lease,revision,document,phase,instance,nonce FROM intents_v1;
-                DROP TABLE intents_v1;")?;
+            // Old documents remain byte-exact and unbound to any current login.
+            tx.execute_batch(if layout == Layout::Legacy {
+                "INSERT INTO intents(account,session,operation,lease,revision,document,phase,instance,nonce)
+                SELECT account,session,operation,lease,revision,document,phase,instance,nonce FROM intents_old;
+                DROP TABLE intents_old;"
+            } else if layout == Layout::V2 {
+                "INSERT INTO intents(account,session,operation,lease,revision,document,phase,instance,nonce,observation)
+                SELECT account,session,operation,lease,revision,document,phase,instance,nonce,observation FROM intents_old;
+                DROP TABLE intents_old;"
+            } else {
+                "INSERT INTO intents(account,session,logon,operation,lease,revision,document,phase,instance,nonce,observation)
+                SELECT account,session,logon,operation,lease,revision,document,phase,instance,nonce,observation FROM intents_old;
+                DROP TABLE intents_old;"
+            })?;
             tx.execute_batch(INDEX)?;
             tx.pragma_update(None, "user_version", VERSION)?;
         }
@@ -587,14 +733,25 @@ impl Journal {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let result = if let Some(record) =
-            lookup(&tx, &intent.account, intent.session, intent.operation)?
-        {
+        let result = if let Some(record) = lookup(
+            &tx,
+            &intent.account,
+            intent.session,
+            intent.logon_sid.as_deref(),
+            intent.boot_id,
+            intent.operation,
+        )? {
             if record.intent.encode()? != document {
                 return Err(Error::Conflict);
             }
             Preparation::Existing(record)
         } else {
+            if intent.logon_sid.is_some() && tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM intents WHERE account=?1 AND session=?2 AND operation=?3 AND boot=zeroblob(16) AND (logon='' OR (?4 AND logon=?5)))",
+                params![intent.account,intent.session,intent.operation.as_bytes().as_slice(),intent.boot_id.is_some(),intent.logon_sid.as_deref().unwrap_or("")],|r|r.get::<_,bool>(0))?
+            {
+                return Err(Error::Conflict);
+            }
             let count: i64 = tx.query_row("SELECT count(*) FROM intents", [], |r| r.get(0))?;
             if count >= MAX_RECORDS {
                 return Err(Error::Capacity);
@@ -607,8 +764,8 @@ impl Journal {
             if active {
                 return Err(Error::BusyLease);
             }
-            tx.execute("INSERT INTO intents(account,session,operation,lease,revision,document,phase) VALUES(?1,?2,?3,?4,?5,?6,0)",
-                params![intent.account,intent.session,intent.operation.as_bytes().as_slice(),intent.lease.as_bytes().as_slice(),intent.revision.as_bytes().as_slice(),document])?;
+            tx.execute("INSERT INTO intents(account,session,operation,lease,revision,document,phase,logon,boot) VALUES(?1,?2,?3,?4,?5,?6,0,?7,?8)",
+                params![intent.account,intent.session,intent.operation.as_bytes().as_slice(),intent.lease.as_bytes().as_slice(),intent.revision.as_bytes().as_slice(),document,intent.logon_sid.as_deref().unwrap_or(""),boot_key(intent.boot_id).as_slice()])?;
             Preparation::New(Prepared { intent, document })
         };
         tx.commit()?;
@@ -622,6 +779,8 @@ impl Journal {
             &self.connection,
             caller.account(),
             caller.session(),
+            caller.logon_sid(),
+            caller.boot_id(),
             operation,
         )
     }
@@ -639,8 +798,8 @@ impl Journal {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let i = &prepared.intent;
-        let count=tx.execute("UPDATE intents SET phase=1,instance=?1,nonce=?2 WHERE account=?3 AND session=?4 AND operation=?5 AND revision=?6 AND document=?7 AND lease=?8 AND phase=0",
-            params![instance.as_bytes().as_slice(),nonce.as_bytes().as_slice(),i.account,i.session,i.operation.as_bytes().as_slice(),current_revision.as_bytes().as_slice(),prepared.document,i.lease.as_bytes().as_slice()])?;
+        let count=tx.execute("UPDATE intents SET phase=1,instance=?1,nonce=?2 WHERE account=?3 AND session=?4 AND operation=?5 AND revision=?6 AND document=?7 AND lease=?8 AND logon=?9 AND boot=?10 AND phase=0",
+            params![instance.as_bytes().as_slice(),nonce.as_bytes().as_slice(),i.account,i.session,i.operation.as_bytes().as_slice(),current_revision.as_bytes().as_slice(),prepared.document,i.lease.as_bytes().as_slice(),i.logon_sid.as_deref().unwrap_or(""),boot_key(i.boot_id).as_slice()])?;
         if count != 1 {
             return Err(Error::Stale);
         }
@@ -657,8 +816,8 @@ impl Journal {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let i = &prepared.intent;
-        let count=tx.execute("UPDATE intents SET phase=3 WHERE account=?1 AND session=?2 AND operation=?3 AND document=?4 AND lease=?5 AND revision=?6 AND phase=0",
-            params![i.account,i.session,i.operation.as_bytes().as_slice(),prepared.document,i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice()])?;
+        let count=tx.execute("UPDATE intents SET phase=3 WHERE account=?1 AND session=?2 AND operation=?3 AND document=?4 AND lease=?5 AND revision=?6 AND logon=?7 AND boot=?8 AND phase=0",
+            params![i.account,i.session,i.operation.as_bytes().as_slice(),prepared.document,i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),i.logon_sid.as_deref().unwrap_or(""),boot_key(i.boot_id).as_slice()])?;
         if count != 1 {
             return Err(Error::Stale);
         }
@@ -677,6 +836,8 @@ impl Journal {
         if reviewed.phase != Phase::Prepared
             || caller.account() != i.account
             || caller.session() != i.session
+            || caller.logon_sid() != i.logon_sid.as_deref()
+            || caller.boot_id() != i.boot_id
         {
             return Err(Error::Stale);
         }
@@ -684,8 +845,8 @@ impl Journal {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let count=tx.execute("UPDATE intents SET phase=3 WHERE account=?1 AND session=?2 AND operation=?3 AND lease=?4 AND revision=?5 AND document=?6 AND phase=0",
-            params![i.account,i.session,i.operation.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),document])?;
+        let count=tx.execute("UPDATE intents SET phase=3 WHERE account=?1 AND session=?2 AND operation=?3 AND lease=?4 AND revision=?5 AND document=?6 AND logon=?7 AND boot=?8 AND phase=0",
+            params![i.account,i.session,i.operation.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),document,i.logon_sid.as_deref().unwrap_or(""),boot_key(i.boot_id).as_slice()])?;
         if count != 1 {
             return Err(Error::Stale);
         }
@@ -697,8 +858,8 @@ impl Journal {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let i = &permit.intent;
-        let count=tx.execute("UPDATE intents SET phase=2 WHERE account=?1 AND session=?2 AND operation=?3 AND document=?4 AND instance=?5 AND nonce=?6 AND lease=?7 AND revision=?8 AND phase=1",
-            params![i.account,i.session,i.operation.as_bytes().as_slice(),permit.document,permit.instance.as_bytes().as_slice(),permit.nonce.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice()])?;
+        let count=tx.execute("UPDATE intents SET phase=2 WHERE account=?1 AND session=?2 AND operation=?3 AND document=?4 AND instance=?5 AND nonce=?6 AND lease=?7 AND revision=?8 AND logon=?9 AND boot=?10 AND phase=1",
+            params![i.account,i.session,i.operation.as_bytes().as_slice(),permit.document,permit.instance.as_bytes().as_slice(),permit.nonce.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),i.logon_sid.as_deref().unwrap_or(""),boot_key(i.boot_id).as_slice()])?;
         if count != 1 {
             return Err(Error::Stale);
         }
@@ -709,6 +870,12 @@ impl Journal {
     /// operation, owner, generation and attempt nonce match. Uncertain commit
     /// outcomes and incomplete/changed reads cannot become settled observations.
     pub(crate) fn record_observation(&mut self, proof: ObservedAttempt) -> Result<Phase, Error> {
+        Ok(self.record_observation_receipt(proof)?.phase())
+    }
+    pub(crate) fn record_observation_receipt(
+        &mut self,
+        proof: ObservedAttempt,
+    ) -> Result<RecordedAttempt, Error> {
         let i = &proof.receipt.intent;
         let phase = proof.observation.phase(i)?;
         let json = proof.observation.encode(i)?;
@@ -720,13 +887,18 @@ impl Journal {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let count=tx.execute("UPDATE intents SET phase=?1,observation=?2 WHERE account=?3 AND session=?4 AND operation=?5 AND lease=?6 AND revision=?7 AND document=?8 AND instance=?9 AND nonce=?10 AND phase IN(1,2) AND observation IS NULL",
-            params![code,json,i.account,i.session,i.operation.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),proof.receipt.document,proof.receipt.instance.as_bytes().as_slice(),proof.receipt.nonce.as_bytes().as_slice()])?;
+        let count=tx.execute("UPDATE intents SET phase=?1,observation=?2 WHERE account=?3 AND session=?4 AND operation=?5 AND lease=?6 AND revision=?7 AND document=?8 AND instance=?9 AND nonce=?10 AND logon=?11 AND boot=?12 AND phase IN(1,2) AND observation IS NULL",
+            params![code,json,i.account,i.session,i.operation.as_bytes().as_slice(),i.lease.as_bytes().as_slice(),i.revision.as_bytes().as_slice(),proof.receipt.document,proof.receipt.instance.as_bytes().as_slice(),proof.receipt.nonce.as_bytes().as_slice(),i.logon_sid.as_deref().unwrap_or(""),boot_key(i.boot_id).as_slice()])?;
         if count != 1 {
             return Err(Error::Stale);
         }
         tx.commit()?;
-        Ok(phase)
+        Ok(RecordedAttempt {
+            intent: proof.receipt.intent,
+            instance: proof.receipt.instance,
+            phase,
+            observation: proof.observation,
+        })
     }
     /// Explicit review only. No recovery, permit creation, state transition or
     /// native retry occurs on reopen or listing. Includes uncertain operations.
@@ -736,10 +908,52 @@ impl Journal {
         limit: usize,
         cursor: Option<&ReviewCursor>,
     ) -> Result<ReviewPage, Error> {
-        if cursor.is_some_and(|c| c.account != caller.account() || c.session != caller.session()) {
+        if cursor.is_some_and(|c| {
+            c.account != caller.account()
+                || c.session != caller.session()
+                || c.logon_sid.as_deref() != caller.logon_sid()
+                || c.boot_id != caller.boot_id()
+        }) {
             return Err(Error::Stale);
         }
         self.review_matching(Some(caller), limit, cursor)
+    }
+
+    /// Records uncertainty only after the exclusive runtime proves native owner
+    /// death. No permit is recreated, no intent is abandoned and no effect runs.
+    pub(crate) fn mark_stopped_owner_uncertain(
+        &mut self,
+        proof: &crate::optimizer_requests::StoppedOwner,
+    ) -> Result<usize, Error> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        validate_rows(&tx, Layout::Current)?;
+        let changed = tx.execute(
+            "UPDATE intents SET phase=2 WHERE phase=1 AND instance=?1",
+            [proof.instance().as_bytes().as_slice()],
+        )?;
+        tx.commit()?;
+        Ok(changed)
+    }
+
+    pub(crate) fn has_foreign_commit_owner(&self, instance: Uuid) -> Result<bool, Error> {
+        if instance.is_nil() {
+            return Err(Error::InvalidIntent);
+        }
+        Ok(self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM intents WHERE phase=1 AND instance<>?1)",
+            [instance.as_bytes().as_slice()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub(crate) fn requires_review(&self) -> Result<bool, Error> {
+        Ok(self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM intents WHERE phase IN(0,1,2))",
+            [],
+            |r| r.get(0),
+        )?)
     }
     /// # Safety
     /// Only the privileged protected-storage/resource owner may enumerate all
@@ -760,7 +974,7 @@ impl Journal {
         if limit == 0 || limit > 64 {
             return Err(Error::InvalidIntent);
         }
-        let mut statement=self.connection.prepare("SELECT account,session,operation,lease,revision,document,phase,observation FROM intents WHERE phase IN(0,1,2) AND (?1 OR (account,session,operation)>(?2,?3,?4)) AND (?6 OR (account=?7 AND session=?8)) ORDER BY account,session,operation LIMIT ?5")?;
+        let mut statement=self.connection.prepare("SELECT account,session,operation,lease,revision,document,phase,observation,logon,boot FROM intents WHERE phase IN(0,1,2) AND (?1 OR (account,session,logon,boot,operation)>(?2,?3,?9,?11,?4)) AND (?6 OR (account=?7 AND session=?8 AND logon=?10 AND boot=?12)) ORDER BY account,session,logon,boot,operation LIMIT ?5")?;
         let nil = Uuid::nil();
         let rows = statement.query_map(
             params![
@@ -774,7 +988,11 @@ impl Journal {
                 limit as i64 + 1,
                 caller.is_none(),
                 caller.map_or("", |c| c.account()),
-                caller.map_or(0, |c| c.session())
+                caller.map_or(0, |c| c.session()),
+                cursor.and_then(|c| c.logon_sid.as_deref()).unwrap_or(""),
+                caller.and_then(|c| c.logon_sid()).unwrap_or(""),
+                boot_key(cursor.and_then(|c| c.boot_id)).as_slice(),
+                boot_key(caller.and_then(|c| c.boot_id())).as_slice()
             ],
             stored_row,
         )?;
@@ -788,6 +1006,8 @@ impl Journal {
             records.last().map(|r| ReviewCursor {
                 account: r.intent.account.clone(),
                 session: r.intent.session,
+                logon_sid: r.intent.logon_sid.clone(),
+                boot_id: r.intent.boot_id,
                 operation: r.intent.operation,
             })
         } else {
@@ -805,12 +1025,14 @@ fn lookup(
     c: &Connection,
     account: &str,
     session: u32,
+    logon_sid: Option<&str>,
+    boot_id: Option<Uuid>,
     operation: Uuid,
 ) -> Result<Option<Record>, Error> {
     let row: Option<StoredRow> = c
         .query_row(
-            "SELECT account,session,operation,lease,revision,document,phase,observation FROM intents WHERE account=?1 AND session=?2 AND operation=?3",
-            params![account, session, operation.as_bytes().as_slice()],
+            "SELECT account,session,operation,lease,revision,document,phase,observation,logon,boot FROM intents WHERE account=?1 AND session=?2 AND operation=?3 AND logon=?4 AND boot=?5",
+            params![account, session, operation.as_bytes().as_slice(),logon_sid.unwrap_or(""),boot_key(boot_id).as_slice()],
             stored_row,
         )
         .optional()?;
@@ -825,6 +1047,8 @@ type StoredRow = (
     String,
     i64,
     Option<String>,
+    String,
+    Vec<u8>,
 );
 fn stored_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRow> {
     Ok((
@@ -836,13 +1060,18 @@ fn stored_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRow> {
         r.get(5)?,
         r.get(6)?,
         r.get(7)?,
+        r.get(8)?,
+        r.get(9)?,
     ))
 }
 fn decode_row(row: StoredRow) -> Result<Record, Error> {
-    let (account, session, operation, lease, revision, document, phase, observation) = row;
+    let (account, session, operation, lease, revision, document, phase, observation, logon, boot) =
+        row;
     let intent = Intent::decode(&document)?;
     if account != intent.account
         || session != intent.session
+        || logon != intent.logon_sid.as_deref().unwrap_or("")
+        || boot != boot_key(intent.boot_id)
         || operation != intent.operation.as_bytes()
         || lease != intent.lease.as_bytes()
         || revision != intent.revision.as_bytes()
@@ -871,6 +1100,8 @@ fn decode_row(row: StoredRow) -> Result<Record, Error> {
 enum Layout {
     Fresh,
     Legacy,
+    V2,
+    V3,
     Current,
 }
 fn header(c: &Connection) -> Result<Layout, Error> {
@@ -885,11 +1116,15 @@ fn header(c: &Connection) -> Result<Layout, Error> {
     if app == 0 && version == 0 && count == 0 {
         return Ok(Layout::Fresh);
     }
-    if app != APP_ID || ![1, VERSION].contains(&version) || count != 2 {
+    if app != APP_ID || ![1, 2, 3, VERSION].contains(&version) || count != 2 {
         return Err(Error::UnsupportedDatabase);
     }
     let layout = if version == 1 {
         Layout::Legacy
+    } else if version == 2 {
+        Layout::V2
+    } else if version == 3 {
+        Layout::V3
     } else {
         Layout::Current
     };
@@ -901,10 +1136,11 @@ fn schema(c: &Connection, layout: Layout) -> Result<(), Error> {
         (
             "table",
             "intents",
-            if layout == Layout::Legacy {
-                LEGACY_TABLE
-            } else {
-                TABLE
+            match layout {
+                Layout::Legacy => LEGACY_TABLE,
+                Layout::V2 => V2_TABLE,
+                Layout::V3 => V3_TABLE,
+                _ => TABLE,
             },
         ),
         ("index", "active_lease", INDEX),
@@ -935,10 +1171,11 @@ fn validate_rows(c: &Connection, layout: Layout) -> Result<(), Error> {
     if count > MAX_RECORDS {
         return Err(Error::Corrupt);
     }
-    let mut statement = c.prepare(if layout == Layout::Legacy {
-        "SELECT account,session,operation,lease,revision,document,phase,NULL FROM intents"
-    } else {
-        "SELECT account,session,operation,lease,revision,document,phase,observation FROM intents"
+    let mut statement = c.prepare(match layout {
+        Layout::Legacy => "SELECT account,session,operation,lease,revision,document,phase,NULL,'',zeroblob(16) FROM intents",
+        Layout::V2 => "SELECT account,session,operation,lease,revision,document,phase,observation,'',zeroblob(16) FROM intents",
+        Layout::V3 => "SELECT account,session,operation,lease,revision,document,phase,observation,logon,zeroblob(16) FROM intents",
+        _ => "SELECT account,session,operation,lease,revision,document,phase,observation,logon,boot FROM intents",
     })?;
     let mut rows = statement.query([])?;
     while let Some(row) = rows.next()? {
@@ -949,6 +1186,84 @@ fn validate_rows(c: &Connection, layout: Layout) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
+    mod boot_scope;
+    mod logon_scope;
+    #[test]
+    fn guarded_documents_are_canonical_and_cannot_turn_only_preconditions_into_work() {
+        let mut guarded = intent();
+        guarded.keys[0].kind = KeyKind::Guarded;
+        let mut same = guarded.keys[0].values[0].clone();
+        same.name = Name::FilterFullPath;
+        same.expected = same.desired.clone();
+        guarded.keys[0].values.push(same);
+        guarded.version = Intent::document_version(&guarded.keys);
+        assert_eq!(guarded.version, 3);
+        let json = guarded.encode().unwrap();
+        assert_eq!(Intent::decode(&json).unwrap().encode().unwrap(), json);
+        for version in [1, 2, 4] {
+            let mut wrong = guarded.clone();
+            wrong.version = version;
+            assert!(wrong.encode().is_err());
+        }
+        guarded.keys.truncate(1);
+        for value in &mut guarded.keys[0].values {
+            value.expected = value.desired.clone();
+        }
+        assert!(guarded.encode().is_err());
+        guarded.keys.push(KeyChange {
+            path: "extra.exe".into(),
+            kind: KeyKind::NewRoot,
+            values: vec![Change {
+                name: Name::UseFilter,
+                expected: None,
+                desired: Some(RawValue {
+                    kind: 4,
+                    bytes: vec![1, 0, 0, 0],
+                }),
+            }],
+        });
+        assert!(guarded.encode().is_ok());
+    }
+    #[test]
+    fn namespace_documents_have_a_canonical_extended_version_without_rewriting_legacy_plans() {
+        let legacy = intent();
+        assert_eq!(legacy.version, 1);
+        let legacy_json = legacy.encode().unwrap();
+        assert_eq!(
+            Intent::decode(&legacy_json).unwrap().encode().unwrap(),
+            legacy_json
+        );
+        let mut extended = legacy.clone();
+        extended.keys[0].kind = KeyKind::NewRoot;
+        for value in &mut extended.keys[0].values {
+            value.expected = None;
+        }
+        extended.version = 2;
+        let json = extended.encode().unwrap();
+        assert_eq!(Intent::decode(&json).unwrap(), extended);
+        let mut wrong = extended.clone();
+        wrong.version = 1;
+        assert!(wrong.encode().is_err());
+        let mut wrong = extended.clone();
+        wrong.version = 3;
+        assert!(wrong.encode().is_err());
+        let mut removal = extended;
+        removal.keys = vec![KeyChange {
+            path: "empty.exe".into(),
+            kind: KeyKind::RemoveKey,
+            values: vec![Change {
+                name: Name::UseFilter,
+                expected: None,
+                desired: None,
+            }],
+        }];
+        assert!(removal.encode().is_ok());
+        removal.keys[0].values[0].desired = Some(RawValue {
+            kind: 4,
+            bytes: 1u32.to_le_bytes().to_vec(),
+        });
+        assert!(removal.encode().is_err());
+    }
     use super::*;
     use crate::optimizer_identity::{FileIdentity, PeFormat, PeHeader};
     use std::{
@@ -1035,6 +1350,77 @@ mod tests {
     }
     fn phase(j: &Journal, i: &Intent) -> Phase {
         j.query(&owner(), i.operation).unwrap().unwrap().phase
+    }
+
+    #[test]
+    fn stopped_owner_marks_only_its_started_intents_uncertain_without_retry_permits() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("intents.sqlite");
+        let mut j = open(&path);
+        let first = intent();
+        let foreign = intent();
+        let queued = intent();
+        let old = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let prepared = prepare(&mut j, first.clone());
+        let _spent = j
+            .begin_commit(prepared, first.revision, old)
+            .unwrap()
+            .into_attempt();
+        let prepared = prepare(&mut j, foreign.clone());
+        let _foreign = j
+            .begin_commit(prepared, foreign.revision, other)
+            .unwrap()
+            .into_attempt();
+        drop(prepare(&mut j, queued.clone()));
+        assert!(j.has_foreign_commit_owner(old).unwrap());
+        let proof = crate::optimizer_requests::StoppedOwner::fixture(old);
+        assert_eq!(j.mark_stopped_owner_uncertain(&proof).unwrap(), 1);
+        assert_eq!(j.mark_stopped_owner_uncertain(&proof).unwrap(), 0);
+        assert_eq!(phase(&j, &first), Phase::Uncertain);
+        assert_eq!(phase(&j, &foreign), Phase::CommitStarted);
+        assert_eq!(phase(&j, &queued), Phase::Prepared);
+        assert!(matches!(
+            j.prepare(first.clone()).unwrap(),
+            Preparation::Existing(Record {
+                phase: Phase::Uncertain,
+                ..
+            })
+        ));
+        drop(j);
+        let reopened = open(&path);
+        assert_eq!(phase(&reopened, &first), Phase::Uncertain);
+        assert!(reopened.requires_review().unwrap());
+    }
+
+    #[test]
+    fn failed_stopped_owner_commit_keeps_started_record_and_provenance() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut j = open(&temp.path().join("intents.sqlite"));
+        let i = intent();
+        let instance = Uuid::new_v4();
+        let p = prepare(&mut j, i.clone());
+        let _r = j
+            .begin_commit(p, i.revision, instance)
+            .unwrap()
+            .into_attempt();
+        commit_fault(&j, "UPDATE OF phase");
+        assert!(
+            j.mark_stopped_owner_uncertain(&crate::optimizer_requests::StoppedOwner::fixture(
+                instance
+            ))
+            .is_err()
+        );
+        assert_eq!(phase(&j, &i), Phase::CommitStarted);
+        clear_fault(&j);
+        assert_eq!(
+            j.mark_stopped_owner_uncertain(&crate::optimizer_requests::StoppedOwner::fixture(
+                instance
+            ))
+            .unwrap(),
+            1
+        );
+        assert_eq!(phase(&j, &i), Phase::Uncertain);
     }
 
     // Synthetic reports exercise persistence/classification, never native proof.
@@ -1455,6 +1841,8 @@ mod tests {
         let fake_cursor = ReviewCursor {
             account: owner().account().into(),
             session: owner().session(),
+            logon_sid: None,
+            boot_id: None,
             operation: original.operation,
         };
         assert!(matches!(

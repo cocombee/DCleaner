@@ -16,9 +16,16 @@ use std::{
         mpsc::{self, Receiver},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
+#[cfg(test)]
+#[path = "launch_tests.rs"]
+mod launch_tests;
+#[path = "page_choice_save.rs"]
+mod page_choice_save;
+#[path = "preference_save.rs"]
+mod preference_save;
 #[cfg(debug_assertions)]
 #[path = "qa_core.rs"]
 mod qa_core;
@@ -152,7 +159,10 @@ const PAGES: [Page; 13] = [
     Page::Settings,
     Page::Help,
 ];
+type CleanupHistory = Result<Vec<CleanupResult>, String>;
+
 enum Event {
+    InitialLoaded(Box<Result<crate::startup_load::StartupData, String>>),
     Settings(view_settings::SettingsEvent),
     Cloud(view_cloud::CloudEvent),
     CleanSettings(view_clean_settings::CleanSettingsEvent),
@@ -168,9 +178,36 @@ enum Event {
     Startup(view_startup::StartupEvent),
     Drivers(view_drivers::DriverEvent),
     Progress(String),
-    Cleaned(Result<CleanupResult, String>),
+    Cleaned {
+        result: Result<CleanupResult, String>,
+        history: CleanupHistory,
+    },
     Disk(Result<DiskReport, String>),
 }
+impl crate::worker_events::ProgressEvent for Event {
+    fn is_progress(&self) -> bool {
+        matches!(
+            self,
+            Self::Progress(_)
+                | Self::Cloud(view_cloud::CloudEvent::Progress(_))
+                | Self::Duplicate(view_duplicates::DuplicateEvent::Progress(_))
+                | Self::Duplicate(view_duplicates::DuplicateEvent::Cleaning { .. })
+                | Self::Privacy(view_privacy::PrivacyEvent::Progress(_))
+                | Self::Privacy(view_privacy::PrivacyEvent::CleanupProgress { .. })
+                | Self::RecycleBin(
+                    view_recycle_bin::RecycleBinEvent::InventoryProgress { .. }
+                        | view_recycle_bin::RecycleBinEvent::OperationProgress { .. }
+                )
+                | Self::Health(
+                    view_health::HealthEvent::ScanProgress { .. }
+                        | view_health::HealthEvent::EffectProgress(_)
+                )
+                | Self::Software(view_software::SoftwareEvent::Progress(_))
+                | Self::Programs(view_programs::ProgramsEvent::UninstallBatchProgress(_))
+        )
+    }
+}
+const MAX_WORKER_EVENTS_PER_FRAME: usize = 64;
 #[derive(Clone)]
 struct DiskReport {
     root: PathBuf,
@@ -184,6 +221,7 @@ pub struct App {
     illustrations: crate::illustrations::Illustrations,
     qa_fixture_mode: bool,
     logo_texture: Option<egui::TextureHandle>,
+    logo_mono_texture: Option<egui::TextureHandle>,
     cloud_ui: view_cloud::CloudUi,
     clean_settings_ui: view_clean_settings::CleanSettingsUi,
     settings_ui: view_settings::SettingsUi,
@@ -215,11 +253,24 @@ pub struct App {
     disk: Option<DiskReport>,
     disk_ui: view_disk::DiskUi,
     data_dir: PathBuf,
-    worker: Option<Receiver<Event>>,
+    worker: Option<crate::worker_events::Receiver<Event>>,
+    ui_context: egui::Context,
+    preferences_job: Option<preference_save::Pending>,
+    page_choices_job: Option<page_choice_save::Pending>,
+    preferences_dirty: bool,
+    preferences_failed_draft: bool,
+    preferences_dirty_origin: Option<Page>,
+    deferred_seen_features: Vec<String>,
+    close_after_preferences: bool,
     cancel: Arc<AtomicBool>,
     progress: String,
     error: Option<String>,
     notice: Option<String>,
+    notice_page: Option<Page>,
+    notice_kind: theme::StatusKind,
+    notice_deadline: Option<Instant>,
+    message_origin: Option<Page>,
+    message_page: Page,
     search: String,
     confirm: bool,
     settings_readable: bool,
@@ -255,54 +306,39 @@ impl App {
             .families
             .insert(theme::semibold(), vec!["Inter 550".into(), "Inter".into()]);
         context.set_fonts(fonts);
-        let logo_texture = dcleaner::brand::icon().ok().map(|icon| {
+        let logo_image = dcleaner::brand::icon().ok().map(|icon| {
+            egui::ColorImage::from_rgba_unmultiplied(
+                [icon.width as usize, icon.height as usize],
+                &icon.rgba,
+            )
+        });
+        let logo_texture = logo_image.as_ref().map(|image| {
             context.load_texture(
                 "dcleaner-brand",
-                egui::ColorImage::from_rgba_unmultiplied(
-                    [icon.width as usize, icon.height as usize],
-                    &icon.rgba,
-                ),
+                image.clone(),
                 egui::TextureOptions::LINEAR,
             )
         });
-        let (data_dir, mut error) = if fixture {
-            (PathBuf::from("__dcleaner_in_memory_fixture__"), None)
-        } else {
-            match platform::data_directory() {
-                Ok(p) => (p, None),
-                Err(e) => (PathBuf::new(), Some(e)),
+        let logo_mono_texture = logo_image.map(|mut image| {
+            for pixel in &mut image.pixels {
+                *pixel = Color32::from_rgba_unmultiplied(243, 243, 243, pixel.a());
             }
-        };
-        let (prefs, settings_readable) = if fixture {
-            (Preferences::default(), true)
+            context.load_texture("dcleaner-brand-mono", image, egui::TextureOptions::LINEAR)
+        });
+        let data_dir = if fixture {
+            PathBuf::from("__dcleaner_in_memory_fixture__")
         } else {
-            match store::load_preferences(&data_dir) {
-                Ok(p) => (p, true),
-                Err(e) => {
-                    error = Some(e);
-                    (Preferences::default(), false)
-                }
-            }
+            PathBuf::new()
         };
-        let (history, history_readable) = if fixture {
-            (Vec::new(), true)
-        } else {
-            match store::history(&data_dir) {
-                Ok(h) => (h, true),
-                Err(e) => {
-                    error = Some(e);
-                    (vec![], false)
-                }
-            }
-        };
+        let prefs = Preferences::default();
+        let settings_readable = fixture;
+        let history = Vec::new();
+        let history_readable = fixture;
         let clean_settings_result = if fixture {
             Ok(Default::default())
         } else {
-            clean_settings::load_settings(&data_dir).map_err(|failure| failure.to_string())
+            Err("Settings are still loading.".into())
         };
-        if let Err(failure) = &clean_settings_result {
-            error = Some(failure.clone());
-        }
         let clean_settings_ui =
             view_clean_settings::CleanSettingsUi::from_saved(clean_settings_result);
         #[cfg(debug_assertions)]
@@ -375,10 +411,11 @@ impl App {
         };
         #[cfg(not(debug_assertions))]
         let duplicate_ui = Default::default();
-        Self {
+        let mut app = Self {
             illustrations: Default::default(),
             qa_fixture_mode: fixture,
             logo_texture,
+            logo_mono_texture,
             clean_settings_ui,
             settings_ui: Default::default(),
             custom_analysis: None,
@@ -403,11 +440,7 @@ impl App {
             clean_bin,
             page: initial_page,
             prefs,
-            categories: if fixture {
-                Vec::new()
-            } else {
-                platform::categories()
-            },
+            categories: Vec::new(),
             analysis: None,
             selected: HashSet::new(),
             history,
@@ -415,18 +448,53 @@ impl App {
             disk_ui: Default::default(),
             data_dir,
             worker: None,
+            ui_context: context.clone(),
+            preferences_job: None,
+            page_choices_job: None,
+            preferences_dirty: false,
+            preferences_failed_draft: false,
+            preferences_dirty_origin: None,
+            deferred_seen_features: Vec::new(),
+            close_after_preferences: false,
             cancel: Arc::new(AtomicBool::new(false)),
             progress: String::new(),
-            error,
+            error: None,
             notice: None,
+            notice_page: None,
+            notice_kind: theme::StatusKind::Info,
+            notice_deadline: None,
+            message_origin: None,
+            message_page: Page::Overview,
             search: String::new(),
             confirm: false,
             settings_readable,
             history_readable,
+        };
+        if !fixture {
+            app.begin_initial_load(context, crate::startup_load::load);
         }
+        app
+    }
+
+    fn begin_initial_load(
+        &mut self,
+        ctx: &egui::Context,
+        load: impl FnOnce() -> Result<crate::startup_load::StartupData, String> + Send + 'static,
+    ) {
+        let (sender, receiver) = crate::worker_events::channel();
+        self.worker = Some(receiver);
+        self.progress = "Loading settings and cleanup history…".into();
+        let context = ctx.clone();
+        thread::spawn(move || {
+            let result = load();
+            let _ = sender.send(Event::InitialLoaded(Box::new(result)));
+            context.request_repaint();
+        });
     }
     fn busy(&self) -> bool {
         self.worker.is_some()
+            || self.page_choices_job.is_some()
+            || (!self.qa_fixture_mode() && self.data_dir.as_os_str().is_empty())
     }
     fn qa_fixture_mode(&self) -> bool {
         self.qa_fixture_mode
@@ -450,14 +518,22 @@ impl App {
                 | "startup-populated"
                 | "startup-details"
                 | "startup-error"
+                | "startup-history"
+                | "startup-history-review"
                 | "programs-empty"
                 | "programs-populated"
+                | "programs-batch-review"
+                | "programs-batch-progress"
+                | "programs-batch-result"
                 | "programs-search"
                 | "programs-details"
                 | "programs-error"
                 | "programs-intro"
                 | "software-empty"
                 | "software-populated"
+                | "software-choices-saving"
+                | "software-choices-saved"
+                | "software-choices-failed"
                 | "software-details"
                 | "software-error"
                 | "software-intro"
@@ -471,11 +547,23 @@ impl App {
                 | "drivers-offered"
                 | "optimizer-empty"
                 | "optimizer-populated"
+                | "optimizer-excluded"
+                | "optimizer-settings-unavailable"
                 | "optimizer-details"
+                | "optimizer-installer-details"
+                | "optimizer-installer-partial"
+                | "optimizer-installer-unavailable"
+                | "optimizer-activity-details"
+                | "optimizer-activity-no-match"
+                | "optimizer-activity-error"
+                | "optimizer-activity-loading"
                 | "optimizer-error"
                 | "optimizer-intro"
                 | "drivers-empty"
                 | "drivers-populated"
+                | "drivers-choices-saving"
+                | "drivers-choices-saved"
+                | "drivers-choices-failed"
                 | "drivers-details"
                 | "drivers-error"
                 | "drivers-intro"
@@ -485,6 +573,13 @@ impl App {
                 | "duplicates-details"
                 | "duplicates-error"
                 | "duplicates-intro"
+                | "duplicates-setup"
+                | "clean-ready"
+                | "clean-info"
+                | "clean-success"
+                | "clean-failure"
+                | "clean-history-unavailable"
+                | "clean-progress"
                 | "clean-empty"
                 | "clean-populated"
                 | "clean-selected"
@@ -494,6 +589,7 @@ impl App {
                 | "history-populated"
                 | "settings"
                 | "settings-general"
+                | "settings-preferences-saving"
                 | "settings-scheduling"
                 | "settings-updates"
                 | "settings-privacy"
@@ -520,11 +616,21 @@ impl App {
                 | "health-intro"
                 | "health-privacy"
                 | "health-privacy-expanded"
+                | "health-privacy-row-counts"
+                | "health-privacy-multi-profile"
+                | "health-privacy-empty-browsers"
+                | "health-privacy-large"
+                | "health-privacy-cancelled"
+                | "health-privacy-stale"
                 | "health-privacy-review"
                 | "health-finding-details"
                 | "health-cookie-settings"
                 | "health-scanning"
                 | "health-cleaning"
+                | "health-results-complete"
+                | "health-results-partial"
+                | "health-results-cancelled"
+                | "health-results-uncertain"
                 | "health-browser-review"
                 | "health-space-review"
                 | "health-space"
@@ -535,6 +641,23 @@ impl App {
                 | "privacy-populated"
                 | "privacy-selected"
                 | "privacy-details"
+                | "privacy-quota"
+                | "privacy-storage"
+                | "privacy-record-files"
+                | "privacy-leveldb"
+                | "privacy-leveldb-restore"
+                | "privacy-preferences"
+                | "privacy-preferences-restore"
+                | "privacy-locations"
+                | "privacy-locations-review"
+                | "privacy-sessions"
+                | "privacy-sessions-review"
+                | "privacy-sessions-restore"
+                | "privacy-mozilla-sessions"
+                | "privacy-generic-sqlite"
+                | "privacy-generic-sqlite-review"
+                | "privacy-mozilla-sessions-review"
+                | "privacy-mozilla-sessions-restore"
                 | "privacy-error"
                 | "recyclebin-empty"
                 | "recyclebin-populated"
@@ -548,7 +671,10 @@ impl App {
         if case.starts_with("settings-") {
             app.seed_core_qa("settings")?;
             app.prefs.seen_features = vec!["health".into(), "software".into()];
-            if case.starts_with("settings-updates-") {
+            if case == "settings-preferences-saving" {
+                view_settings::seed_qa_tab(context, "settings-menu-layout")?;
+                app.seed_preferences_saving_qa()?;
+            } else if case.starts_with("settings-updates-") {
                 view_settings::seed_qa_tab(context, "updates")?;
                 view_settings::seed_qa_update_case(&mut app.settings_ui, case)?;
             } else {
@@ -557,6 +683,7 @@ impl App {
         } else if case.starts_with("health-") {
             app.page = Page::Overview;
             app.seed_health_qa(case)?;
+            app.seed_health_qa_artwork(context)?;
         } else if case.starts_with("privacy-") {
             app.page = Page::Clean;
             app.clean_browser = true;
@@ -582,13 +709,27 @@ impl App {
             app.seed_programs_qa(case)?;
         } else if case.starts_with("software-") {
             app.page = Page::Software;
-            app.seed_software_qa(case)?;
+            app.seed_software_qa(if case.starts_with("software-choices-") {
+                "software-populated"
+            } else {
+                case
+            })?;
+            if case.starts_with("software-choices-") {
+                app.seed_page_choices_saving_qa(false, case);
+            }
         } else if case.starts_with("optimizer-") {
             app.page = Page::Optimizer;
             app.seed_optimizer_qa(case)?;
         } else if case.starts_with("drivers-") {
             app.page = Page::Drivers;
-            app.seed_drivers_qa(case)?;
+            app.seed_drivers_qa(if case.starts_with("drivers-choices-") {
+                "drivers-populated"
+            } else {
+                case
+            })?;
+            if case.starts_with("drivers-choices-") {
+                app.seed_page_choices_saving_qa(true, case);
+            }
         } else if case.starts_with("duplicates-") {
             app.page = Page::Duplicates;
             app.seed_duplicates_qa(case)?;
@@ -596,6 +737,7 @@ impl App {
             app.page = Page::Disk;
             app.seed_disk_qa(case);
         }
+        app.message_page = app.page;
         Ok(app)
     }
     fn begin_scan(&mut self, ctx: &egui::Context) {
@@ -609,7 +751,7 @@ impl App {
         self.custom_partial_acknowledged = false;
         self.selected.clear();
         self.progress = "Preparing analysis…".into();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         self.cancel = Arc::new(AtomicBool::new(false));
         let cancel = self.cancel.clone();
@@ -654,7 +796,7 @@ impl App {
         let configured = self.custom_analysis.clone();
         let acknowledge_partial = self.custom_partial_acknowledged;
         let root = self.data_dir.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         self.cancel = Arc::new(AtomicBool::new(false));
         let cancel = self.cancel.clone();
@@ -696,7 +838,10 @@ impl App {
                     )
                 }
             })();
-            let _ = tx.send(Event::Cleaned(result));
+            let _ = tx.send(Event::Progress("Refreshing cleanup history…".into()));
+            ctx.request_repaint();
+            let history = store::history(&root);
+            let _ = tx.send(Event::Cleaned { result, history });
             ctx.request_repaint();
         });
     }
@@ -712,7 +857,7 @@ impl App {
         };
         self.error = None;
         self.progress = "Reading folder sizes…".into();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         self.cancel = Arc::new(AtomicBool::new(false));
         let cancel = self.cancel.clone();
@@ -743,14 +888,144 @@ impl App {
             ctx.request_repaint();
         });
     }
-    fn poll(&mut self) {
-        let events: Vec<_> = self
-            .worker
-            .as_ref()
-            .map(|rx| rx.try_iter().collect())
-            .unwrap_or_default();
+    fn set_notice(&mut self, message: String) {
+        self.set_page_notice(
+            message,
+            self.message_origin.unwrap_or(self.page),
+            theme::StatusKind::Info,
+            false,
+        );
+    }
+
+    fn set_page_notice(
+        &mut self,
+        message: String,
+        page: Page,
+        kind: theme::StatusKind,
+        persistent: bool,
+    ) {
+        self.notice = Some(message);
+        self.notice_page = Some(page);
+        self.notice_kind = kind;
+        self.notice_deadline = if persistent || kind == theme::StatusKind::Error {
+            None
+        } else {
+            Some(Instant::now() + Duration::from_secs(8))
+        };
+    }
+
+    fn expire_notice_at(&mut self, now: Instant, ctx: &egui::Context) {
+        if self.notice.is_none() {
+            self.notice_deadline = None;
+            return;
+        }
+        if let Some(deadline) = self.notice_deadline {
+            if now >= deadline {
+                self.notice = None;
+                self.notice_page = None;
+                self.notice_deadline = None;
+            } else if self.notice_page == Some(self.page) {
+                // Expire while idle too, without a busy repaint loop.
+                ctx.request_repaint_after(deadline.saturating_duration_since(now));
+            }
+        }
+    }
+
+    fn clear_unrelated_messages(&mut self) {
+        if self.message_page != self.page {
+            self.error = None;
+            self.message_page = self.page;
+        }
+    }
+
+    fn poll(&mut self, ctx: &egui::Context) {
+        self.poll_page_choices(ctx);
+        self.poll_preferences(ctx);
+        let mut events = Vec::new();
+        let mut disconnected = false;
+        if let Some(receiver) = &self.worker {
+            for _ in 0..MAX_WORKER_EVENTS_PER_FRAME {
+                match receiver.try_recv() {
+                    Ok(event) => events.push(event),
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        disconnected = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if events.len() == MAX_WORKER_EVENTS_PER_FRAME {
+            ctx.request_repaint();
+        }
+        if disconnected && events.is_empty() && self.data_dir.as_os_str().is_empty() {
+            self.worker = None;
+            self.error =
+                Some("Startup loading stopped unexpectedly. Retry startup to continue.".into());
+        }
         for event in events {
+            let previous_error = self.error.clone();
+            self.message_origin = Some(match &event {
+                Event::Cloud(_) => Page::Cloud,
+                Event::CleanSettings(_)
+                | Event::ConfiguredScanned(_)
+                | Event::Cleaned { .. }
+                | Event::Privacy(_)
+                | Event::RecycleBin(_) => Page::Clean,
+                Event::Software(_) => Page::Software,
+                Event::Duplicate(_) => Page::Duplicates,
+                Event::Programs(_) => Page::Programs,
+                Event::Optimizer(_) => Page::Optimizer,
+                Event::Startup(_) => Page::Startup,
+                Event::Drivers(_) => Page::Drivers,
+                Event::Health(_) => Page::Overview,
+                Event::Help(_) => Page::Help,
+                Event::Settings(_) => Page::Settings,
+                Event::Disk(_) => Page::Disk,
+                _ => self.page,
+            });
             match event {
+                Event::InitialLoaded(result) => {
+                    self.worker = None;
+                    self.progress.clear();
+                    match *result {
+                        Ok(data) => {
+                            self.data_dir = data.root;
+                            self.categories = data.categories;
+                            self.settings_readable = data.preferences.is_ok();
+                            match data.preferences {
+                                Ok(mut prefs) => {
+                                    prefs.dark = prefs.effective_dark(
+                                        ctx.system_theme().map(|theme| theme == egui::Theme::Dark),
+                                    );
+                                    theme::apply(ctx, prefs.dark);
+                                    self.page = match prefs.landing_page {
+                                        dcleaner::domain::LandingPage::HealthCheck => {
+                                            Page::Overview
+                                        }
+                                        dcleaner::domain::LandingPage::CustomClean => Page::Clean,
+                                    };
+                                    self.prefs = prefs;
+                                    self.message_page = self.page;
+                                }
+                                Err(error) => self.error = Some(error),
+                            }
+                            self.history_readable = data.history.is_ok();
+                            match data.history {
+                                Ok(history) => self.history = history,
+                                Err(error) => self.error = Some(error),
+                            }
+                            if let Err(error) = &data.clean_settings {
+                                self.error = Some(error.clone());
+                            }
+                            self.clean_settings_ui =
+                                view_clean_settings::CleanSettingsUi::from_saved(
+                                    data.clean_settings,
+                                );
+                        }
+                        Err(error) => self.error = Some(error),
+                    }
+                }
                 Event::Cloud(event) => self.cloud_event(event),
                 Event::CleanSettings(event) => self.clean_settings_event(event),
                 Event::Settings(event) => {
@@ -786,7 +1061,7 @@ impl App {
                 Event::Privacy(event) => self.privacy_event(event),
                 Event::RecycleBin(event) => self.recycle_bin_event(event),
                 Event::Progress(text) => self.progress = text,
-                Event::Cleaned(result) => {
+                Event::Cleaned { result, history } => {
                     self.worker = None;
                     match result {
                         Ok(r) => {
@@ -797,7 +1072,7 @@ impl App {
                                 }
                             }
                             self.selected.clear();
-                            self.notice = Some(format!(
+                            self.set_notice(format!(
                                 "{} moved to {}. {} files cleaned; {} skipped{}.",
                                 size(r.bytes),
                                 platform::trash_label(),
@@ -815,16 +1090,7 @@ impl App {
                             self.selected.clear();
                         }
                     }
-                    match store::history(&self.data_dir) {
-                        Ok(h) => {
-                            self.history = h;
-                            self.history_readable = true;
-                        }
-                        Err(e) => {
-                            self.error = Some(e);
-                            self.history_readable = false;
-                        }
-                    }
+                    self.apply_cleanup_history(history);
                 }
                 Event::Disk(result) => {
                     self.worker = None;
@@ -834,20 +1100,57 @@ impl App {
                     }
                 }
             }
+            if self.message_origin != Some(self.page) {
+                self.error = previous_error;
+            }
+            self.message_origin = None;
         }
     }
     fn feature_seen(&self, kind: &str) -> bool {
         self.prefs.seen_features.iter().any(|seen| seen == kind)
     }
+    fn apply_cleanup_history(&mut self, history: CleanupHistory) {
+        match history {
+            Ok(history) => {
+                self.history = history;
+                self.history_readable = true;
+            }
+            Err(error) => {
+                self.history_readable = false;
+                let detail = format!("Cleanup history could not be refreshed: {error}");
+                if let Some(previous) = &mut self.error {
+                    previous.push(' ');
+                    previous.push_str(&detail);
+                } else {
+                    self.error = Some(detail);
+                }
+            }
+        }
+    }
     fn mark_feature_seen(&mut self, kind: &str) {
         if !self.feature_seen(kind) {
+            if self.preferences_busy() {
+                self.preferences_dirty_origin = Some(self.page);
+                if !self.deferred_seen_features.iter().any(|f| f == kind) {
+                    self.deferred_seen_features.push(kind.to_owned());
+                }
+                return;
+            }
             self.prefs.seen_features.push(kind.to_owned());
             self.persist();
         }
     }
     fn feature_intro_wide(&self, ctx: &egui::Context) -> bool {
-        let window_width = ctx.content_rect().width();
-        window_width - if window_width < 1000. { 64. } else { 260. } - 2. * theme::CONTENT >= 780.
+        let window = ctx.content_rect();
+        let narrow = self.sidebar_collapsed.unwrap_or(window.width() < 900.);
+        let text_and_art_width =
+            window.width() - Self::navigation_width(narrow) - 2. * f32::from(theme::PAGE_PADDING);
+        // The three-point introduction and its action need vertical room as well
+        // as two columns. Short windows keep the action in the pinned footer.
+        text_and_art_width >= 780. && window.height() >= 720.
+    }
+    fn navigation_width(narrow: bool) -> f32 {
+        if narrow { 64. } else { 228. }
     }
     fn feature_intro(
         &mut self,
@@ -953,15 +1256,7 @@ impl App {
         }
     }
     fn persist(&mut self) {
-        if self.qa_fixture_mode() {
-            return;
-        }
-        if !self.settings_readable {
-            return;
-        }
-        if let Err(e) = store::save_preferences(&self.data_dir, &self.prefs) {
-            self.error = Some(e);
-        }
+        self.persist_preferences();
     }
     fn invalidate(&mut self) {
         self.analysis = None;
@@ -994,7 +1289,7 @@ impl App {
             .map_err(|e| e.to_string())
             .and_then(|b| std::fs::write(path, b).map_err(|e| e.to_string()))
         {
-            Ok(()) => self.notice = Some("Analysis report exported.".into()),
+            Ok(()) => self.set_notice("Analysis report exported.".into()),
             Err(e) => self.error = Some(e),
         }
     }
@@ -1179,7 +1474,7 @@ impl App {
             if report.cancelled() {
                 theme::muted(ui, "Scan stopped. Scan again before cleaning.", t);
             }
-            egui::CollapsingHeader::new("Scan details").show(ui, |ui| {
+            theme::Disclosure::new("Scan details").show(ui, |ui| {
                 for rule in report.rules().iter().filter(|rule| rule.selected()) {
                     theme::muted(
                         ui,
@@ -1232,54 +1527,205 @@ impl App {
         } else {
             210.
         };
-        egui::Panel::left("clean-category-selection")
-            .resizable(false)
-            .exact_size(selection_width)
-            .frame(
-                egui::Frame::new()
-                    .fill(t.sidebar)
-                    .inner_margin(14)
-                    .corner_radius(12),
-            )
-            .show(ui, |ui| {
-                self.clean_category_tree(ui, t, ctx);
-            });
-        theme::card(t).show(ui,|ui|{ui.set_width(ui.available_width());
-            if let Some(analysis)=self.analysis.clone(){
-                ui.label(RichText::new("Analysis results").family(theme::semibold()));ui.add_space(12.);
-                ui.horizontal(|ui|{ui.label(RichText::new(size(analysis.bytes())).size(theme::FONT_DISPLAY).family(theme::semibold()));theme::muted(ui,format!("{} · {:.1}s elapsed{}",theme::counted_label(analysis.count(),"file","files"),analysis.elapsed_ms as f64/1000.,if analysis.cancelled{" · cancelled"}else{""}),t);});ui.add_space(10.);
-                let query=self.search.to_lowercase();let busy=self.busy();
-                for category in &analysis.categories{
-                    if !query.is_empty()&&!category.name.to_lowercase().contains(&query)&&!category.files.iter().any(|f|f.path.to_string_lossy().to_lowercase().contains(&query)){continue;}
-                    let status=if category.truncated{"Partial scan"}else if !category.available{"Not found"}else if category.files.is_empty(){"No eligible files"}else{""};
-                    ui.horizontal(|ui|{let mut all=!category.files.is_empty()&&category.files.iter().all(|f|self.selected.contains(&f.id));if theme::checkbox_widget(ui,&mut all,!busy&&!analysis.cancelled&&!category.files.is_empty()).changed(){for f in &category.files{if all{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}}
-                        ui.label(&category.name);ui.with_layout(Layout::right_to_left(Align::Center),|ui|{ui.label(size(category.bytes()));theme::muted(ui,format!("{} files   {status}",category.files.len()),t);});});
-                    if category.skipped>0{theme::muted(ui,format!("{} inaccessible or linked locations skipped",category.skipped),t);}
-                    egui::CollapsingHeader::new(format!("View files — {}",category.name)).id_salt(&category.id).show(ui,|ui|{
-                        theme::scroll_vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
-                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,&mut selected,!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(theme::FONT_CAPTION)).truncate()).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(theme::FONT_CAPTION));});}
-                            if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
-                        });});ui.separator();
-                }
-            }else{
-                ui.add_space(32.);
-                ui.vertical_centered(|ui|{
-                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(36.), egui::Sense::hover());
-                    theme::paint_icon(ui.painter(), rect, theme::Icon::Trash, t.primary);
-                    ui.add_space(20.);
-                    ui.label(RichText::new("Clean up system clutter").size(theme::FONT_TITLE).family(theme::semibold()));
-                    ui.add_space(12.);
-                    theme::muted(ui,"Temporary files, logs and application caches can accumulate. Choose supported categories, scan, then review the files to remove.",t);
+        // One bounded split surface; long content scrolls within its own pane.
+        let visible_height = (ui.clip_rect().bottom() - ui.next_widget_position().y).max(96.);
+        let height = (ui.available_height() - 32.).max(200.).min(visible_height);
+        let width = ui.available_width();
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.;
+            let left = egui::Frame::new()
+                .fill(t.sidebar)
+                .inner_margin(14)
+                .corner_radius(theme::joined_radius(theme::JoinedEdge::Left))
+                .show(ui, |ui| {
+                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                        ui.spacing_mut().item_spacing.x = theme::LABEL_GAP;
+                        ui.set_min_size(Vec2::new(selection_width - 28., height - 28.));
+                        ui.set_max_width(selection_width - 28.);
+                        ui.set_max_height(height - 28.);
+                        theme::scroll_vertical()
+                            .id_salt("clean-category-tree")
+                            .max_height(height - 28.)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| self.clean_category_tree(ui, t, ctx));
+                    });
                 });
-                ui.add_space(32.);
+            let right_pane = egui::Frame::new()
+                .fill(t.card)
+                .inner_margin(theme::CONTENT as i8)
+                .corner_radius(theme::joined_radius(theme::JoinedEdge::Right))
+                .show(ui, |ui| {
+                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                        ui.spacing_mut().item_spacing.x = theme::LABEL_GAP;
+                        let inner = Vec2::new(
+                            width - left.response.rect.width() - 2. * theme::CONTENT,
+                            height - 2. * theme::CONTENT,
+                        );
+                        ui.set_min_size(inner);
+                        ui.set_max_width(inner.x);
+                        ui.set_max_height(inner.y);
+                        if self.analysis.is_some() {
+                            theme::scroll_vertical()
+                                .id_salt("clean-analysis-results")
+                                .max_height(inner.y)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| self.clean_analysis_results(ui, t));
+                        } else {
+                            self.clean_empty_state(ui, t);
+                        }
+                    });
+                });
+            #[cfg(debug_assertions)]
+            {
+                theme::record_region(
+                    ui,
+                    "clean-left-pane",
+                    left.response.rect,
+                    theme::SECTION_RADIUS,
+                );
+                theme::record_region(
+                    ui,
+                    "clean-right-pane",
+                    right_pane.response.rect,
+                    theme::SECTION_RADIUS,
+                );
             }
-
+            #[cfg(not(debug_assertions))]
+            let _ = right_pane;
         });
+    }
+
+    fn clean_empty_state(&self, ui: &mut egui::Ui, t: Tokens) {
+        let title = "Clean up system clutter";
+        let description = "Temporary files, logs and application caches can accumulate. Choose supported categories, scan, then review the files to remove.";
+        let title = ui.painter().layout(
+            title.into(),
+            egui::FontId::new(theme::FONT_TITLE, theme::semibold()),
+            t.foreground,
+            ui.available_width(),
+        );
+        let description = ui.painter().layout(
+            description.into(),
+            egui::FontId::proportional(theme::FONT_CAPTION),
+            t.muted,
+            ui.available_width(),
+        );
+        let height = 36. + 20. + title.size().y + 12. + description.size().y;
+        let content = ui.available_rect_before_wrap();
+        let group =
+            egui::Rect::from_center_size(content.center(), Vec2::new(content.width(), height));
+        ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(group)
+                .layout(Layout::top_down(Align::Center)),
+            |ui| {
+                ui.spacing_mut().item_spacing.y = 0.;
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(36.), egui::Sense::hover());
+                theme::paint_icon(ui.painter(), rect, theme::Icon::Trash, t.primary);
+                ui.add_space(20.);
+                ui.add(egui::Label::new(title));
+                ui.add_space(12.);
+                ui.add(egui::Label::new(description));
+            },
+        );
+        #[cfg(debug_assertions)]
+        theme::record_region(ui, "clean-empty-group", group, 0);
+    }
+
+    fn clean_analysis_results(&mut self, ui: &mut egui::Ui, t: Tokens) {
+        let busy = self.busy();
+        if let Some(analysis) = &self.analysis {
+            ui.label(RichText::new("Analysis results").family(theme::semibold()));
+            ui.add_space(12.);
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(size(analysis.bytes()))
+                        .size(theme::FONT_DISPLAY)
+                        .family(theme::semibold()),
+                );
+                theme::muted(
+                    ui,
+                    format!(
+                        "{} · {:.1}s elapsed{}",
+                        theme::counted_label(analysis.count(), "file", "files"),
+                        analysis.elapsed_ms as f64 / 1000.,
+                        if analysis.cancelled {
+                            " · cancelled"
+                        } else {
+                            ""
+                        }
+                    ),
+                    t,
+                );
+            });
+            ui.add_space(10.);
+            let query = self.search.to_lowercase();
+            for category in &analysis.categories {
+                if !query.is_empty()
+                    && !category.name.to_lowercase().contains(&query)
+                    && !category
+                        .files
+                        .iter()
+                        .any(|f| f.path.to_string_lossy().to_lowercase().contains(&query))
+                {
+                    continue;
+                }
+                let status = if category.truncated {
+                    "Partial scan"
+                } else if !category.available {
+                    "Not found"
+                } else if category.files.is_empty() {
+                    "No eligible files"
+                } else {
+                    ""
+                };
+                ui.horizontal(|ui| {
+                    let mut all = !category.files.is_empty()
+                        && category.files.iter().all(|f| self.selected.contains(&f.id));
+                    if theme::checkbox_widget(
+                        ui,
+                        &mut all,
+                        !busy && !analysis.cancelled && !category.files.is_empty(),
+                    )
+                    .changed()
+                    {
+                        for f in &category.files {
+                            if all {
+                                self.selected.insert(f.id);
+                            } else {
+                                self.selected.remove(&f.id);
+                            }
+                        }
+                    }
+                    ui.label(&category.name);
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(size(category.bytes()));
+                        theme::muted(ui, format!("{} files   {status}", category.files.len()), t);
+                    });
+                });
+                if category.skipped > 0 {
+                    theme::muted(
+                        ui,
+                        format!(
+                            "{} inaccessible or linked locations skipped",
+                            category.skipped
+                        ),
+                        t,
+                    );
+                }
+                theme::Disclosure::new(format!("View files — {}",category.name)).id_salt(&category.id).show(ui,|ui|{
+                        theme::scroll_vertical().max_height(220.).id_salt(format!("files-{}",category.id)).show(ui,|ui|{
+                            for f in category.files.iter().filter(|f|query.is_empty()||category.name.to_lowercase().contains(&query)||f.path.to_string_lossy().to_lowercase().contains(&query)).take(200){ui.horizontal(|ui|{let mut selected=self.selected.contains(&f.id);if theme::checkbox_widget(ui,&mut selected,!busy&&!analysis.cancelled).changed(){if selected{self.selected.insert(f.id);}else{self.selected.remove(&f.id);}}ui.add(egui::Label::new(RichText::new(f.path.to_string_lossy()).size(theme::FONT_CAPTION)).truncate().show_tooltip_when_elided(false)).on_hover_text(f.path.to_string_lossy());ui.label(RichText::new(size(f.size)).size(theme::FONT_CAPTION));});}
+                            if category.files.len()>200{theme::muted(ui,"Showing up to 200 matching files. Export for the full list. Category selection includes all files.",t);}
+                        });});
+                ui.separator();
+            }
+        }
     }
 
     fn clean_category_tree(&mut self, ui: &mut egui::Ui, t: Tokens, ctx: &egui::Context) {
         let categories = self.categories.clone();
-        let busy = self.busy();
+        let busy = self.busy() || self.preferences_busy();
         let mut changed = false;
         let selected_count = categories
             .iter()
@@ -1460,7 +1906,10 @@ impl App {
         ui.add_space(8.);
         theme::muted(
             ui,
-            format!("Files at least {} days old", self.prefs.minimum_age_days),
+            format!(
+                "Temp: {}+ days · Cache: any age",
+                self.prefs.minimum_age_days
+            ),
             t,
         );
         if cfg!(windows) {
@@ -1590,7 +2039,7 @@ impl App {
                 );
                 return;
             }
-            let (sender, receiver) = mpsc::channel();
+            let (sender, receiver) = crate::worker_events::channel();
             self.worker = Some(receiver);
             self.progress = "Checking published DCleaner releases…".into();
             let context = ctx.clone();
@@ -1605,9 +2054,25 @@ impl App {
     }
 }
 impl App {
+    #[cfg(test)]
+    pub(crate) fn native_startup_probe_state(
+        &self,
+        expected_root: &std::path::Path,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "fixture_mode": self.qa_fixture_mode(),
+            "expected_root_loaded": self.data_dir == expected_root,
+            "startup_worker_active": self.worker.is_some(),
+            "preference_writer_active": self.preferences_busy(),
+            "preferences_readable": self.settings_readable,
+            "history_readable": self.history_readable,
+            "page": self.page.name(),
+        })
+    }
     #[cfg(debug_assertions)]
     pub(crate) fn qa_busy(&self) -> bool {
-        self.busy() || self.app_icons.is_loading()
+        (self.busy() && !(self.qa_fixture_mode() && self.page_choices_job.is_some()))
+            || self.app_icons.is_loading()
     }
     #[cfg(debug_assertions)]
     pub(crate) fn qa_action_precondition(
@@ -1615,6 +2080,17 @@ impl App {
         label: &str,
         ctx: &egui::Context,
     ) -> Result<(), String> {
+        if matches!(label, "Appearance menu" | "Light" | "Dark" | "System") {
+            return if self.settings_readable
+                && !self.busy()
+                && !self.preferences_busy()
+                && (label == "Appearance menu" || view_settings::qa_appearance_open(ctx))
+            {
+                Ok(())
+            } else {
+                Err(format!("Appearance action is unavailable: {label}"))
+            };
+        }
         if label.starts_with("Navigate ")
             || matches!(
                 label,
@@ -1645,6 +2121,15 @@ impl App {
             return self.qa_privacy_profile_action(label, false).map(|_| ());
         }
         if self.page == Page::Clean
+            && self.clean_browser
+            && matches!(
+                label,
+                "Select visible" | "Clear selection" | "Details" | "Review"
+            )
+        {
+            return self.qa_privacy_record_action(label, false).map(|_| ());
+        }
+        if self.page == Page::Clean
             && (matches!(
                 label,
                 "Junk" | "Browser" | "Registry" | "Select all custom categories" | "Reset"
@@ -1661,7 +2146,7 @@ impl App {
             return Ok(());
         }
         if self.page == Page::Optimizer && !matches!(label, "Start now" | "Scan now") {
-            return self.qa_optimizer_precondition(label);
+            return self.qa_optimizer_precondition(label, ctx);
         }
         if self.page == Page::Programs && !matches!(label, "Start now" | "Scan now") {
             return self.qa_programs_precondition(label);
@@ -1689,6 +2174,10 @@ impl App {
                     | "Remove"
                     | "Cancel"
                     | "Confirm fixture review"
+                    | "Review recovery"
+                    | "Review restore"
+                    | "Select startup history record"
+                    | "Windows services"
             )
         {
             return self.qa_startup_action_precondition(label);
@@ -1743,6 +2232,37 @@ impl App {
         if !self.qa_fixture_mode() {
             return Err("UI action verification requires isolated fixture mode.".into());
         }
+        if matches!(label, "Appearance menu" | "Light" | "Dark" | "System") {
+            let open = view_settings::qa_appearance_open(ctx);
+            let mode = self.prefs.appearance_mode();
+            let valid = match label {
+                "Appearance menu" => open,
+                "Light" => {
+                    !open && mode == dcleaner::domain::AppearanceMode::Light && !self.prefs.dark
+                }
+                "Dark" => {
+                    !open && mode == dcleaner::domain::AppearanceMode::Dark && self.prefs.dark
+                }
+                "System" => {
+                    !open
+                        && mode == dcleaner::domain::AppearanceMode::System
+                        && self.prefs.dark
+                            == self.prefs.effective_dark(
+                                ctx.system_theme().map(|theme| theme == egui::Theme::Dark),
+                            )
+                }
+                _ => false,
+            };
+            return if valid {
+                Ok(
+                    serde_json::json!({"page":self.page.name(), "appearance":format!("{mode:?}"), "dark":self.prefs.dark, "menu_open":open}),
+                )
+            } else {
+                Err(format!(
+                    "Appearance action did not reach its expected state: {label}"
+                ))
+            };
+        }
         if label.starts_with("Navigate ")
             || matches!(
                 label,
@@ -1780,6 +2300,15 @@ impl App {
         if self.page == Page::Clean && self.clean_browser && matches!(label, "Select all" | "Clear")
         {
             return self.qa_privacy_profile_action(label, true);
+        }
+        if self.page == Page::Clean
+            && self.clean_browser
+            && matches!(
+                label,
+                "Select visible" | "Clear selection" | "Details" | "Review"
+            )
+        {
+            return self.qa_privacy_record_action(label, true);
         }
         if self.page == Page::Clean
             && (matches!(
@@ -1857,7 +2386,7 @@ impl App {
             };
         }
         if self.page == Page::Optimizer && !matches!(label, "Start now" | "Scan now") {
-            return self.qa_optimizer_action_state(label);
+            return self.qa_optimizer_action_state(label, ctx);
         }
         if self.page == Page::Programs && !matches!(label, "Start now" | "Scan now") {
             return self.qa_programs_action_state(label);
@@ -1885,6 +2414,10 @@ impl App {
                     | "Remove"
                     | "Cancel"
                     | "Confirm fixture review"
+                    | "Review recovery"
+                    | "Review restore"
+                    | "Select startup history record"
+                    | "Windows services"
             )
         {
             return self.qa_startup_action_state(label);
@@ -1908,9 +2441,6 @@ impl App {
                     "Menu" | "Menu Layout" => settings["tab"] == "menu-layout",
                     "My Subscription" => settings["tab"] == "my-subscription",
                     "About" => settings["tab"] == "about",
-                    "Light" => settings["appearance"] == "Light" && settings["dark"] == false,
-                    "Dark" => settings["appearance"] == "Dark" && settings["dark"] == true,
-                    "Auto" => settings["appearance"] == "System",
                     "Check for updates" => {
                         settings["update_check"] == "no_published_release"
                             && settings["update_check_pending"] == false
@@ -1983,8 +2513,10 @@ impl App {
         }
     }
     pub(crate) fn paint(&mut self, root: &mut egui::Ui) {
-        self.poll();
         let ctx = root.ctx().clone();
+        self.clear_unrelated_messages();
+        self.poll(&ctx);
+        self.expire_notice_at(Instant::now(), &ctx);
         let effective_dark = self
             .prefs
             .effective_dark(ctx.system_theme().map(|theme| theme == egui::Theme::Dark));
@@ -1999,11 +2531,12 @@ impl App {
         }
         let t = theme::tokens(self.prefs.dark);
         let busy = self.busy();
-        if busy {
+        if busy || self.preferences_busy() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         if ctx.input(|i| i.viewport().close_requested()) {
             self.cancel.store(true, Ordering::Relaxed);
+            self.handle_preferences_close(&ctx);
         }
         let narrow = self
             .sidebar_collapsed
@@ -2019,7 +2552,7 @@ impl App {
             .collect::<Vec<_>>();
         egui::Panel::left("main-navigation")
             .resizable(false)
-            .exact_size(if narrow { 64. } else { 228. })
+            .exact_size(Self::navigation_width(narrow))
             .frame(
                 egui::Frame::new()
                     .fill(t.sidebar)
@@ -2030,8 +2563,13 @@ impl App {
             )
             .show(root, |ui| {
                 ui.horizontal(|ui| {
+                    ui.add_space(if narrow { 9. } else { 13. });
                     let (rect, _) = ui.allocate_exact_size(Vec2::splat(28.), egui::Sense::hover());
-                    if let Some(logo) = self.logo_texture.as_ref() {
+                    if let Some(logo) = if self.prefs.dark {
+                        self.logo_mono_texture.as_ref()
+                    } else {
+                        self.logo_texture.as_ref()
+                    } {
                         ui.painter().image(
                             logo.id(),
                             rect,
@@ -2044,18 +2582,21 @@ impl App {
                     }
                 });
                 ui.add_space(4.);
-                if theme::icon_action(
-                    ui,
-                    theme::Icon::Menu,
-                    if narrow {
-                        "Expand menu"
-                    } else {
-                        "Collapse menu"
-                    },
-                    !busy,
-                ) {
-                    self.sidebar_collapsed = Some(!narrow);
-                }
+                ui.horizontal(|ui| {
+                    ui.add_space(if narrow { 6. } else { 10. });
+                    if theme::icon_action(
+                        ui,
+                        theme::Icon::Menu,
+                        if narrow {
+                            "Expand menu"
+                        } else {
+                            "Collapse menu"
+                        },
+                        !busy,
+                    ) {
+                        self.sidebar_collapsed = Some(!narrow);
+                    }
+                });
                 ui.add_space(2.);
                 ui.spacing_mut().item_spacing.y = 2.;
                 for page in primary_pages {
@@ -2143,6 +2684,15 @@ impl App {
                         bottom: 28,
                     })
                     .show(ui, |ui| {
+                        if !self.qa_fixture_mode() && self.data_dir.as_os_str().is_empty() {
+                            if self.worker.is_some() {
+                                ui.horizontal(|ui| { ui.spinner(); ui.label("Loading settings and cleanup history…"); });
+                            } else if theme::secondary(ui, "Retry startup", true) {
+                                self.error = None;
+                                self.begin_initial_load(&ctx, crate::startup_load::load);
+                            }
+                            ui.add_space(12.);
+                        }
                         if !health_workflow {
                             ui.horizontal(|ui| {
                                 let heading = ui.heading(
@@ -2226,44 +2776,28 @@ impl App {
                                 26.
                             });
                         }
+                        self.clear_unrelated_messages();
                         let page_scroll = theme::scroll_vertical()
                             .auto_shrink([false, false])
                             .id_salt(self.page.name())
                             .show(ui, |ui| {
-                                if let Some(error) = self.error.clone() {
-                                    egui::Frame::new()
-                                        .fill(Color32::from_rgba_unmultiplied(237, 85, 101, 20))
-                                        .inner_margin(12)
-                                        .corner_radius(10)
-                                        .show(ui, |ui| {
-                                            ui.horizontal_wrapped(|ui| {
-                                                ui.label(
-                                                    RichText::new(error)
-                                                        .color(Color32::from_rgb(237, 115, 127)),
-                                                );
-                                                if ui.small_button("Dismiss").clicked() {
-                                                    self.error = None;
-                                                }
-                                            });
-                                        });
+                                if let Some(error) = &self.error {
+                                    theme::status_banner(ui, error, theme::StatusKind::Error, false, false);
                                     ui.add_space(12.);
                                 }
-                                if let Some(notice) = self.notice.clone() {
-                                    egui::Frame::new()
-                                        .fill(t.tint)
-                                        .inner_margin(12)
-                                        .corner_radius(10)
-                                        .show(ui, |ui| {
-                                            ui.horizontal_wrapped(|ui| {
-                                                ui.label(notice);
-                                                if ui.small_button("Dismiss").clicked() {
-                                                    self.notice = None;
-                                                }
-                                            });
-                                        });
+                                if let Some(notice) = self.notice.as_deref().filter(|_| self.notice_page == Some(self.page)) {
+                                    theme::status_banner(ui, notice, self.notice_kind, false, false);
                                     ui.add_space(12.);
                                 }
-                                if busy
+                                if self.preference_save_notice_visible() {
+                                    theme::status_banner(ui, "Saving preferences…", theme::StatusKind::Info, true, false);
+                                    ui.add_space(12.);
+                                }
+                                if let Some(message) = self.page_choice_progress() {
+                                    theme::status_banner(ui, message, theme::StatusKind::Info, true, false);
+                                    ui.add_space(12.);
+                                }
+                                if self.page_choices_job.is_none() && (busy || (self.qa_fixture_mode() && !self.progress.is_empty()))
                                     && !matches!(
                                         self.page,
                                         Page::Overview
@@ -2272,21 +2806,11 @@ impl App {
                                             | Page::Settings
                                     )
                                 {
-                                    theme::card(t).show(ui, |ui| {
-                                        ui.horizontal(|ui| {
-                                            ui.spinner();
-                                            ui.label(&self.progress);
-                                            let can_stop = matches!(
-                                                self.page,
-                                                Page::Overview | Page::Disk | Page::Duplicates
-                                            ) || (self.page == Page::Clean
-                                                && !self.clean_browser
-                                                && !self.clean_bin);
-                                            if can_stop && ui.button("Stop").clicked() {
-                                                self.cancel.store(true, Ordering::Relaxed);
-                                            }
-                                        });
-                                    });
+                                    let can_stop = matches!(self.page, Page::Overview | Page::Disk | Page::Duplicates)
+                                        || (self.page == Page::Clean && !self.clean_browser && !self.clean_bin);
+                                    if theme::status_banner(ui, &self.progress, theme::StatusKind::Info, true, can_stop) {
+                                        self.cancel.store(true, Ordering::Relaxed);
+                                    }
                                     ui.add_space(20.);
                                 }
                                 match self.page {
@@ -2320,6 +2844,7 @@ impl App {
             });
         #[cfg(windows)]
         theme::window_chrome(root, t);
+        view_settings::appearance_control(self, root);
         self.duplicates_dialog(&ctx);
         self.disk_dialog(&ctx);
         self.programs_dialog(&ctx);
@@ -2397,7 +2922,8 @@ fn finding_row(
                                             .color(t.muted)
                                             .size(theme::FONT_CAPTION),
                                     )
-                                    .truncate(),
+                                    .truncate()
+                                    .show_tooltip_when_elided(false),
                                 )
                                 .on_hover_text(description);
                             });
@@ -2453,7 +2979,7 @@ fn history_row(ui: &mut egui::Ui, r: &CleanupResult, t: Tokens) {
         t,
     );
     if !r.failed.is_empty() || !r.uncertain.is_empty() {
-        egui::CollapsingHeader::new("Details").id_salt(r.id).show(ui,|ui|{for f in &r.failed{theme::muted(ui,format!("{} — {}",f.path.display(),f.reason.as_deref().unwrap_or("Skipped")),t);}for p in &r.uncertain{ui.label(format!("{} — outcome uncertain; inspect the system Trash before taking another action",p.display()));}});
+        theme::Disclosure::new("Details").id_salt(r.id).show(ui,|ui|{for f in &r.failed{theme::muted(ui,format!("{} — {}",f.path.display(),f.reason.as_deref().unwrap_or("Skipped")),t);}for p in &r.uncertain{ui.label(format!("{} — outcome uncertain; inspect the system Trash before taking another action",p.display()));}});
     }
     ui.add_space(8.);
 }

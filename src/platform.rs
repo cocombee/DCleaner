@@ -11,6 +11,7 @@ pub fn data_directory() -> Result<PathBuf, String> {
 }
 fn category(id: &str, name: &str, group: &str, description: &str, roots: Vec<PathBuf>) -> Category {
     Category {
+        cache_root_scopes: Default::default(),
         id: id.into(),
         name: name.into(),
         group: group.into(),
@@ -18,23 +19,98 @@ fn category(id: &str, name: &str, group: &str, description: &str, roots: Vec<Pat
         roots,
     }
 }
-fn browser_roots(parent: &Path, caches: &[&str], chromium: bool) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(parent) else {
-        return vec![];
-    };
-    entries
-        .flatten()
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir() && !t.is_symlink()))
-        .filter(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            !chromium
-                || name == "Default"
-                || name
-                    .strip_prefix("Profile ")
-                    .is_some_and(|s| s.parse::<u32>().is_ok())
+/// Explicit paths make discovery independently testable without changing the
+/// process environment or enumerating the user's browser records.
+pub fn browser_categories_at(
+    local: &Path,
+    roaming: &Path,
+    program: &Path,
+    common: &Path,
+) -> Vec<Category> {
+    let mut labels = vec![
+        ("chrome", "Google Chrome cache"),
+        ("edge", "Microsoft Edge cache"),
+        ("firefox", "Mozilla Firefox cache"),
+    ];
+    labels.extend(
+        crate::browser_cache::LABELS
+            .iter()
+            .copied()
+            .filter(|(id, _)| !matches!(*id, "chrome" | "edge" | "firefox")),
+    );
+    let mut result: Vec<_> = labels
+        .into_iter()
+        .map(|(id, name)| {
+            category(
+                id,
+                name,
+                "Applications",
+                "Browser cache and temporary website data; review matched files before removal.",
+                vec![],
+            )
         })
-        .flat_map(|e| caches.iter().map(move |c| e.path().join(c)))
-        .collect()
+        .collect();
+    let mut add = |index: usize, root: PathBuf, force_diagnostic: bool| {
+        if !force_diagnostic
+            && std::fs::symlink_metadata(&root)
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+        {
+            return;
+        }
+        let definition = &crate::browser_cache::REFERENCE_ROOTS[index];
+        let item = result
+            .iter_mut()
+            .find(|c| c.id == definition.category)
+            .unwrap();
+        item.cache_root_scopes.insert(
+            root.clone(),
+            crate::browser_cache::RootScope::Reference(index as u16),
+        );
+        item.roots.push(root);
+    };
+    for (index, definition) in crate::browser_cache::REFERENCE_ROOTS.iter().enumerate() {
+        let base = match definition.environment {
+            "localappdata" => local,
+            "appdata" => roaming,
+            "programfiles" => program,
+            "commonappdata" => common,
+            _ => continue,
+        };
+        if definition.relative == "Mozilla-*" {
+            match std::fs::read_dir(base) {
+                Ok(entries) => {
+                    for entry in entries {
+                        match entry {
+                            Ok(entry)
+                                if entry
+                                    .file_name()
+                                    .to_string_lossy()
+                                    .to_ascii_lowercase()
+                                    .starts_with("mozilla-") =>
+                            {
+                                add(index, entry.path(), false)
+                            }
+                            Ok(_) => {}
+                            Err(_) => add(index, base.join("Mozilla-*"), true),
+                        }
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => add(index, base.join("Mozilla-*"), true),
+            }
+        } else {
+            add(index, base.join(definition.relative), false);
+        }
+    }
+    // Missing optional installations do not crowd the sidebar. Keep the three
+    // existing catalogue choices so saved selections remain compatible.
+    result
+        .retain(|c| !c.roots.is_empty() || matches!(c.id.as_str(), "chrome" | "edge" | "firefox"));
+    for item in &mut result {
+        item.roots.sort();
+        item.roots.dedup();
+    }
+    result
 }
 pub fn categories() -> Vec<Category> {
     #[cfg(target_os = "windows")]
@@ -42,7 +118,7 @@ pub fn categories() -> Vec<Category> {
         let Some(local) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) else {
             return vec![];
         };
-        return vec![
+        let mut result = vec![
             category(
                 "temp",
                 "Temporary files",
@@ -57,36 +133,16 @@ pub fn categories() -> Vec<Category> {
                 "Local application crash dumps.",
                 vec![local.join("CrashDumps")],
             ),
-            category(
-                "chrome",
-                "Google Chrome cache",
-                "Applications",
-                "Cache only. Cookies, history and passwords are retained.",
-                browser_roots(
-                    &local.join("Google/Chrome/User Data"),
-                    &["Cache", "Code Cache", "GPUCache"],
-                    true,
-                ),
-            ),
-            category(
-                "edge",
-                "Microsoft Edge cache",
-                "Applications",
-                "Cache only. Cookies, history and passwords are retained.",
-                browser_roots(
-                    &local.join("Microsoft/Edge/User Data"),
-                    &["Cache", "Code Cache", "GPUCache"],
-                    true,
-                ),
-            ),
-            category(
-                "firefox",
-                "Mozilla Firefox cache",
-                "Applications",
-                "Disposable cache2 data from local browser profiles.",
-                browser_roots(&local.join("Mozilla/Firefox/Profiles"), &["cache2"], false),
-            ),
         ];
+        let roaming = dirs::config_dir().unwrap_or_else(|| local.clone());
+        let program = std::env::var_os("ProgramFiles")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("C:/Program Files"));
+        let common = std::env::var_os("ProgramData")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("C:/ProgramData"));
+        result.extend(browser_categories_at(&local, &roaming, &program, &common));
+        return result;
     }
     #[cfg(target_os = "macos")]
     {

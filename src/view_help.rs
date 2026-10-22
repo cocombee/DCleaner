@@ -42,7 +42,7 @@ impl App {
         self.error = None;
         self.notice = None;
         self.progress = "Requesting the default browser…".into();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let ctx = ctx.clone();
         thread::spawn(move || {
@@ -62,7 +62,7 @@ impl App {
                         Destination::HelpCentre => "Help Centre",
                         Destination::ContactSupport => "Support",
                     };
-                    self.notice = Some(format!(
+                    self.set_notice(format!(
                         "{label}: browser handoff accepted. If the page does not load, check your browser and connection."
                     ));
                 }
@@ -72,7 +72,7 @@ impl App {
                 self.help_ui.export_status = Some(result.clone());
                 match result {
                     Ok(()) => {
-                        self.notice = Some("Diagnostic report saved. Nothing was uploaded.".into())
+                        self.set_notice("Diagnostic report saved. Nothing was uploaded.".into())
                     }
                     Err(error) => self.error = Some(error),
                 }
@@ -216,7 +216,7 @@ impl App {
         self.notice = None;
         self.progress = "Saving diagnostic report…".into();
         self.help_ui.export_status = None;
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         let ctx = ctx.clone();
         thread::spawn(move || {

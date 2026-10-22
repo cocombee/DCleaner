@@ -1,0 +1,6388 @@
+{
+  "scope": "Independent owned named-member non-null counting and selective member deletion model derived from retained native calls. Original reference is not executed; incidental mutable-lookup insertions are intentionally omitted.",
+  "cases": [
+    {
+      "name": "missing",
+      "source": "{}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "null-root",
+      "source": "null",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-null-count-0",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":null,\"startup_list\":null,\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":null,\"site_engagement\":null,\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-null-count-1",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":false,\"startup_list\":false,\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":false,\"site_engagement\":false,\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": false,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": false,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-2",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":true,\"startup_list\":true,\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":true,\"site_engagement\":true,\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": true,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": true,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-3",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":0,\"startup_list\":0,\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":0,\"site_engagement\":0,\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 0,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 0,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-4",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":-2,\"startup_list\":-2,\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":-2,\"site_engagement\":-2,\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": -2,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": -2,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-5",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":3.5,\"startup_list\":3.5,\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":3.5,\"site_engagement\":3.5,\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": 3.5,
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": 3.5,
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-6",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":\"\",\"startup_list\":\"\",\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":\"\",\"site_engagement\":\"\",\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-7",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":\"null\",\"startup_list\":\"null\",\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":\"null\",\"site_engagement\":\"null\",\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": "null",
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": "null",
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-8",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":[],\"startup_list\":[],\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":[],\"site_engagement\":[],\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-9",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{},\"startup_list\":{},\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":{},\"site_engagement\":{},\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {},
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {},
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-10",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":[1,null,{\"url\":\"https://owned.test/path\"}],\"startup_list\":[1,null,{\"url\":\"https://owned.test/path\"}],\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":[1,null,{\"url\":\"https://owned.test/path\"}],\"site_engagement\":[1,null,{\"url\":\"https://owned.test/path\"}],\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": [
+                    1,
+                    null,
+                    {
+                      "url": "https://owned.test/path"
+                    }
+                  ],
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": [
+                1,
+                null,
+                {
+                  "url": "https://owned.test/path"
+                }
+              ],
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-null-count-11",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"url\":\"https://例え.テスト/道\"},\"startup_list\":{\"url\":\"https://例え.テスト/道\"},\"unrelated\":\"preserved\"},\"profile\":{\"content_settings\":{\"exceptions\":{\"media_engagement\":{\"url\":\"https://例え.テスト/道\"},\"site_engagement\":{\"url\":\"https://例え.テスト/道\"},\"keep\":{\"content\":\"unchanged\"}}}},\"extra\":{\"keep\":true}}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup",
+        "media_engagement",
+        "site_engagement"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "site_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "media_engagement": {
+                    "url": "https://例え.テスト/道"
+                  },
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "url": "https://例え.テスト/道"
+              },
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup",
+            "media_engagement",
+            "site_engagement"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "unrelated": "preserved"
+            },
+            "profile": {
+              "content_settings": {
+                "exceptions": {
+                  "keep": {
+                    "content": "unchanged"
+                  }
+                }
+              }
+            },
+            "extra": {
+              "keep": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "non-object-leaves-0",
+      "source": "{\"dns_prefetching\":null,\"profile\":{\"content_settings\":{\"exceptions\":null}}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-object-leaves-1",
+      "source": "{\"dns_prefetching\":false,\"profile\":{\"content_settings\":{\"exceptions\":false}}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-object-leaves-2",
+      "source": "{\"dns_prefetching\":7,\"profile\":{\"content_settings\":{\"exceptions\":7}}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-object-leaves-3",
+      "source": "{\"dns_prefetching\":\"text\",\"profile\":{\"content_settings\":{\"exceptions\":\"text\"}}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-object-leaves-4",
+      "source": "{\"dns_prefetching\":[],\"profile\":{\"content_settings\":{\"exceptions\":[]}}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "non-object-leaves-5",
+      "source": "{\"dns_prefetching\":{},\"profile\":{\"content_settings\":{\"exceptions\":{}}}}",
+      "fields": [],
+      "transforms": []
+    },
+    {
+      "name": "member-order-0",
+      "source": "{\"dns_prefetching\":{\"keep_a\":{\"protected\":\"keep_a\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"startup_list\":{\"protected\":\"startup_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-1",
+      "source": "{\"dns_prefetching\":{\"keep_a\":{\"protected\":\"keep_a\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_b\":{\"protected\":\"keep_b\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-2",
+      "source": "{\"dns_prefetching\":{\"keep_a\":{\"protected\":\"keep_a\"},\"keep_b\":{\"protected\":\"keep_b\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"startup_list\":{\"protected\":\"startup_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-3",
+      "source": "{\"dns_prefetching\":{\"keep_a\":{\"protected\":\"keep_a\"},\"keep_b\":{\"protected\":\"keep_b\"},\"startup_list\":{\"protected\":\"startup_list\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-4",
+      "source": "{\"dns_prefetching\":{\"keep_a\":{\"protected\":\"keep_a\"},\"startup_list\":{\"protected\":\"startup_list\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_b\":{\"protected\":\"keep_b\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-5",
+      "source": "{\"dns_prefetching\":{\"keep_a\":{\"protected\":\"keep_a\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-6",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"keep_b\":{\"protected\":\"keep_b\"},\"startup_list\":{\"protected\":\"startup_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-7",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_b\":{\"protected\":\"keep_b\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-8",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"keep_a\":{\"protected\":\"keep_a\"},\"startup_list\":{\"protected\":\"startup_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-9",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_a\":{\"protected\":\"keep_a\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-10",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"keep_b\":{\"protected\":\"keep_b\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-11",
+      "source": "{\"dns_prefetching\":{\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"keep_a\":{\"protected\":\"keep_a\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-12",
+      "source": "{\"dns_prefetching\":{\"keep_b\":{\"protected\":\"keep_b\"},\"keep_a\":{\"protected\":\"keep_a\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"startup_list\":{\"protected\":\"startup_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-13",
+      "source": "{\"dns_prefetching\":{\"keep_b\":{\"protected\":\"keep_b\"},\"keep_a\":{\"protected\":\"keep_a\"},\"startup_list\":{\"protected\":\"startup_list\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-14",
+      "source": "{\"dns_prefetching\":{\"keep_b\":{\"protected\":\"keep_b\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"startup_list\":{\"protected\":\"startup_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-15",
+      "source": "{\"dns_prefetching\":{\"keep_b\":{\"protected\":\"keep_b\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_a\":{\"protected\":\"keep_a\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-16",
+      "source": "{\"dns_prefetching\":{\"keep_b\":{\"protected\":\"keep_b\"},\"startup_list\":{\"protected\":\"startup_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-17",
+      "source": "{\"dns_prefetching\":{\"keep_b\":{\"protected\":\"keep_b\"},\"startup_list\":{\"protected\":\"startup_list\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_a\":{\"protected\":\"keep_a\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-18",
+      "source": "{\"dns_prefetching\":{\"startup_list\":{\"protected\":\"startup_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_b\":{\"protected\":\"keep_b\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-19",
+      "source": "{\"dns_prefetching\":{\"startup_list\":{\"protected\":\"startup_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"keep_b\":{\"protected\":\"keep_b\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-20",
+      "source": "{\"dns_prefetching\":{\"startup_list\":{\"protected\":\"startup_list\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_a\":{\"protected\":\"keep_a\"},\"keep_b\":{\"protected\":\"keep_b\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-21",
+      "source": "{\"dns_prefetching\":{\"startup_list\":{\"protected\":\"startup_list\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"keep_a\":{\"protected\":\"keep_a\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-22",
+      "source": "{\"dns_prefetching\":{\"startup_list\":{\"protected\":\"startup_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"keep_a\":{\"protected\":\"keep_a\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "member-order-23",
+      "source": "{\"dns_prefetching\":{\"startup_list\":{\"protected\":\"startup_list\"},\"keep_b\":{\"protected\":\"keep_b\"},\"host_referral_list\":{\"protected\":\"host_referral_list\"},\"keep_a\":{\"protected\":\"keep_a\"}},\"unrelated\":[false,null,0]}",
+      "fields": [
+        "dns_referrals",
+        "dns_startup"
+      ],
+      "transforms": [
+        {
+          "selected": [
+            "dns_referrals"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "startup_list": {
+                "protected": "startup_list"
+              },
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "host_referral_list": {
+                "protected": "host_referral_list"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        },
+        {
+          "selected": [
+            "dns_referrals",
+            "dns_startup"
+          ],
+          "expected": {
+            "dns_prefetching": {
+              "keep_b": {
+                "protected": "keep_b"
+              },
+              "keep_a": {
+                "protected": "keep_a"
+              }
+            },
+            "unrelated": [
+              false,
+              null,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

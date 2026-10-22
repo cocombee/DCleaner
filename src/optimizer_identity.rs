@@ -130,6 +130,50 @@ pub fn revalidate(
     Ok(current)
 }
 
+/// Retained read/execute handle to one freshly compared selected image. Not a launch,
+/// app association, protected-path, publisher or native-effect permit. Ordinary
+/// write/delete opens are excluded while held; existing writable mappings and
+/// ancestor/alias changes are not made impossible by a sharing mode.
+#[cfg(windows)]
+#[allow(dead_code)] // The complete protected launch/effect owner is not wired yet.
+pub(crate) struct PinnedImage {
+    file: std::fs::File,
+    snapshot: ImageSnapshot,
+}
+#[cfg(windows)]
+#[allow(dead_code)]
+impl PinnedImage {
+    /// Worker-only full bounded read. May block in synchronous native I/O;
+    /// callers still own their cancellation/deadline and effect admission.
+    pub(crate) fn open(expected: &ImageSnapshot, cancel: &AtomicBool) -> Result<Self, ImageError> {
+        let (file, snapshot) =
+            native::pin_with_limit(&expected.requested_path, cancel, MAX_IMAGE_BYTES, true)?;
+        if snapshot != *expected {
+            return Err(error(
+                ImageErrorKind::Changed,
+                "The selected image changed before its handle was retained.",
+            ));
+        }
+        Ok(Self { file, snapshot })
+    }
+    pub(crate) fn snapshot(&self) -> &ImageSnapshot {
+        &self.snapshot
+    }
+    pub(crate) fn handle(&self) -> std::os::windows::io::BorrowedHandle<'_> {
+        use std::os::windows::io::AsHandle;
+        self.file.as_handle()
+    }
+    /// Re-read the requested path and complete digest, checking the retained
+    /// leaf's metadata/path on both sides. This detects observed replacement,
+    /// alias/ancestor and content changes; it does not reserve the namespace or
+    /// certify immunity from concurrent mapped writes after the check.
+    pub(crate) fn revalidate(&self, cancel: &AtomicBool) -> Result<(), ImageError> {
+        native::validate_held(&self.file, &self.snapshot, cancel)?;
+        revalidate(&self.snapshot, cancel)?;
+        native::validate_held(&self.file, &self.snapshot, cancel)
+    }
+}
+
 #[cfg(any(windows, test))]
 fn u16_at(bytes: &[u8], at: usize) -> Result<u16, ImageError> {
     let value = bytes
@@ -279,11 +323,11 @@ mod native {
     };
     use windows::{
         Win32::{
-            Foundation::{GetLastError, HANDLE},
+            Foundation::{GENERIC_READ, GetLastError, HANDLE},
             Storage::FileSystem::{
                 BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
-                FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_SEQUENTIAL_SCAN, FILE_ID_INFO,
-                FILE_NAME_NORMALIZED, FILE_SHARE_READ, FILE_TYPE_DISK, FileIdInfo,
+                FILE_EXECUTE, FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_SEQUENTIAL_SCAN,
+                FILE_ID_INFO, FILE_NAME_NORMALIZED, FILE_SHARE_READ, FILE_TYPE_DISK, FileIdInfo,
                 GETFINALPATHNAMEBYHANDLE_FLAGS, GetFileInformationByHandle,
                 GetFileInformationByHandleEx, GetFileType, GetFinalPathNameByHandleW,
                 VOLUME_NAME_DOS,
@@ -514,10 +558,27 @@ mod native {
         cancel: &AtomicBool,
         image_limit: u64,
     ) -> Result<ImageSnapshot, ImageError> {
+        pin_with_limit(path, cancel, image_limit, false).map(|(_file, snapshot)| snapshot)
+    }
+    pub(super) fn pin_with_limit(
+        path: &Path,
+        cancel: &AtomicBool,
+        image_limit: u64,
+        executable_mapping: bool,
+    ) -> Result<(File, ImageSnapshot), ImageError> {
         cancelled(cancel)?;
         input_path(path)?;
         let mut file = OpenOptions::new()
-            .read(true)
+            // ProcessImageFileMapping needs FILE_EXECUTE on its retained file
+            // input. Snapshot-only inspection must keep its read-only contract.
+            .access_mode(
+                GENERIC_READ.0
+                    | if executable_mapping {
+                        FILE_EXECUTE.0
+                    } else {
+                        0
+                    },
+            )
             .share_mode(FILE_SHARE_READ.0)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0 | FILE_FLAG_SEQUENTIAL_SCAN.0)
             .open(path)
@@ -597,7 +658,7 @@ mod native {
             ));
         }
         let sha256 = hash.finish().map_err(hash_error)?;
-        Ok(ImageSnapshot {
+        let snapshot = ImageSnapshot {
             requested_path: path.to_path_buf(),
             final_path: final_after,
             identity: after.identity,
@@ -609,7 +670,31 @@ mod native {
             sha256,
             pe,
             bytes_read: hashed + prefix.len() as u64,
-        })
+        };
+        Ok((file, snapshot))
+    }
+    pub(super) fn validate_held(
+        file: &File,
+        expected: &ImageSnapshot,
+        cancel: &AtomicBool,
+    ) -> Result<(), ImageError> {
+        cancelled(cancel)?;
+        let actual = observe(file)?;
+        let before = Observation {
+            identity: expected.identity.clone(),
+            size: expected.size,
+            creation_time: expected.creation_time,
+            last_write_time: expected.last_write_time,
+            attributes: expected.attributes,
+            hard_links: expected.hard_links,
+        };
+        if actual != before || final_path(file)? != expected.final_path {
+            return Err(error(
+                ImageErrorKind::Changed,
+                "The retained image's metadata or resolved path changed.",
+            ));
+        }
+        cancelled(cancel)
     }
 
     #[cfg(test)]
@@ -802,6 +887,184 @@ mod tests {
             let path = dir.path().join("selected-image.bin");
             fs::write(&path, image(PeFormat::Pe32Plus)).unwrap();
             (dir, path)
+        }
+
+        fn writer_can_open(path: &Path) -> bool {
+            OpenOptions::new()
+                .write(true)
+                .share_mode(7)
+                .open(path)
+                .is_ok()
+        }
+
+        #[test]
+        fn selected_pin_retains_the_exact_file_and_releases_ordinary_write_delete_reservation() {
+            use std::os::windows::io::AsRawHandle;
+            let (_dir, path) = fixture();
+            let cancel = AtomicBool::new(false);
+            let expected = inspect(&path, &cancel).unwrap();
+            let pin = PinnedImage::open(&expected, &cancel).unwrap();
+            assert_eq!(pin.snapshot(), &expected);
+            assert!(!pin.handle().as_raw_handle().is_null());
+            pin.revalidate(&cancel).unwrap();
+            assert!(!writer_can_open(&path));
+            assert!(fs::rename(&path, path.with_extension("moved")).is_err());
+            assert!(fs::remove_file(&path).is_err());
+            assert_eq!(fs::read(&path).unwrap(), image(PeFormat::Pe32Plus));
+            drop(pin);
+            assert!(writer_can_open(&path));
+            fs::rename(&path, path.with_extension("moved")).unwrap();
+            fs::remove_file(path.with_extension("moved")).unwrap();
+            eprintln!(
+                "SELECTED_PIN held_read=true write_refused=true delete_refused=true rename_refused=true drop_releases=true"
+            );
+        }
+
+        #[test]
+        fn snapshot_reader_does_not_require_the_execute_access_needed_by_selected_pin() {
+            use std::os::windows::ffi::OsStrExt;
+            use windows::{
+                Win32::Security::{
+                    DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+                    SetFileSecurityW,
+                },
+                core::PCWSTR,
+            };
+            let (_dir, path) = fixture();
+            let sid = crate::optimizer_pipe_security::Principal::current()
+                .unwrap()
+                .user_sid()
+                .unwrap();
+            let name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+            let set = |rights: &str| {
+                let descriptor = crate::optimizer_pipe_security::Descriptor::from_sddl(&format!(
+                    "O:{sid}D:P(A;;{rights};;;{sid})"
+                ))
+                .unwrap();
+                unsafe {
+                    SetFileSecurityW(
+                        PCWSTR(name.as_ptr()),
+                        DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                        descriptor.native(),
+                    )
+                }
+                .unwrap();
+            };
+            set("FR");
+            let cancel = AtomicBool::new(false);
+            let readable = inspect(&path, &cancel).unwrap();
+            assert_eq!(readable.size, 1024);
+            assert!(matches!(
+                PinnedImage::open(&readable, &cancel),
+                Err(ImageError {
+                    kind: ImageErrorKind::AccessDenied,
+                    ..
+                })
+            ));
+            set("FA");
+            let restored = inspect(&path, &cancel).unwrap();
+            assert_eq!(restored.identity, readable.identity);
+            assert_eq!(restored.sha256, readable.sha256);
+            let pin = PinnedImage::open(&restored, &cancel).unwrap();
+            pin.revalidate(&cancel).unwrap();
+            eprintln!(
+                "SELECTED_PIN read_only_inspection=true execute_denial_refused=true restored_access_valid=true"
+            );
+        }
+
+        #[test]
+        fn selected_pin_refuses_changed_bytes_and_identical_replacement_without_leaking_handles() {
+            let (_dir, path) = fixture();
+            let cancel = AtomicBool::new(false);
+            let expected = inspect(&path, &cancel).unwrap();
+            let mut changed = fs::read(&path).unwrap();
+            changed[900] ^= 1;
+            fs::write(&path, &changed).unwrap();
+            assert!(matches!(
+                PinnedImage::open(&expected, &cancel),
+                Err(ImageError {
+                    kind: ImageErrorKind::Changed,
+                    ..
+                })
+            ));
+            assert!(writer_can_open(&path));
+            let expected = inspect(&path, &cancel).unwrap();
+            fs::rename(&path, path.with_extension("previous")).unwrap();
+            fs::write(&path, &changed).unwrap();
+            let replacement = inspect(&path, &cancel).unwrap();
+            assert_eq!(replacement.sha256, expected.sha256);
+            assert_ne!(replacement.identity, expected.identity);
+            assert!(matches!(
+                PinnedImage::open(&expected, &cancel),
+                Err(ImageError {
+                    kind: ImageErrorKind::Changed,
+                    ..
+                })
+            ));
+            assert!(writer_can_open(&path));
+            eprintln!(
+                "SELECTED_PIN content_drift_refused=true byte_identical_replacement_refused=true failure_releases=true"
+            );
+        }
+
+        #[test]
+        fn selected_pin_checks_cancellation_before_open_and_while_retaining_its_original_handle() {
+            let (_dir, path) = fixture();
+            let cancel = AtomicBool::new(false);
+            let expected = inspect(&path, &cancel).unwrap();
+            cancel.store(true, std::sync::atomic::Ordering::Release);
+            assert!(matches!(
+                PinnedImage::open(&expected, &cancel),
+                Err(ImageError {
+                    kind: ImageErrorKind::Cancelled,
+                    ..
+                })
+            ));
+            assert!(writer_can_open(&path));
+            cancel.store(false, std::sync::atomic::Ordering::Release);
+            let pin = PinnedImage::open(&expected, &cancel).unwrap();
+            cancel.store(true, std::sync::atomic::Ordering::Release);
+            assert!(matches!(
+                pin.revalidate(&cancel),
+                Err(ImageError {
+                    kind: ImageErrorKind::Cancelled,
+                    ..
+                })
+            ));
+            assert_eq!(pin.snapshot(), &expected);
+            assert!(!writer_can_open(&path));
+            cancel.store(false, std::sync::atomic::Ordering::Release);
+            pin.revalidate(&cancel).unwrap();
+            drop(pin);
+            assert!(writer_can_open(&path));
+            eprintln!(
+                "SELECTED_PIN pre_cancel_refused=true retained_cancel_refused=true caller_still_owns_cleanup=true"
+            );
+        }
+
+        #[test]
+        fn selected_pin_does_not_treat_a_retained_leaf_as_namespace_authority() {
+            let dir = tempfile::tempdir().unwrap();
+            let parent = dir.path().join("selected");
+            let moved = dir.path().join("moved");
+            fs::create_dir(&parent).unwrap();
+            let path = parent.join("image.bin");
+            fs::write(&path, image(PeFormat::Pe32Plus)).unwrap();
+            let cancel = AtomicBool::new(false);
+            let expected = inspect(&path, &cancel).unwrap();
+            let pin = PinnedImage::open(&expected, &cancel).unwrap();
+            if fs::rename(&parent, &moved).is_ok() {
+                fs::create_dir(&parent).unwrap();
+                fs::write(&path, image(PeFormat::Pe32Plus)).unwrap();
+                assert_ne!(inspect(&path, &cancel).unwrap().identity, expected.identity);
+                assert!(pin.revalidate(&cancel).is_err());
+                eprintln!("SELECTED_PIN parent_rename_permitted=true retarget_refused=true");
+            } else {
+                pin.revalidate(&cancel).unwrap();
+                eprintln!(
+                    "SELECTED_PIN parent_rename_blocked_by_os=true original_still_valid=true"
+                );
+            }
         }
 
         #[test]

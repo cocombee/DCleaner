@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uuid::Uuid;
 
+#[cfg(any(windows, test))]
+mod service_pages;
+
 pub const MAX_ITEMS_PER_SOURCE: usize = 4_096;
 pub const CHANGE_SCHEMA_VERSION: u32 = 2;
 const LEGACY_CHANGE_SCHEMA_VERSION: u32 = 1;
@@ -1360,7 +1363,6 @@ mod windows_backend {
     const MAX_TASK_XML_UNITS: usize = 512 * 1024;
     const MAX_TASK_DEPTH: usize = 16;
     const MAX_CONTEXT_REGISTRATIONS: usize = 4_096;
-    const MAX_SERVICE_BUFFER: usize = 16 * 1024 * 1024;
     const MAX_REGISTRY_SOURCE_BYTES: usize = 16 * 1024 * 1024;
     const MAX_REGISTRY_VALUE_BYTES: usize = 1024 * 1024;
     const MAX_CONTEXT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
@@ -1944,12 +1946,22 @@ mod windows_backend {
                                         change_limitation: (!can_change).then(|| "Driver and non-Win32 service types are inventory-only.".into()),
                                     });
                                 }
-                                Err(error) => sources.push(SourceOutcome {
-                                    source: format!("Service configuration: {name}"),
-                                    state: SourceState::Inaccessible {
-                                        reason: error.message,
-                                    },
-                                }),
+                                Err(error) => {
+                                    // Enumeration established this identity, even if its
+                                    // configuration cannot be queried. Keep the row but
+                                    // grant no change authority or guessed enabled state.
+                                    entries.push(unreadable_service_entry(
+                                        name,
+                                        display_name,
+                                        &error.message,
+                                    ));
+                                    sources.push(SourceOutcome {
+                                        source: format!("Service configuration: {name}"),
+                                        state: SourceState::Inaccessible {
+                                            reason: error.message,
+                                        },
+                                    });
+                                }
                             }
                         }
                         sources.push(SourceOutcome {
@@ -4198,64 +4210,186 @@ mod windows_backend {
     }
 
     fn enumerate_services(manager: SC_HANDLE) -> Result<(Vec<(String, String)>, bool), String> {
-        let mut buffer = vec![0u8; 64 * 1024];
-        let mut resume = 0u32;
-        let mut services = Vec::new();
-        loop {
-            let mut bytes_needed = 0u32;
-            let mut returned = 0u32;
-            let result = unsafe {
-                EnumServicesStatusExW(
-                    manager,
-                    SC_ENUM_PROCESS_INFO,
-                    SERVICE_WIN32,
-                    SERVICE_STATE_ALL,
-                    Some(&mut buffer),
-                    &mut bytes_needed,
-                    &mut returned,
-                    Some(&mut resume),
-                    PCWSTR::null(),
-                )
-            };
-            if let Err(error) = result {
-                let code = win32_code_from_hresult(error.code().0);
-                if code == ERROR_MORE_DATA.0
-                    && bytes_needed as usize > buffer.len()
-                    && bytes_needed as usize <= MAX_SERVICE_BUFFER
-                {
-                    buffer.resize(bytes_needed as usize, 0);
-                    continue;
+        enumerate_services_with_page_size(manager, 64 * 1024)
+    }
+
+    fn unreadable_service_entry(name: &str, display_name: &str, reason: &str) -> StartupEntry {
+        let identity = EntryIdentity::WindowsService { name: name.into() };
+        StartupEntry {
+            id: StartupId::for_identity(&identity),
+            section: StartupSection::WindowsServices,
+            program: FieldValue::known(
+                if display_name.is_empty() {
+                    name
+                } else {
+                    display_name
                 }
-                if code == ERROR_MORE_DATA.0 {
-                    return Ok((services, true));
-                }
-                return Err(format!(
-                    "Service enumeration failed (Windows error {code})."
-                ));
-            }
-            let records = unsafe {
-                std::slice::from_raw_parts(
-                    buffer.as_ptr().cast::<ENUM_SERVICE_STATUS_PROCESSW>(),
-                    returned as usize,
-                )
-            };
-            for record in records {
-                services.push((
-                    wide_ptr_to_string(record.lpServiceName),
-                    wide_ptr_to_string(record.lpDisplayName),
-                ));
-                if services.len() >= MAX_ITEMS_PER_SOURCE {
-                    return Ok((services, true));
-                }
-            }
-            if resume == 0 {
-                break;
-            }
-            if services.len() >= MAX_ITEMS_PER_SOURCE {
-                return Ok((services, true));
-            }
+                .into(),
+            ),
+            publisher: FieldValue::unknown("Service publisher metadata was not queried."),
+            version: FieldValue::NotApplicable,
+            file_path: FieldValue::unknown(reason),
+            command: FieldValue::unknown(reason),
+            enabled: EnabledState::Unknown {
+                reason: reason.into(),
+            },
+            identity,
+            can_change_enabled: false,
+            change_limitation: Some(reason.into()),
         }
-        Ok((services, false))
+    }
+
+    fn enumerate_services_with_page_size(
+        manager: SC_HANDLE,
+        initial_bytes: usize,
+    ) -> Result<(Vec<(String, String)>, bool), String> {
+        service_pages::collect(
+            initial_bytes,
+            MAX_ITEMS_PER_SOURCE,
+            |capacity, mut resume| {
+                // Native records contain pointers: retain suitably aligned backing
+                // storage until their names have been copied out of this page.
+                let mut backing = vec![0usize; capacity.div_ceil(size_of::<usize>())];
+                let buffer = unsafe {
+                    std::slice::from_raw_parts_mut(backing.as_mut_ptr().cast::<u8>(), capacity)
+                };
+                let mut bytes_needed = 0u32;
+                let mut returned = 0u32;
+                let result = unsafe {
+                    EnumServicesStatusExW(
+                        manager,
+                        SC_ENUM_PROCESS_INFO,
+                        SERVICE_WIN32,
+                        SERVICE_STATE_ALL,
+                        Some(buffer),
+                        &mut bytes_needed,
+                        &mut returned,
+                        Some(&mut resume),
+                        PCWSTR::null(),
+                    )
+                };
+                let more_data = match result {
+                    Ok(()) => false,
+                    Err(error) if win32_code_from_hresult(error.code().0) == ERROR_MORE_DATA.0 => {
+                        true
+                    }
+                    Err(error) => {
+                        return Err(format!(
+                            "Service enumeration failed (Windows error {}).",
+                            win32_code_from_hresult(error.code().0)
+                        ));
+                    }
+                };
+                if returned as usize > capacity / size_of::<ENUM_SERVICE_STATUS_PROCESSW>() {
+                    return Err("Service enumeration returned an invalid record count.".into());
+                }
+                let records = unsafe {
+                    std::slice::from_raw_parts(
+                        backing.as_ptr().cast::<ENUM_SERVICE_STATUS_PROCESSW>(),
+                        returned as usize,
+                    )
+                };
+                let entries = records
+                    .iter()
+                    .map(|record| {
+                        (
+                            wide_ptr_to_string(record.lpServiceName),
+                            wide_ptr_to_string(record.lpDisplayName),
+                        )
+                    })
+                    .collect();
+                Ok(service_pages::Page {
+                    entries,
+                    resume,
+                    more_data,
+                    bytes_needed: bytes_needed as usize,
+                })
+            },
+        )
+    }
+
+    #[cfg(test)]
+    mod service_page_native_tests {
+        use super::*;
+
+        #[test]
+        fn unreadable_service_configuration_preserves_identity_without_change_authority() {
+            let row = unreadable_service_entry(
+                "FixtureService",
+                "Fixture service",
+                "Synthetic query denied",
+            );
+            let identity = EntryIdentity::WindowsService {
+                name: "FixtureService".into(),
+            };
+            assert_eq!(row.identity, identity);
+            assert_eq!(row.id, StartupId::for_identity(&identity));
+            assert_eq!(row.program, FieldValue::known("Fixture service".into()));
+            assert!(row.enabled.as_bool().is_none());
+            assert!(matches!(row.file_path, FieldValue::Unknown { .. }));
+            assert!(matches!(row.command, FieldValue::Unknown { .. }));
+            assert!(!row.can_change_enabled);
+            assert_eq!(
+                row.change_limitation.as_deref(),
+                Some("Synthetic query denied")
+            );
+            assert_eq!(
+                unreadable_service_entry("FixtureService", "", "denied").program,
+                FieldValue::known("FixtureService".into())
+            );
+        }
+
+        #[test]
+        #[ignore = "Opt-in read-only SCM pagination check; no service changes, windows or physical input"]
+        fn small_service_pages_retain_the_same_native_names_as_a_large_page() {
+            let manager =
+                service_manager(SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE).unwrap();
+            let (small, small_truncated) =
+                enumerate_services_with_page_size(manager.0, 1024).unwrap();
+            let (large, large_truncated) =
+                enumerate_services_with_page_size(manager.0, service_pages::MAX_BUFFER_BYTES)
+                    .unwrap();
+            assert!(!small_truncated && !large_truncated);
+            let small_names: std::collections::BTreeSet<_> =
+                small.iter().map(|row| &row.0).collect();
+            let large_names: std::collections::BTreeSet<_> =
+                large.iter().map(|row| &row.0).collect();
+            assert!(!small_names.is_empty());
+            assert_eq!(small_names, large_names);
+            assert_eq!(small.len(), small_names.len());
+            let inventory =
+                WindowsStartupPlatform::new().inventory(StartupSection::WindowsServices);
+            let inventory_names: std::collections::BTreeSet<_> = inventory
+                .entries
+                .iter()
+                .map(|row| {
+                    let EntryIdentity::WindowsService { name } = &row.identity else {
+                        panic!("service identity required")
+                    };
+                    if row.enabled.as_bool().is_none() {
+                        assert!(!row.can_change_enabled);
+                    }
+                    name
+                })
+                .collect();
+            assert_eq!(large_names, inventory_names);
+            eprintln!(
+                "SCM_INVENTORY rows={} unknown_state={} all_enumerated_names_retained=true service_changes=false",
+                inventory.entries.len(),
+                inventory
+                    .entries
+                    .iter()
+                    .filter(|row| row.enabled.as_bool().is_none())
+                    .count()
+            );
+            eprintln!(
+                "SCM_PAGINATION small_bytes=1024 large_bytes={} same_native_names={} small_rows={} large_rows={} service_changes=false",
+                service_pages::MAX_BUFFER_BYTES,
+                small_names.len(),
+                small.len(),
+                large.len()
+            );
+        }
     }
 
     fn win32_code_from_hresult(code: i32) -> u32 {

@@ -1,4 +1,4 @@
-//! Internal byte I/O for a future authenticated Windows helper channel.
+//! Overlapped byte I/O for the authenticated Windows helper channel.
 //!
 //! No production endpoint is created here. A caller must establish local pipe
 //! security and authenticate both peers before dispatching any request. This
@@ -9,7 +9,7 @@
 //! native completion before releasing its buffer, event or OVERLAPPED. Windows
 //! can delay cancellation completion, so the drain is not a hard time bound.
 
-// Intentionally internal and unconnected until the authenticated endpoint exists.
+// Internal transport; only the policy/owner may establish a service endpoint.
 #![allow(dead_code)]
 
 use std::{
@@ -190,8 +190,22 @@ impl AsHandle for PipeIo<'_> {
 }
 
 impl<'a> PipeIo<'a> {
+    /// End this exchange and retain the exclusive first-instance listener.
+    /// Every overlapped operation has already completed or drained before a
+    /// method returns. No operation or buffer may survive this consuming call.
+    pub(crate) fn disconnect(self) -> io::Result<OwnedHandle> {
+        use windows::Win32::{
+            Foundation::ERROR_PIPE_NOT_CONNECTED, System::Pipes::DisconnectNamedPipe,
+        };
+        match unsafe { DisconnectNamedPipe(HANDLE(self.pipe.as_raw_handle())) } {
+            Ok(()) => Ok(self.pipe),
+            Err(error) if error.code() == ERROR_PIPE_NOT_CONNECTED.to_hresult() => Ok(self.pipe),
+            Err(error) => Err(native_error(error)),
+        }
+    }
     /// Protocol/authentication failures also end an exchange, even if the last
-    /// native byte operation succeeded. The owner must then drop the endpoint.
+    /// native byte operation succeeded. The owner must drop it or consume this
+    /// exchange through disconnect before a fresh exchange can own the listener.
     pub(crate) fn end_exchange(&mut self) {
         self.ended = true;
     }

@@ -5,6 +5,7 @@ use windows::Win32::Security::Cryptography::{
     BCryptOpenAlgorithmProvider,
 };
 use windows::core::PCWSTR;
+use zeroize::Zeroize;
 
 const MAX_OBJECT_LENGTH: usize = 1_048_576;
 
@@ -81,7 +82,15 @@ impl Sha256 {
         }
     }
 
-    pub(crate) fn finish(mut self) -> Result<String, HashError> {
+    pub(crate) fn finish(self) -> Result<String, HashError> {
+        Ok(self
+            .finish_bytes()?
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
+    }
+
+    pub(crate) fn finish_bytes(mut self) -> Result<[u8; 32], HashError> {
         let mut output = [0u8; 32];
         let status = unsafe { BCryptFinishHash(self.hash, &mut output, 0) };
         unsafe {
@@ -90,11 +99,11 @@ impl Sha256 {
         }
         self.hash = BCRYPT_HASH_HANDLE::default();
         self.algorithm = BCRYPT_ALG_HANDLE::default();
-        self.object.clear();
+        self.object.zeroize();
         if status.0 < 0 {
             return Err(HashError::NativeFailure(status.0 as u32));
         }
-        Ok(output.iter().map(|byte| format!("{byte:02x}")).collect())
+        Ok(output)
     }
 }
 
@@ -108,6 +117,7 @@ impl Drop for Sha256 {
                 let _ = BCryptCloseAlgorithmProvider(self.algorithm, 0);
             }
         }
+        self.object.zeroize();
     }
 }
 

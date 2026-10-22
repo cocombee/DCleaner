@@ -7,7 +7,7 @@ description = "Native Rust PC cleaner with blue semantic tokens"
 license = "MIT"
 
 [dependencies]
-eframe = { version = "=0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow"] }
+eframe = { version = "=0.36.2", default-features = false, features = ["accesskit", "default_fonts", "wgpu"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -22,6 +22,7 @@ reqwest = { version = "=0.13.5", default-features = false, features = ["blocking
 zeroize = "=1.9.1"
 oauth2 = { version = "=5.0.0", default-features = false, features = ["timing-resistant-secret-traits"] }
 subtle = "=2.6.1"
+sha2 = "=0.10.9"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "=0.62.2", features = [
@@ -36,7 +37,11 @@ windows = { version = "=0.62.2", features = [
     "Win32_System_Variant",
     "Win32_System_TaskScheduler",
     "Win32_System_Services",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Environment",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_ProcessStatus",
+    "Win32_System_JobObjects",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
     "Win32_Security",
@@ -57,6 +62,7 @@ windows = { version = "=0.62.2", features = [
 security-framework = "=3.7.0"
 
 [dev-dependencies]
+pollster = "=1.0.1"
 tempfile = "3"
 filetime = "0.2"
 

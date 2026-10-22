@@ -1,0 +1,930 @@
+{
+  "scope": "Owned filename inputs; Windows wildcard API composed with retained native masks/order, conditional on an actual profile binding. No original reference execution or database-count claim.",
+  "input_files": [
+    "History",
+    "Archived History",
+    "Visited Links",
+    "Current Tabs",
+    "Last Tabs",
+    "Top Sites",
+    "History Provider Cache",
+    "Network Action Predictor",
+    "History Index.sample.tmp",
+    "History Index.data",
+    "History Indexplain",
+    "sample.tmp",
+    "Shortcuts",
+    "Web Data",
+    "Preferences",
+    "DownloadMetadata",
+    "history.dat",
+    "urlbarhistory.sqlite",
+    "places.sqlite",
+    "favicons.sqlite",
+    "downloads.rdf",
+    "downloads.sqlite",
+    "downloads.json",
+    "Login Data",
+    "cookies.sqlite",
+    "nested/Archived History",
+    "nested/History Index.data",
+    "nested/downloads.rdf",
+    "nested/downloads.sqlite",
+    "nested/downloads.json",
+    "nested/history.dat",
+    "thumbnails/one.png",
+    "thumbnails/deep/two.png",
+    "thumbnails/keep.jpg",
+    "nested/thumbnails/three.png",
+    "vps/one.tmp",
+    "vps/deep/two.tmp",
+    "vps/keep.dat",
+    "Downloaded documents/user-document.pdf",
+    "global.dat",
+    "global_history.dat",
+    "search_field_history.dat",
+    "opera.dir",
+    "download.dat",
+    "vlink4.dat"
+  ],
+  "groups": [
+    {
+      "browser": "edge",
+      "category": "history",
+      "rule": "edge-chromium.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "edge",
+      "category": "downloads",
+      "rule": "edge-chromium.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "avg",
+      "category": "history",
+      "rule": "avgsecurebrowser.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "avg",
+      "category": "downloads",
+      "rule": "avgsecurebrowser.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "ccleaner",
+      "category": "history",
+      "rule": "ccleanerbrowser.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "ccleaner",
+      "category": "downloads",
+      "rule": "ccleanerbrowser.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "avast",
+      "category": "history",
+      "rule": "avastsecurebrowser.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "avast",
+      "category": "downloads",
+      "rule": "avastsecurebrowser.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "firefox",
+      "category": "history",
+      "rule": "mozilla.history",
+      "expected": [
+        {
+          "path": "history.dat",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "urlbarhistory.sqlite",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "nested/history.dat",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "thumbnails/one.png",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "thumbnails/deep/two.png",
+          "handler": "OnFile5"
+        }
+      ]
+    },
+    {
+      "browser": "firefox",
+      "category": "downloads",
+      "rule": "mozilla.downloadhistory",
+      "expected": [
+        {
+          "path": "downloads.rdf",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "downloads.sqlite",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "downloads.json",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "nested/downloads.rdf",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "nested/downloads.sqlite",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "nested/downloads.json",
+          "handler": "OnFile4"
+        }
+      ]
+    },
+    {
+      "browser": "thunderbird",
+      "category": "history",
+      "rule": "thunderbird.history",
+      "expected": [
+        {
+          "path": "history.dat",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "urlbarhistory.sqlite",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "nested/history.dat",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "thumbnails/one.png",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "thumbnails/deep/two.png",
+          "handler": "OnFile5"
+        }
+      ]
+    },
+    {
+      "browser": "thunderbird",
+      "category": "downloads",
+      "rule": "thunderbird.downloadhistory",
+      "expected": [
+        {
+          "path": "downloads.rdf",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "downloads.sqlite",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "downloads.json",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "nested/downloads.rdf",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "nested/downloads.sqlite",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "nested/downloads.json",
+          "handler": "OnFile4"
+        }
+      ]
+    },
+    {
+      "browser": "opera",
+      "category": "history",
+      "rule": "opera.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "vps/one.tmp",
+          "handler": "OnFile9"
+        },
+        {
+          "path": "vps/deep/two.tmp",
+          "handler": "OnFile9"
+        }
+      ]
+    },
+    {
+      "browser": "opera",
+      "category": "downloads",
+      "rule": "opera.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "chrome",
+      "category": "history",
+      "rule": "google-chrome.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "chrome",
+      "category": "downloads",
+      "rule": "google-chrome.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "vivaldi",
+      "category": "history",
+      "rule": "vivaldi.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "vivaldi",
+      "category": "downloads",
+      "rule": "vivaldi.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "brave",
+      "category": "history",
+      "rule": "brave.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "brave",
+      "category": "downloads",
+      "rule": "brave.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "opera_gx",
+      "category": "history",
+      "rule": "operagx.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "opera_gx",
+      "category": "downloads",
+      "rule": "operagx.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "norton",
+      "category": "history",
+      "rule": "nortonprivatebrowser.internethistory",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "norton",
+      "category": "downloads",
+      "rule": "nortonprivatebrowser.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "avira",
+      "category": "history",
+      "rule": "avirasecurebrowser.internethistory",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "avira",
+      "category": "downloads",
+      "rule": "avirasecurebrowser.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "arc",
+      "category": "history",
+      "rule": "arc.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "arc",
+      "category": "downloads",
+      "rule": "arc.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    },
+    {
+      "browser": "neo",
+      "category": "history",
+      "rule": "neobrowser.history",
+      "expected": [
+        {
+          "path": "Archived History",
+          "handler": "OnFile2"
+        },
+        {
+          "path": "Visited Links",
+          "handler": "OnFile3"
+        },
+        {
+          "path": "Current Tabs",
+          "handler": "OnFile4"
+        },
+        {
+          "path": "Last Tabs",
+          "handler": "OnFile5"
+        },
+        {
+          "path": "Top Sites",
+          "handler": "OnFile6"
+        },
+        {
+          "path": "History Provider Cache",
+          "handler": "OnFile7"
+        },
+        {
+          "path": "Network Action Predictor",
+          "handler": "OnFile8"
+        },
+        {
+          "path": "History Index.sample.tmp",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Index.data",
+          "handler": "OnFile1"
+        },
+        {
+          "path": "History Indexplain",
+          "handler": "OnFile1"
+        }
+      ]
+    },
+    {
+      "browser": "neo",
+      "category": "downloads",
+      "rule": "neobrowser.downloadhistory",
+      "expected": [
+        {
+          "path": "DownloadMetadata",
+          "handler": "OnFile2"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,533 @@
+{
+  "scope": "Owned SQLite inputs and recovered SQL predicates. The modern-only probe fallback is separately derived from native FH4 type/state/continuation tables and bounded catch/parent instructions. No original execution.",
+  "cases": [
+    {
+      "name": "legacy-empty",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 0,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 0",
+      "expected_row_ids": [
+        -5,
+        2,
+        3,
+        5,
+        9,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        1,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "name": "legacy-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',1);\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        5,
+        9,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        4,
+        6,
+        7,
+        8,
+        12
+      ]
+    },
+    {
+      "name": "legacy-negative",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',-1);\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": -1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1",
+      "expected_row_ids": [
+        -5,
+        -4,
+        1,
+        2,
+        3,
+        5,
+        9,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "name": "legacy-wrapped-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',4294967297);\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        5,
+        9,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        4,
+        6,
+        7,
+        8,
+        12
+      ]
+    },
+    {
+      "name": "legacy-wrapped-negative",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',2147483648);\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": -2147483648,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1",
+      "expected_row_ids": [
+        -5,
+        -4,
+        1,
+        2,
+        3,
+        5,
+        9,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "name": "legacy-null",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',NULL);\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 0,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 0",
+      "expected_row_ids": [
+        -5,
+        2,
+        3,
+        5,
+        9,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        1,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "name": "legacy-text-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID','1');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        5,
+        9,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        4,
+        6,
+        7,
+        8,
+        12
+      ]
+    },
+    {
+      "name": "legacy-text-prefix",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID','1e2');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        5,
+        9,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        4,
+        6,
+        7,
+        8,
+        12
+      ]
+    },
+    {
+      "name": "legacy-text-zero",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID','not-a-number');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 0,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 0",
+      "expected_row_ids": [
+        -5,
+        2,
+        3,
+        5,
+        9,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        1,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "name": "legacy-blob-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',X'31');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        5,
+        9,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        4,
+        6,
+        7,
+        8,
+        12
+      ]
+    },
+    {
+      "name": "legacy-real-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,show_in_default_list INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',1.9);\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,0,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,0,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0','0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,show_in_default_list,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where show_in_default_list = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        5,
+        9,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        4,
+        6,
+        7,
+        8,
+        12
+      ]
+    },
+    {
+      "name": "modern-empty",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 0,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 0",
+      "expected_row_ids": [
+        -5,
+        2,
+        3,
+        4,
+        8,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        1,
+        5,
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "name": "modern-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',1);\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        4,
+        8,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        5,
+        6,
+        7,
+        9,
+        12
+      ]
+    },
+    {
+      "name": "modern-negative",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',-1);\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": -1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1",
+      "expected_row_ids": [
+        -5,
+        -4,
+        1,
+        2,
+        3,
+        4,
+        8,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        5,
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "name": "modern-wrapped-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',4294967297);\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        4,
+        8,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        5,
+        6,
+        7,
+        9,
+        12
+      ]
+    },
+    {
+      "name": "modern-wrapped-negative",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',2147483648);\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": -2147483648,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1",
+      "expected_row_ids": [
+        -5,
+        -4,
+        1,
+        2,
+        3,
+        4,
+        8,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        5,
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "name": "modern-null",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',NULL);\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 0,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 0",
+      "expected_row_ids": [
+        -5,
+        2,
+        3,
+        4,
+        8,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        1,
+        5,
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "name": "modern-text-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID','1');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        4,
+        8,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        5,
+        6,
+        7,
+        9,
+        12
+      ]
+    },
+    {
+      "name": "modern-text-prefix",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID','1e2');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        4,
+        8,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        5,
+        6,
+        7,
+        9,
+        12
+      ]
+    },
+    {
+      "name": "modern-text-zero",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID','not-a-number');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 0,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 0",
+      "expected_row_ids": [
+        -5,
+        2,
+        3,
+        4,
+        8,
+        10,
+        11,
+        12
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        1,
+        5,
+        6,
+        7,
+        9
+      ]
+    },
+    {
+      "name": "modern-blob-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',X'31');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        4,
+        8,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        5,
+        6,
+        7,
+        9,
+        12
+      ]
+    },
+    {
+      "name": "modern-real-one",
+      "setup_sql": "CREATE TABLE keywords(id INTEGER,prepopulate_id INTEGER,safe_for_autoreplace INTEGER,url TEXT,payload BLOB);\nCREATE TABLE meta(key TEXT,value);\nCREATE TABLE autofill(value TEXT);\nINSERT INTO autofill VALUES('preserved unrelated data');\nINSERT INTO meta VALUES('Default Search Provider ID',1.9);\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-5,-1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(-4,NULL,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(1,0,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(2,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(3,2,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(4,3,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(5,4,1,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(6,5,0,0, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(7,6,0,NULL, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(8,7,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(9,8,NULL,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(10,9,0,'1', 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(11,10,'0',1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\nINSERT INTO keywords(rowid,id,prepopulate_id,safe_for_autoreplace,url,payload) VALUES(12,1,0,1, 'https://owned.test/search?q={searchTerms}', X'0001FF');\n",
+      "provider_int32": 1,
+      "native_fragment": "FROM keywords where prepopulate_id = 0 and safe_for_autoreplace = 1 and id != 1",
+      "expected_row_ids": [
+        -5,
+        1,
+        3,
+        4,
+        8,
+        10,
+        11
+      ],
+      "remaining_after_native_predicate": [
+        -4,
+        2,
+        5,
+        6,
+        7,
+        9,
+        12
+      ]
+    }
+  ]
+}

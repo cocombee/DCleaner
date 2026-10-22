@@ -10,7 +10,7 @@ use dcleaner::{
     privacy::{self, CookieExceptionSettings},
 };
 use eframe::egui::{self, Align, Layout, RichText};
-use std::{sync::mpsc, thread};
+use std::thread;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum SettingsTab {
@@ -259,7 +259,7 @@ impl App {
         let message = "Cookie rules could not be verified. Reload the saved rules in Custom Clean settings before scanning or reviewing cleanup.";
         self.mark_privacy_cookie_settings_unverified(message);
         self.mark_health_cookie_settings_unverified(message);
-        self.notice = Some(message.into());
+        self.set_notice(message.into());
     }
 
     pub(super) fn clean_settings_dialog(&mut self, ctx: &egui::Context) {
@@ -495,7 +495,7 @@ impl App {
         }
         let root = self.data_dir.clone();
         let context = ctx.clone();
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = crate::worker_events::channel();
         self.worker = Some(receiver);
         self.clean_settings_ui.operation = SettingsOperation::Loading;
         thread::spawn(move || {
@@ -554,7 +554,7 @@ impl App {
         }
         let root = self.data_dir.clone();
         let context = ctx.clone();
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = crate::worker_events::channel();
         self.worker = Some(receiver);
         self.clean_settings_ui.operation = SettingsOperation::Saving;
         self.clean_settings_ui.form_error = None;
@@ -708,8 +708,12 @@ impl App {
         let mut remove = None;
         for (index, domain) in domains.iter().enumerate() {
             ui.horizontal(|ui| {
-                ui.add(egui::Label::new(RichText::new(domain).strong()).truncate())
-                    .on_hover_text(domain);
+                ui.add(
+                    egui::Label::new(RichText::new(domain).strong())
+                        .truncate()
+                        .show_tooltip_when_elided(false),
+                )
+                .on_hover_text(domain);
                 if theme::field_action(ui, "Delete", editable) {
                     remove = Some(index);
                 }
@@ -1039,7 +1043,8 @@ impl App {
                 ui.vertical(|ui| {
                     ui.add(
                         egui::Label::new(RichText::new(inclusion_location(rule)).strong())
-                            .truncate(),
+                            .truncate()
+                            .show_tooltip_when_elided(false),
                     )
                     .on_hover_text(inclusion_location(rule));
                     let detail = inclusion_detail(rule);
@@ -1292,8 +1297,12 @@ impl App {
         for (index, rule) in draft.exclusions.iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.add(egui::Label::new(RichText::new(&rule.path).strong()).truncate())
-                        .on_hover_text(&rule.path);
+                    ui.add(
+                        egui::Label::new(RichText::new(&rule.path).strong())
+                            .truncate()
+                            .show_tooltip_when_elided(false),
+                    )
+                    .on_hover_text(&rule.path);
                     ui.horizontal(|ui| {
                         theme::muted(ui, exclusion_type_label(rule.exclusion_type), t);
                         if exclusions_supported(rule.exclusion_type) {
@@ -1435,8 +1444,12 @@ impl App {
                 }
                 ui.vertical(|ui| {
                     let location = inclusion_location(rule);
-                    ui.add(egui::Label::new(&location).truncate())
-                        .on_hover_text(location);
+                    ui.add(
+                        egui::Label::new(&location)
+                            .truncate()
+                            .show_tooltip_when_elided(false),
+                    )
+                    .on_hover_text(location);
                     let age = rule.age_threshold_hours.map_or_else(
                         || "No age filter".to_owned(),
                         |hours| format!("At least {hours} hours old"),

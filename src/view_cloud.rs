@@ -267,7 +267,7 @@ impl App {
         let cancel = self.cancel.clone();
         let path = self.data_dir.clone();
         let ctx = ctx.clone();
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = crate::worker_events::channel();
         self.worker = Some(rx);
         thread::spawn(move || {
             let event=std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -344,7 +344,7 @@ impl App {
                     self.cloud_ui.dialog = None;
                     self.cloud_ui.reload = true;
                     self.clear_cloud_results();
-                    self.notice=Some("Disconnected on this device. Cleanup history remains available. You can revoke DCleaner's grant in your provider account settings.".into());
+                    self.set_notice("Disconnected on this device. Cleanup history remains available. You can revoke DCleaner's grant in your provider account settings.".into());
                 }
                 Err(error) => {
                     self.cloud_ui.dialog = None;
@@ -402,7 +402,7 @@ impl App {
                 self.cloud_ui.history_back.clear();
                 match result {
                     Ok(outcome) => {
-                        self.notice = Some(format!(
+                        self.set_notice(format!(
                             "{} confirmed · {} failed · {} uncertain{}. Review each outcome below. Scan again before making another cleanup selection.",
                             outcome.confirmed,
                             outcome.failed,
@@ -421,7 +421,7 @@ impl App {
         self.cloud_ui.reload = true;
         self.cloud_ui.introduced = true;
         self.clear_cloud_results();
-        self.notice=Some("Connected to the provider account and selected storage. Scan to review its current API-visible items.".into());
+        self.set_notice("Connected to the provider account and selected storage. Scan to review its current API-visible items.".into());
     }
     fn clear_cloud_results(&mut self) {
         self.cloud_ui.snapshot = None;
@@ -829,7 +829,7 @@ impl App {
                 "This scan is incomplete. Only returned items are shown; omissions and provider limits may affect duplicate groups. Review issues before selecting cleanup.",
                 t,
             );
-            egui::CollapsingHeader::new(format!("Scan issues ({})", snapshot.issues().len()))
+            theme::Disclosure::new(format!("Scan issues ({})", snapshot.issues().len()))
                 .id_salt("cloud-partial-scan-issues")
                 .default_open(false)
                 .show(ui, |ui| {
@@ -977,14 +977,12 @@ impl App {
                                         }
                                     },
                                 );
-                                theme::table_cell(
+                                theme::table_cell_with_tooltip(
                                     ui,
                                     RichText::new(item.display_name()).family(theme::semibold()),
                                     name_width,
-                                    theme::TABLE_ROW_HEIGHT,
-                                ).on_hover_text(item.display_name());
-                                theme::table_cell(ui, cloud_size(item), size_width, theme::TABLE_ROW_HEIGHT)
-                                    .on_hover_text("Size is provider-reported. Gmail and other estimates are marked ≈; — means unknown.");
+                                    theme::TABLE_ROW_HEIGHT, item.display_name());
+                                theme::table_cell_with_tooltip(ui, cloud_size(item), size_width, theme::TABLE_ROW_HEIGHT, "Size is provider-reported. Gmail and other estimates are marked ≈; — means unknown.");
                                 let date = item.provider_timestamp()
                                     .and_then(|d| chrono::DateTime::from_timestamp_millis(d.unix_millis()))
                                     .map(|d| d.format("%d %b %Y").to_string())
@@ -1551,14 +1549,21 @@ fn cloud_intro_steps(ui: &mut egui::Ui, t: Tokens) {
 
 fn paint_provider(p: &egui::Painter, rect: egui::Rect, provider: Provider) {
     let point = |x: f32, y: f32| rect.min + Vec2::new(x, y) * (rect.width() / 36.);
+    let themed_color = |value| {
+        if p.ctx().theme() == egui::Theme::Dark {
+            theme::monochrome(value)
+        } else {
+            value
+        }
+    };
     let polygon = |xy: &[(f32, f32)], color| {
         p.add(egui::Shape::convex_polygon(
             xy.iter().map(|&(x, y)| point(x, y)).collect(),
-            color,
+            themed_color(color),
             egui::Stroke::NONE,
         ))
     };
-    let blue = Color32::from_rgb(0, 120, 240);
+    let blue = themed_color(Color32::from_rgb(0, 120, 240));
     match provider {
         Provider::GoogleDrive => {
             polygon(
@@ -1605,12 +1610,12 @@ fn paint_provider(p: &egui::Painter, rect: egui::Rect, provider: Provider) {
             p.circle_filled(
                 point(15., 16.),
                 rect.width() * 0.29,
-                Color32::from_rgb(0, 90, 170),
+                themed_color(Color32::from_rgb(0, 90, 170)),
             );
             p.circle_filled(
                 point(24., 20.),
                 rect.width() * 0.27,
-                Color32::from_rgb(0, 120, 212),
+                themed_color(Color32::from_rgb(0, 120, 212)),
             );
             p.circle_filled(point(8., 23.), rect.width() * 0.20, blue);
             p.rect_filled(
